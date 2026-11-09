@@ -6,8 +6,11 @@ a:hover,button:hover{background:#dcdcdc}
 a:focus-visible,button:focus-visible{outline:2px solid #755cfe}
 .pulse{width:10px;height:10px;background:#755cfe;animation:p 1s infinite}
 @keyframes p{50%{opacity:.2}}
-@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
+.drift{width:120px;height:120px;background:#755cfe;animation:d 2s infinite alternate}
+@keyframes d{to{transform:translateX(300px)}}
+@media (prefers-reduced-motion: reduce){.pulse,.drift{animation:none}}
 </style></head><body>
 <h1 id="top">Fixture</h1><a href="other.html">Other page</a> <a href="#top">Back to top</a> <button>Send</button><div class="pulse"></div>
 <div aria-hidden="true"><a href="other.html" tabindex="-1"><svg width="10" height="10"></svg></a></div>
+<main><section><div style="display:grid;grid-template-columns:1fr 2fr"><h2>People</h2><p>Photos</p></div></section><section style="background:#dfe6ec"><div style="display:grid;grid-template-columns:1fr 2fr"><h2>Questions</h2><p>List</p></div></section><section style="min-height:70vh;background:#1d1956;color:#fff"><h2>Alive zone</h2><div class="drift"></div></section></main>
 </body></html>

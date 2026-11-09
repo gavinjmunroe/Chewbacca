@@ -24,8 +24,22 @@ SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
         f'--attr-source={EMPTY_TREE}', '--no-optional-locks']
 
 
+# The user's own context repos (the brain) may use git's builtin fsmonitor
+# daemon: `true` names git's own watcher, never a configured program, so the
+# hostile-config concern above does not apply, and it is only ever turned on
+# for repos named in ~/.claude/d1-config.sh. On 2026-10-11 the brain had
+# 61,752 tracked and 12,119 dirty files and one status cost 0.85 s CPU
+# (0.76 s of it lstat in the kernel); with the daemon it cost 0.17 s.
+TRUSTED = ['git', '-c', 'core.fsmonitor=true', '-c', 'core.hooksPath=/dev/null',
+           f'--attr-source={EMPTY_TREE}', '--no-optional-locks']
+# Context repos resolved for this call; filled by repositories().
+CONTEXT = set()
+
+
 def git(repo, *args):
-    result = subprocess.run([*SAFE, '-C', str(repo), *args], capture_output=True, timeout=5)
+    # The builtin daemon exists on macOS and Windows only (git 2.36+).
+    prefix = TRUSTED if sys.platform == 'darwin' and Path(repo) in CONTEXT else SAFE
+    result = subprocess.run([*prefix, '-C', str(repo), *args], capture_output=True, timeout=5)
     if result.returncode:
         raise ValueError('repository observation unavailable')
     return result.stdout
@@ -41,6 +55,14 @@ PATCH_PREFIXES = ('*** Add File: ', '*** Update File: ', '*** Delete File: ', '*
 # filesystem timestamp granularity. Guessed, never measured: 2s covers HFS+
 # one-second mtimes with room to spare.
 MTIME_SLACK = 2.0
+# A context repo is watched on every shell call even when the call never names
+# it, so a long call collects every brain write any other tab made meanwhile.
+# On 2026-10-09 one tab's 10-minute cache cleanup (`cd ~ && uv cache prune`)
+# was credited with 494 transcripts an ingest tab wrote, and stop-check then
+# re-woke that tab four times over files it never touched. A call that runs
+# longer than this claims nothing in a repo it did not name. Guessed, never
+# measured: a script that writes a note finishes well inside a minute.
+IMPLICIT_MAX_CALL = float(os.environ.get('CHEWBACCA_IMPLICIT_MAX_CALL') or 60)
 
 
 def exact_targets(payload):
@@ -87,6 +109,215 @@ def touched_in_window(path, start, end):
     except FileNotFoundError:
         return True  # A deletion has no mtime left to check.
     return start - MTIME_SLACK <= modified <= end + MTIME_SLACK
+
+
+# Background writers: work no tool call started (a queued job, a scheduled
+# mirror) that writes into a repo the calls watch. Neither a status diff nor
+# FSEvents says which process wrote a file, and macOS has no unprivileged way
+# to ask (fs_usage and Endpoint Security need root), so the processes that
+# start background work say so here: one row when it begins and one when it
+# ends, with their pid and the directory it writes. A changed path under a
+# region whose run overlapped the call, written inside that run, is the
+# background work's, never the call's.
+#
+# On 2026-10-12 the creator-transcripts job (cwd raw/creators, 1009-191645)
+# and the 21:30 people-sync mirror of ~/.chewbacca into the brain put 14,690
+# rows into the Rust shadow log and 32 into this one, every one of them
+# credited to whichever tab's call happened to be open: 3,111 kit-snapshot
+# deletions went to one Bash call in the togari tab.
+#
+#     begin <ts> <pid> <root>      end <ts> <pid> <root>
+#
+# A begin with no end whose pid is gone (the supervisor was killed) claims
+# nothing: no end time means no window to check a write against. The cost of
+# the rule: a call's own Bash write under a region, made while that run is
+# going, is dropped too. Unattributable either way, so nobody claims it.
+BACKGROUND_FILE = 'background-writers.tsv'
+# Rewritten once past this, keeping two days. Guessed, never measured: a row
+# is ~90 bytes, so 256 KB is ~2,800 rows, more than a week of the ~140 jobs a
+# day the queue ran on 2026-10-09 to 10-12.
+BACKGROUND_MAX = 256 << 10
+BACKGROUND_KEEP = 2 * 24 * 3600
+# Exactly what background_mark writes: the binary parses the same way, so a
+# hand-edited row the two would read differently is skipped by both.
+BACKGROUND_ROW = re.compile(r'(begin|end)\t([0-9]+(?:\.[0-9]+)?)\t([0-9]+)\t([^\t\r\n]+)\r?')
+
+
+def background_path(home=None):
+    if os.environ.get('CHEWBACCA_BACKGROUND_WRITERS'):
+        return Path(os.environ['CHEWBACCA_BACKGROUND_WRITERS']).expanduser()
+    home = home or Path(os.environ.get('CHEWBACCA_HOME') or Path.home() / '.chewbacca').expanduser()
+    return Path(home) / BACKGROUND_FILE
+
+
+def background_mark(kind, pid, roots, path=None, now=None):
+    """Append begin or end rows for `roots`. Never raises: a job never fails
+    over its bookkeeping."""
+    try:
+        path = path or background_path()
+        now = time.time() if now is None else now
+        rows = ''.join(f'{kind}\t{now:.6f}\t{pid}\t{root}\n' for root in roots
+                       if root and not any(c in str(root) for c in '\t\r\n'))
+        if not rows:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o600)
+        with os.fdopen(fd, 'r+', encoding='utf-8', errors='replace') as stream:
+            fcntl.flock(stream, fcntl.LOCK_EX)
+            stream.write(rows)
+            stream.flush()
+            if os.fstat(stream.fileno()).st_size > BACKGROUND_MAX:
+                stream.seek(0)
+                kept = _pruned(stream.read().split('\n'), now)
+                stream.seek(0)
+                stream.truncate()
+                stream.write(''.join(line + '\n' for line in kept))
+    except Exception:  # noqa: BLE001  bookkeeping only; see the docstring
+        pass
+
+
+def _parse(lines):
+    """[(index, kind, when, pid, root)] for the rows both readers accept."""
+    out = []
+    for index, line in enumerate(lines):
+        match = BACKGROUND_ROW.fullmatch(line)
+        if match and int(match.group(3)) <= 0x7fffffff:  # a pid_t, as the binary reads it
+            out.append((index, match.group(1), float(match.group(2)), int(match.group(3)), match.group(4)))
+    return out
+
+
+def _pruned(lines, now):
+    # Rows from the last two days, plus the begin of a run still going however
+    # old (the creator-transcripts job ran 10/9 19:15 to 10/12 22:25). A begin
+    # whose end is gone too would read as a run that never ended.
+    rows = _parse(lines)
+    keep = {i for i, kind, when, pid, root in rows if now - when < BACKGROUND_KEEP}
+    for i, begin in _open_begins(rows):
+        if _live_since(begin[3], begin[2]):
+            keep.add(i)
+    return [lines[i] for i in sorted(keep)]
+
+
+def _open_begins(rows):
+    """[(index, row)] of begins no end closed."""
+    stacks = {}
+    for row in rows:
+        i, kind, when, pid, root = row
+        if kind == 'begin':
+            stacks.setdefault((pid, root), []).append((i, row))
+        elif stacks.get((pid, root)):
+            stacks[(pid, root)].pop()
+    return [entry for stack in stacks.values() for entry in stack]
+
+
+_PROC_START = None
+
+
+def _proc_start(pid):
+    """When `pid` started, from libproc's proc_bsdinfo (offset 120 holds
+    pbi_start_tvsec on macOS), or None when it can't be read."""
+    global _PROC_START
+    if _PROC_START is None:
+        try:
+            import ctypes
+            import ctypes.util
+            lib = ctypes.CDLL(ctypes.util.find_library('proc') or '/usr/lib/libproc.dylib')
+            buffer = ctypes.create_string_buffer(136)
+
+            def read(p):
+                if lib.proc_pidinfo(p, 3, ctypes.c_uint64(0), buffer, 136) != 136:
+                    return None
+                sec = int.from_bytes(buffer.raw[120:128], 'little')
+                usec = int.from_bytes(buffer.raw[128:136], 'little')
+                return sec + usec / 1e6
+            _PROC_START = read
+        except (OSError, AttributeError):
+            _PROC_START = lambda p: None  # noqa: E731
+    return _PROC_START(pid)
+
+
+def _live_since(pid, begin):
+    """The process that wrote a begin at `begin` is still running: its pid is
+    alive and that pid didn't start after the row (a reused pid after a
+    reboot or a SIGKILL would otherwise keep a dead run open forever)."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        pass
+    except (OSError, OverflowError):
+        return False
+    started = _proc_start(pid)
+    return started is None or started <= begin + MTIME_SLACK
+
+
+def background_regions(now, path=None):
+    """[(root, begin, end)] from the background log. An open run is live up
+    to now while its process is."""
+    path = path or background_path()
+    try:
+        with open(path, encoding='utf-8', errors='replace') as stream:
+            fcntl.flock(stream, fcntl.LOCK_SH)  # never a prune half-written
+            lines = stream.read().split('\n')
+    except OSError:
+        return []
+    rows = _parse(lines)
+    regions = []
+    stacks = {}
+    for i, kind, when, pid, root in rows:
+        if kind == 'begin':
+            stacks.setdefault((pid, root), []).append(when)
+        elif stacks.get((pid, root)):
+            regions.append((root, stacks[(pid, root)].pop(), when))
+    for (pid, root), begins in stacks.items():
+        regions.extend((root, begin, now) for begin in begins if _live_since(pid, begin))
+    return regions
+
+
+def background_wrote(path, regions, start, end):
+    """True when a background run that overlapped [start, end] covers `path`
+    and the path was written (or deleted) inside that run."""
+    modified = None
+    for root, begin, finish in regions:
+        if path != root and not path.startswith(root.rstrip(os.sep) + os.sep):
+            continue
+        if begin - MTIME_SLACK > end or finish + MTIME_SLACK < start:
+            continue
+        if modified is None:
+            try:
+                modified = os.lstat(path).st_mtime
+            except FileNotFoundError:
+                return True  # a deletion inside a run that was deleting
+            except OSError:
+                return False
+        if begin - MTIME_SLACK <= modified <= finish + MTIME_SLACK:
+            return True
+    return False
+
+
+def background_run(argv):
+    """`write_log.py background --root DIR... -- CMD...`: run CMD as this
+    process's child, marked as a background writer of each DIR."""
+    roots = []
+    while argv and argv[0] != '--':
+        flag = argv.pop(0)
+        if flag == '--root' and argv:
+            roots.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
+    if not argv or argv[0] != '--' or len(argv) < 2:
+        print('usage: write_log.py background --root DIR [--root DIR]... -- CMD...', file=sys.stderr)
+        return 2
+    import signal
+    # Marked before the child exists, so its first write is already inside.
+    background_mark('begin', os.getpid(), roots)
+    try:
+        child = subprocess.Popen(argv[1:])
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, lambda signum, frame: child.send_signal(signum))
+        code = child.wait()
+    finally:
+        background_mark('end', os.getpid(), roots)
+    return code if code >= 0 else 128 - code
 
 
 def context_dirs():
@@ -159,8 +390,15 @@ def repositories(payload):
         return found
 
     explicit = toplevels(candidates)
+    if implicit:
+        context = toplevels(implicit)
+    else:  # an Edit inside the brain: no extra git call to find it
+        roots = [str(Path(d).expanduser().resolve()) for d in context_dirs()]
+        context = {top for top in explicit if str(top) in roots}
+    CONTEXT.clear()
+    CONTEXT.update(context)
     IMPLICIT.clear()
-    IMPLICIT.update(toplevels(implicit) - explicit)
+    IMPLICIT.update((context if implicit else set()) - explicit)
     return sorted(explicit | IMPLICIT)
 
 
@@ -223,17 +461,57 @@ def observe(repo, log, state):
         if entry[:1] in (b'R', b'C') or entry[1:2] in (b'R', b'C'):
             names.add(os.fsdecode(fields[i]))
             i += 1
+    # A content hash of every dirty file, before AND after every tool call,
+    # cost 0.69s per observation of the brain on 2026-10-10 (3,093 dirty files)
+    # although almost none of them changed between calls. Like git's own index,
+    # reuse a digest while the file's inode, size, mtime and ctime are all
+    # unchanged; any write moves ctime, so a reused digest is never stale.
+    cache_path = state / ('.digests-' + hashlib.sha256(str(repo).encode()).hexdigest()[:16] + '.cache')
+    try:
+        cache = json.loads(cache_path.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    fresh = {}
     result = {}
+    # Plain strings, not pathlib, in this loop. On 2026-10-11 the brain had
+    # 12,119 dirty paths and `state in path.parents` plus `path.parts` cost
+    # 0.5 s of the hook's 1.0 s per event (cProfile), paid before and after
+    # every tool call in every tab.
+    root = str(repo).rstrip(os.sep) + os.sep
+    skip = {str(log), str(log.with_suffix(log.suffix + '.lock')), str(state)}
+    state_prefix = str(state).rstrip(os.sep) + os.sep
     for name in names:
-        path = repo / name
-        if any(character in str(path) for character in '\t\r\n'):
+        text = root + name
+        if '\t' in text or '\r' in text or '\n' in text:
             continue  # Legacy TSV cannot represent these paths unambiguously.
-        if path == log or path == log.with_suffix(log.suffix + '.lock') or state == path or state in path.parents:
+        if text in skip or text.startswith(state_prefix):
             continue
-        if '.chewbacca' in path.parts:
+        if os.sep + '.chewbacca' + os.sep in text + os.sep:
             continue
-        result[str(path)] = fingerprint(path)
+        key = stat_key(text)
+        hit = cache.get(text)
+        if key and hit and hit[0] == key:
+            result[text] = hit[1]
+        else:
+            result[text] = fingerprint(Path(text))
+        if key:
+            fresh[text] = [key, result[text]]
+    if fresh != cache:
+        try:
+            save(cache_path, fresh)
+        except OSError:
+            pass
     return result
+
+
+def stat_key(path):
+    try:
+        m = os.lstat(path)
+    except OSError:
+        return None
+    if not stat.S_ISREG(m.st_mode):
+        return None
+    return f'{m.st_ino}:{m.st_size}:{m.st_mtime_ns}:{m.st_ctime_ns}:{m.st_mode}'
 
 
 def save(path, document):
@@ -246,6 +524,32 @@ def save(path, document):
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+# A Pre whose Post never arrives (a killed session, a denied call the host never
+# reported) leaves its snapshot behind with nothing to finish it. No tool call
+# runs for a day, so anything that old is an orphan. Swept at most hourly,
+# because listing 44,000 files on every tool call would cost more than it saves.
+SNAPSHOT_MAX_AGE = 24 * 3600
+PRUNE_EVERY = 3600
+
+
+def prune(state, now):
+    marker = state / '.pruned'
+    try:
+        if now - marker.stat().st_mtime < PRUNE_EVERY:
+            return
+    except FileNotFoundError:
+        pass
+    marker.touch()
+    for entry in os.scandir(state):
+        if not entry.name.endswith('.json'):
+            continue
+        try:
+            if now - entry.stat().st_mtime > SNAPSHOT_MAX_AGE:
+                os.unlink(entry.path)
+        except FileNotFoundError:
+            continue
 
 
 def record(payload):
@@ -267,8 +571,10 @@ def record(payload):
         rows = []
         now = time.time()
         exact = exact_targets(payload)
+        regions = None
         for repo in repos:
             tool = payload.get('tool_use_id') or payload.get('tool_call_id')
+            native = bool(tool)
             if not tool:
                 tool = json.dumps([payload.get('tool_name'), payload.get('tool_input')], sort_keys=True)
             key = hashlib.sha256((sid + '\0' + str(repo) + '\0' + str(tool)).encode()).hexdigest()
@@ -294,6 +600,7 @@ def record(payload):
                 changed.update(committed)
                 started = float(prior.get('started') or 0)
                 claimed = others_exact(log, sid, started - MTIME_SLACK) if started else set()
+                unnamed_long = repo in IMPLICIT and started and now - started > IMPLICIT_MAX_CALL
                 for path in sorted(changed):
                     if path in exact:
                         rows.append(f'{now:.6f}\t{sid}\t{path}\tedit\n')
@@ -303,15 +610,31 @@ def record(payload):
                     # commit made inside the call is its own evidence, whatever
                     # the file's mtime.
                     stale = started and path not in committed and not touched_in_window(path, started, now)
-                    if path in claimed or stale:
+                    if path in claimed or stale or unnamed_long:
                         continue
+                    if started and path not in committed:
+                        if regions is None:
+                            regions = background_regions(now)
+                        if background_wrote(path, regions, started, now):
+                            continue
                     rows.append(f'{now:.6f}\t{sid}\t{path}\tbash\n')
             remaining = 1 if is_pre else max(0, pending - 1)
             keep = not is_pre and remaining
+            # A finished call with a native id is never looked up again: the
+            # next call has its own id, so its key is new. Saving it anyway
+            # left a full repo fingerprint per Bash or Edit call, 6 MB each in
+            # this kit, and on 2026-10-09 that was 44,065 files and 14.2 GB in
+            # ~/.chewbacca/session-state, which filled the disk to 254 MB free.
+            # Without an id the key is the command text, and a post-only host
+            # needs this snapshot as the next identical call's baseline.
+            if not is_pre and not remaining and native:
+                snapshot.unlink(missing_ok=True)
+                continue
             save(snapshot, {'files': before if keep else after,
                             'pending': remaining,
                             'head': prior.get('head') if keep else current_head,
                             'started': prior.get('started') if keep else now})
+        prune(state, now)
         if rows:
             fd = os.open(log, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
             with os.fdopen(fd, 'a') as stream:
@@ -321,6 +644,8 @@ def record(payload):
 
 
 def main():
+    if sys.argv[1:2] == ['background']:
+        return background_run(sys.argv[2:])
     try:
         record(json.load(sys.stdin))
     except (OSError, ValueError, subprocess.TimeoutExpired):

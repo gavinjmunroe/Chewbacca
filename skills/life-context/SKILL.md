@@ -1,6 +1,8 @@
 ---
 name: life-context
-description: "Get to know someone without making them write an autobiography. Use in a first session, when Claude does not know enough about the person to be useful, when they offer files or a Drive export, when they say Claude keeps forgetting things, or any time an answer would be better with context you do not have."
+description: "Get to know someone without an autobiography. Use in a first session, when you lack context to be useful, when they offer files or a Drive export, or when they say Claude keeps forgetting things."
+triggers: >-
+  Get to know someone without making them write an autobiography. Use in a first session, when Claude does not know enough about the person to be useful, when they offer files or a Drive export, when they say Claude keeps forgetting things, or any time an answer would be better with context you do not have.
 license: MIT
 ---
 

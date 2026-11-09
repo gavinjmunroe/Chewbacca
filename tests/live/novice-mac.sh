@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Live: the README's one-line install on a Mac nobody has touched, timed, with every human touch logged
 #
-# docs/ONBOARDING.md sets the bar: a fresh Mac goes from the README to a first
+# docs/plans/ONBOARDING.md sets the bar: a fresh Mac goes from the README to a first
 # real answer with zero unexplained dialogs. tests/bare_machine.sh gets "as
 # close to a factory Mac as this can get without a factory Mac". This is the
 # factory Mac: a vanilla macOS VM (no Xcode tools, no Homebrew, no Claude),

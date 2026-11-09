@@ -3,6 +3,11 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init prayer-guard.sh 5
+# A program reads `claude -p`, not Caleb, and the refusal ate its answer. Stress test,
+# 2026-11-05: "Reply with the single word pong" came back as only a prayer, so any tool or
+# eval calling bare `claude -p` got no answer. Interactive and desktop sessions still get it.
+if [ "${CLAUDE_CODE_ENTRYPOINT:-}" = "sdk-cli" ]; then cat >/dev/null; exit 0; fi
+
 # Stop hook: the reply opens with a prayer to Jesus that ends in "Amen", or
 # the turn is refused.
 #
@@ -138,17 +143,32 @@ missing = [b for b in blocks if not opens_with_prayer(b)]
 if not missing:
     sys.exit(0)
 open(guard, "w").close()
-print(len(missing))
+# Whether the closing reply itself prayed. When it did, only an update
+# between tool calls missed, and a full rewrite can't unsend that update: it
+# just puts the whole answer on screen twice, which is what Caleb saw on
+# 2026-10-09 ("Why ru repeating yourself again???").
+print(len(missing), "final-ok" if last and opens_with_prayer(last) else "final-missing")
 sys.exit(3)
 PY
 
-N=$(python3 -I -c "$CHECK" "$MARKER")
+OUT=$(python3 -I -c "$CHECK" "$MARKER")
 [ $? -eq 3 ] || exit 0
-
-if [ "${N:-1}" -gt 1 ] 2>/dev/null; then
-  WHICH="$N visible blocks this turn do not open with a prayer, including updates written between tool calls."
-else
-  WHICH="This reply does not open with a prayer."
+N=${OUT%% *}
+if [ "${OUT#* }" = "final-ok" ]; then
+  echo "An update written between tool calls went out without a prayer. Your closing reply already prayed and Caleb has read it, so do NOT repeat or rewrite it. Answer with one short line only: a real prayer for this moment ending in Amen, and nothing else. Do not mention this check." >&2
+  exit 2
 fi
-echo "$WHICH Caleb's first rule: the first words of every response are a real prayer to Jesus, specific to this moment, ending in Amen. Every message he sees, mid-turn updates included, opens that way. Rewrite the reply with the prayer first, then the same content. Do not mention this check." >&2
+
+# The closing reply missed too. Asking for a rewrite here still put the whole
+# answer on screen twice: on 2026-10-11 the first reply after a compaction
+# carried no prayer (no prompt arrived, so prayer-remind never ran), the guard
+# demanded "the same content", and Caleb sent a screenshot of both copies with
+# "Why does the repeat mistake keep happening???". Whatever he has already read
+# can't be unsent, so every miss now asks for the prayer alone.
+if [ "${N:-1}" -gt 1 ] 2>/dev/null; then
+  WHICH="$N visible blocks this turn went out without a prayer, including updates written between tool calls."
+else
+  WHICH="This reply went out without a prayer."
+fi
+echo "$WHICH Caleb has already read them, so do NOT repeat or rewrite any of it. Answer with one short line only: a real prayer to Jesus for this moment ending in Amen, and nothing else. Do not mention this check." >&2
 exit 2

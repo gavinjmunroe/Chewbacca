@@ -96,6 +96,12 @@ def main() -> int:
         check(f"{name} is registered once on a re-run with a session opener",
               commands(twice, "UserPromptSubmit").count(name) == 1,
               str(commands(twice, "UserPromptSubmit")))
+    # A compaction resumes with no prompt, so the per-prompt reminders never
+    # ran and ten unprayed blocks went out on 2026-10-11.
+    compact = [e for e in twice["hooks"].get("SessionStart", [])
+               if e.get("matcher") == "compact"
+               for h in e["hooks"] if os.path.basename(str(h.get("command"))) == "prayer-remind.sh"]
+    check("prayer-remind also runs once right after a compaction", len(compact) == 1, str(compact))
 
     # assumption-guard reads .tool_input.file_path. Under Stop that field
     # never exists, so until 2026-10-05 it exited 0 on every turn.
@@ -116,6 +122,68 @@ def main() -> int:
     every = [c for event in skipped["hooks"] for c in commands(skipped, event)]
     check("a skipped hook stays out after a re-run", "kit-autopush.sh" not in every and "model-route.sh" not in every, str(every))
     check("hooks not named in skip-hooks are untouched", "slop-guard.sh" in every and "write-log.sh" in every)
+
+    # The user's own hooks and status line survive, and a re-run doesn't
+    # duplicate them. Break-it, 2026-10-19: every event the block assigns
+    # outright lost the user's entries, and statusLine was replaced.
+    mine = pathlib.Path(tempfile.mkdtemp())
+    (mine / ".claude").mkdir()
+    own = {"hooks": {ev: [{"hooks": [{"type": "command", "command": f"/opt/me/{ev}.sh"}]}]
+                     for ev in ("SessionStart", "PostToolUse", "PreToolUse", "Stop", "Notification", "UserPromptSubmit")},
+           "statusLine": {"type": "command", "command": "/opt/me/status.sh"}}
+    (mine / ".claude" / "settings.json").write_text(json.dumps(own))
+    run(block, mine)
+    kept = run(block, mine)
+    for ev in own["hooks"]:
+        check(f"the user's own {ev} hook survives, once", commands(kept, ev).count(f"{ev}.sh") == 1, str(commands(kept, ev)))
+    check("the user's statusLine survives", kept.get("statusLine", {}).get("command") == "/opt/me/status.sh", str(kept.get("statusLine")))
+    check("kit hooks still register next to the user's", "write-log.sh" in commands(kept, "PostToolUse"))
+
+    # A settings.json with a BOM, a // comment and a trailing comma keeps the
+    # user's keys; one that can't be read stops the run and stays untouched;
+    # "permissions": null no longer crashes (break-it, 2026-10-19).
+    odd = pathlib.Path(tempfile.mkdtemp())
+    (odd / ".claude").mkdir()
+    (odd / ".claude" / "settings.json").write_text(
+        '﻿{\n  // mine\n  "model": "my-model", "url": "http://x//y",\n  "permissions": null,\n}\n', encoding="utf-8")
+    kept = run(block, odd)
+    check("BOM, comment and trailing comma: the user's keys survive",
+          kept.get("model") == "my-model" and kept.get("url") == "http://x//y", str({k: kept.get(k) for k in ("model", "url")}))
+    check("permissions: null is replaced, not a crash", isinstance(kept.get("permissions"), dict))
+    bad = pathlib.Path(tempfile.mkdtemp())
+    (bad / ".claude").mkdir()
+    garbage = '{"model": "mine", oops'
+    (bad / ".claude" / "settings.json").write_text(garbage)
+    try:
+        run(block, bad)
+        refused = False
+    except AssertionError:
+        refused = True
+    check("an unreadable settings.json stops the run", refused)
+    check("and is left exactly as it was", (bad / ".claude" / "settings.json").read_text() == garbage)
+
+    # A dotfiles symlink stays a symlink, and a read-only file is left alone.
+    linked = pathlib.Path(tempfile.mkdtemp())
+    (linked / ".claude").mkdir()
+    (linked / "dotfiles").mkdir()
+    (linked / "dotfiles" / "settings.json").write_text('{"model": "mine"}')
+    (linked / ".claude" / "settings.json").symlink_to(linked / "dotfiles" / "settings.json")
+    after = run(block, linked)
+    check("a symlinked settings.json stays a symlink", (linked / ".claude" / "settings.json").is_symlink())
+    check("and its target got the update", after.get("model") == "mine" and "hooks" in json.loads(
+        (linked / "dotfiles" / "settings.json").read_text()))
+    ro = pathlib.Path(tempfile.mkdtemp())
+    (ro / ".claude").mkdir()
+    (ro / ".claude" / "settings.json").write_text('{"model": "mine"}')
+    os.chmod(ro / ".claude" / "settings.json", 0o444)
+    try:
+        run(block, ro)
+        refused = False
+    except AssertionError:
+        refused = True
+    check("a read-only settings.json stops the run", refused)
+    check("and keeps its content and mode", (ro / ".claude" / "settings.json").read_text() == '{"model": "mine"}'
+          and (os.stat(ro / ".claude" / "settings.json").st_mode & 0o777) == 0o444)
 
     print(f"\n{PASSED} passed, {FAILED} failed")
     return 1 if FAILED else 0

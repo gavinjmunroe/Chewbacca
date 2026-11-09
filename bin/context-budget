@@ -15,7 +15,7 @@ are not recorded; they show as the residual against the first turn's real usage.
 disk; this reads what one session was actually sent.
 
 Characters become tokens at 2.8 per token: the same 34,646-character prompt was
-12,407 tokens on Sonnet 5 (docs/HYBRID-ROUTE.md). Haiku 4.5 runs about 3.9, so
+12,407 tokens on Sonnet 5 (docs/reference/HYBRID-ROUTE.md). Haiku 4.5 runs about 3.9, so
 on Haiku every estimate here is high. The first-turn total is exact.
 """
 import argparse
@@ -196,7 +196,16 @@ def main() -> None:
     ap.add_argument("-n", type=int, default=400)
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--json", action="store_true")
+    # 2026-10-11: the first turn of a VS Code session from ~ was 131,426
+    # tokens. The cap starts there and drops as each cut in
+    # docs/plans/context-budget.md lands, so growth fails doctor instead of
+    # going unnoticed.
+    ap.add_argument("--max", type=cap_arg,
+                    help="exit 1 when the first turn is over this many tokens; auto picks the cap for "
+                         "the memory-index mode tools/recall_gate.py set")
     args = ap.parse_args()
+    if args.max == "auto":
+        args.max = auto_cap()
 
     if args.command == "usage":
         out = usage(args.n)
@@ -213,7 +222,7 @@ def main() -> None:
     out = budget(path)
     if args.json:
         print(json.dumps(out, indent=2))
-        return
+        sys.exit(1 if over_cap(out, args.max) else 0)
     print(f"session {out['session']}")
     print(f"first turn      {out['first_turn_tokens']:>8,} tokens (exact)")
     print(f"attributed      {out['attributed_tokens_est']:>8,} (estimate)")
@@ -222,6 +231,35 @@ def main() -> None:
     print()
     for k, v in list(out["sources"].items())[: args.top]:
         print(f"  {v:>7,}  {k}")
+    if over_cap(out, args.max):
+        print(f"\nover the cap: {out['first_turn_tokens']:,} > {args.max:,} tokens on the first turn")
+        sys.exit(1)
+
+
+# The cap per memory-index mode (reengineer-flat-plan step 14). Whole: the
+# 131,426-token first turn measured 2026-10-11. Recall: that, less the two
+# indexes recall stands in for, 9,762 + 6,542 = 16,304 tokens on 2026-10-12
+# (session 378e4bfd). The stub left in their place is under 200.
+CAPS = {"whole": 131_426, "recall": 131_426 - 16_304}
+
+
+def cap_arg(value):
+    return "auto" if value == "auto" else int(value)
+
+
+def auto_cap():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    try:
+        import recall_gate
+        return CAPS[recall_gate.mode()]
+    except Exception:  # no gate: hold the whole-index line
+        return CAPS["whole"]
+
+
+def over_cap(out, cap):
+    """True when a cap is set and the first turn's real usage passed it."""
+    first = out.get("first_turn_tokens")
+    return bool(cap) and isinstance(first, int) and first > cap
 
 
 if __name__ == "__main__":

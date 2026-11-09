@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+// Free ZoomInfo searches and Fireflies meetings, from a checkout or a symlinked installation.
+require(require("node:path").join(require("node:fs").realpathSync(__filename), "..", "..", "tools", "gtme_lookup.js"));

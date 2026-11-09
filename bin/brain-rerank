@@ -1,0 +1,6 @@
+#!/bin/sh
+# brain-rerank: `brain ask` with a model reordering stage one's top 30.
+# Explicit only, never the per-prompt hook: p50 was 37s through claude -p on
+# 2026-10-10 (sealed recall@5 55.4% -> 72.3%, bench/frozen/rerank_A.json).
+here="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+exec python3 "$here/../apps/brain-retrieval/src/brain_rerank.py" "$@"

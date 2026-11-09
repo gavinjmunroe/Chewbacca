@@ -1,0 +1,4 @@
+SEALED n=65 index=/private/tmp/claude-501/-Users-joelnewton/232b29b1-9054-407e-8428-4da1fad87586/scratchpad/idx files=839 chunks=4006
+  minmax (shipped before)  r@5  50.8% +/-12.2  MRR 0.333
+  rrf3 k=10 + prf 0.6x5    r@5  53.8% +/-12.1  MRR 0.389  +6 -4
+  run_at 2026-10-12T23:07:17-0700

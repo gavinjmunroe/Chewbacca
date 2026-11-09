@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""Keeps Chewbacca Live's campaign numbers fresh from Clay, with no person.
+
+Clay's campaign analytics are only readable on a signed-in Clay session (its
+public API has no campaign endpoints), so this runs on a machine where the
+`clay` CLI is signed in and pushes what it reads to the hosted page. It
+long-polls the page for questions that need fresher numbers, and reads every
+live client on its own every SYNC_EVERY seconds regardless.
+
+Read only. It runs `clay whoami`, `clay campaigns list`, `clay campaigns
+analytics` and `chewbacca clay inbox`, nothing else, and never starts, pauses
+or edits a campaign. Reply addresses leave this machine only as sha256 hashes.
+
+    live-stats-sync                 # loop forever (launchd keeps it alive)
+    live-stats-sync --once          # read every client once, push, exit
+    live-stats-sync --once --dry-run   # read and print, push nothing
+
+Needs LIVE_URL and LIVE_SYNC_KEY in the environment, or LIVE_SYNC_KEY in the
+login keychain as service "chewbacca-live-sync".
+"""
+import argparse
+import concurrent.futures
+import datetime as dt
+import hashlib
+import http.client
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from zoneinfo import ZoneInfo
+
+CLI = os.environ.get("CLAY_CLI") or os.path.expanduser("~/.local/bin/clay")
+TZ = "America/Los_Angeles"
+# Matches STATS_MAX_AGE_MS in lib/freshness.js: a background read at least
+# this often means most questions find numbers under the bound already.
+SYNC_EVERY = 10 * 60
+# Six reads at once read Zeutara's 25 campaigns, 50 reads, in 22.8 s on
+# 2026-10-10 without the CLI reporting a rate limit; never tried higher.
+PARALLEL = 6
+CALL_TIMEOUT = 90
+# Two retries, 2 s then 6 s apart: one transient server_error cleared on its
+# own within a minute (2026-10-10). Guessed spacing, never measured.
+RETRY_WAITS = (2, 6)
+WAIT = 25
+# Anything the network or a half-written response can throw. URLError and
+# TimeoutError are OSErrors; a bad body is a ValueError.
+NET_ERRORS = (OSError, http.client.HTTPException, ValueError)
+
+
+def log(*a):
+    print(time.strftime("%H:%M:%S"), *a, file=sys.stderr, flush=True)
+
+
+def cli(*args, sleep=time.sleep):
+    """One read, retried on a transient failure. On 2026-10-10 the first
+    launchd run lost a whole 50-read refresh to one analytics call that
+    answered server_error; the same read passed a minute later."""
+    last = None
+    for wait in RETRY_WAITS + (None,):
+        out = subprocess.run([CLI, *args], capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        if out.returncode == 0:
+            return json.loads(out.stdout)
+        last = f"{' '.join(args[:2])} failed ({out.returncode}): {out.stderr.strip()[:200]}"
+        # Exit 2 is a bad argument and 3 is auth: retrying cannot fix either.
+        if out.returncode in (2, 3) or wait is None:
+            break
+        sleep(wait)
+    raise RuntimeError(last)
+
+
+def sync_key():
+    if os.environ.get("LIVE_SYNC_KEY"):
+        return os.environ["LIVE_SYNC_KEY"]
+    out = subprocess.run(["security", "find-generic-password", "-s", "chewbacca-live-sync", "-w"], capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit("live-stats-sync: no LIVE_SYNC_KEY in the environment or the keychain (service chewbacca-live-sync)")
+    return out.stdout.strip()
+
+
+class Live:
+    def __init__(self, base, key):
+        self.base = base.rstrip("/")
+        self.key = key
+
+    def call(self, method, path, body=None, timeout=60):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self.base + path, data=data, method=method, headers={
+            "Authorization": f"Bearer {self.key}",
+            "Content-Type": "application/json",
+            "User-Agent": "chewbacca-live-stats-sync",
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read() or b"{}")
+
+
+def row(campaign, analytics, window):
+    totals = (analytics.get("stats") or {}).get("totals") or {}
+    funnel = analytics.get("funnel") or {}
+    return {
+        "campaign_id": campaign["id"],
+        "campaign": campaign["name"],
+        "status": campaign.get("status", ""),
+        # The funnel is the campaign's current state and ignores the date range,
+        # so leads only mean something all time.
+        "leads": int(funnel.get("totalLeads") or 0) if window == "all" else None,
+        "sent": int(totals.get("sent") or 0),
+        "replies": int(totals.get("replies") or 0),
+        "human_replies": int(totals.get("repliesExcludingOoo") or 0),
+        "bounces": int(totals.get("bounces") or 0),
+    }
+
+
+def campaigns_for(prefix):
+    word = prefix.split("|")[0].strip()
+    found, cursor = [], None
+    for _ in range(20):
+        args = ["campaigns", "list", "--limit", "100", "--search", word]
+        if cursor:
+            args += ["--cursor", cursor]
+        page = cli(*args)
+        found += page.get("data", [])
+        cursor = page.get("cursor")
+        if not cursor or not page.get("data"):
+            break
+    return [c for c in found if c.get("name", "").startswith(prefix) and c.get("status") != "draft"]
+
+
+def inbox_threads(ws, prefix, since_dt, categories):
+    """Every inbox thread of this client with a reply since since_dt, one per
+    person, the email reduced to its sha256 so the page can match it against
+    the replies Togari read without ever holding an address. Read through the
+    kit's front door (`chewbacca clay inbox`, 20 a page)."""
+    out = []
+    for offset in range(0, 5000, 20):
+        page = chewbacca_clay("inbox", f"ws={ws}", f"offset={offset}").get("data") or []
+        for r in page:
+            name = r.get("email_campaign_name") or ""
+            at = r.get("last_reply_time")
+            if not name.startswith(prefix) or not at:
+                continue
+            when = dt.datetime.fromisoformat(at.replace("Z", "+00:00"))
+            if when < since_dt:
+                continue
+            email = (r.get("lead_email") or "").strip().lower()
+            out.append({
+                "campaign": name,
+                "who": hashlib.sha256(email.encode()).hexdigest(),
+                # The page refuses a category over 60 characters; cut, never drop.
+                "category": (categories.get(str(r.get("lead_category_id"))) or None) and categories[str(r.get("lead_category_id"))][:60],
+                "at": when.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            })
+        if len(page) < 20:
+            break
+    return out
+
+
+def chewbacca_clay(*args, sleep=time.sleep):
+    """One kit read, retried on the same schedule as cli(). Pinned to the
+    api-anything surface: the kit's fallback for the inbox is clay-inbox, which
+    drives a Chrome tab, and a background job must never open the browser
+    (first launchd run, 2026-10-10, fell through to it)."""
+    last = None
+    for wait in RETRY_WAITS + (None,):
+        out = subprocess.run(["chewbacca", "clay", *args, "--surface", "api-anything"], capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        try:
+            body = json.loads(out.stdout or "{}")
+        except ValueError:
+            body = {}
+        if out.returncode == 0 and body.get("ok"):
+            return body
+        # Only the surfaces' reasons go to the log: the body carries reply
+        # addresses, and the log is a plain file.
+        reasons = [t.get("reason", "") for t in body.get("tried", []) if isinstance(t, dict)]
+        last = f"inbox read failed: {'; '.join(reasons)[:300] or (out.stderr or '').strip()[:300]}"
+        if wait is None:
+            break
+        sleep(wait)
+    raise RuntimeError(last)
+
+
+def read_client(client):
+    """Both windows for one client, as two push bodies. Raises on any failure."""
+    who = cli("whoami")
+    ws = str((who.get("workspace") or {}).get("id", ""))
+    if ws != str(client["clayWorkspaceId"]):
+        raise RuntimeError("the Clay sign-in on this machine is a different workspace")
+    camps = campaigns_for(client["campaignPrefix"])
+    since = (dt.datetime.now(ZoneInfo(TZ)).date() - dt.timedelta(days=6)).isoformat()
+    jobs = []
+    for c in camps:
+        jobs.append((c, "all", ["campaigns", "analytics", c["id"]]))
+        jobs.append((c, "7d", ["campaigns", "analytics", c["id"], "--start-date", since, "--timezone", TZ]))
+    out = {"all": [], "7d": []}
+    categories = {}
+    started = time.time()
+    with concurrent.futures.ThreadPoolExecutor(PARALLEL) as pool:
+        futs = {pool.submit(cli, *args): (c, w) for c, w, args in jobs}
+        for f in concurrent.futures.as_completed(futs):
+            c, w = futs[f]
+            a = f.result()
+            out[w].append(row(c, a, w))
+            for k in (a.get("replies") or {}).get("categories", []):
+                if k.get("categoryId") is not None and k.get("categoryName"):
+                    categories[str(k["categoryId"])] = k["categoryName"]
+    since_dt = dt.datetime.combine(dt.date.fromisoformat(since), dt.time(0), ZoneInfo(TZ))
+    threads = inbox_threads(ws, client["campaignPrefix"], since_dt, categories)
+    as_of = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    log(f"{client['clientId']}: {len(camps)} campaigns, {len(jobs)} reads, {len(threads)} reply threads in {time.time() - started:.1f}s")
+    bodies = []
+    for w, rows in out.items():
+        b = {"clientId": client["clientId"], "window": w, "as_of": as_of, "workspace": ws, "rows": rows}
+        if w == "7d":
+            b["threads"] = threads
+        bodies.append(b)
+    return bodies
+
+
+def sync(live, client, dry):
+    try:
+        bodies = read_client(client)
+    except Exception as e:  # noqa: BLE001  any failure is reported to the page, never swallowed
+        log(f"{client['clientId']}: read failed: {e}")
+        if not dry:
+            try:
+                live.call("POST", "/sync/fail", {"clientId": client["clientId"], "message": str(e)[:200]})
+            except NET_ERRORS as e2:
+                log(f"{client['clientId']}: could not report the failure: {e2!r}")
+        return False
+    for b in bodies:
+        if dry:
+            print(json.dumps(b, indent=2))
+            continue
+        try:
+            r = live.call("POST", "/sync/stats", b)
+            log(f"{client['clientId']} {b['window']}: pushed {r.get('rows')} rows as of {r.get('as_of')}")
+        except NET_ERRORS as e:
+            log(f"{client['clientId']} {b['window']}: push failed: {e!r}")
+            # Tell the page, so a question waiting on this refresh stops waiting
+            # and the client is not re-read on every poll.
+            try:
+                live.call("POST", "/sync/fail", {"clientId": client["clientId"], "message": "the refreshed numbers could not be delivered"})
+            except NET_ERRORS as e2:
+                log(f"{client['clientId']}: could not report the failure: {e2!r}")
+            return False
+    return True
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--once", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args(argv)
+    base = os.environ.get("LIVE_URL")
+    if not base:
+        sys.exit("live-stats-sync: set LIVE_URL")
+    live = Live(base, sync_key())
+    last = {}
+    while True:
+        try:
+            got = live.call("GET", f"/sync/wanted?wait={0 if a.once else WAIT}", timeout=WAIT + 15)
+        except NET_ERRORS as e:
+            # A redeploy of the page drops the long poll mid-request
+            # (RemoteDisconnected, seen 2026-10-10); wait and poll again.
+            log(f"poll failed: {e!r}")
+            if a.once:
+                return 1
+            time.sleep(10)
+            continue
+        wanted = {c["clientId"] for c in got.get("wanted", [])}
+        for c in got.get("clients", []):
+            due = a.once or c["clientId"] in wanted or time.time() - last.get(c["clientId"], 0) > SYNC_EVERY
+            if due and c.get("clayWorkspaceId") and c.get("campaignPrefix"):
+                sync(live, c, a.dry_run)
+                last[c["clientId"]] = time.time()
+        if a.once:
+            return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

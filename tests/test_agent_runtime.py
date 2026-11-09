@@ -5,7 +5,10 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
 from unittest.mock import patch
 
@@ -24,10 +27,46 @@ class RuntimeTests(unittest.TestCase):
             'CODEX_HOME': str(self.home / 'codex custom'),
             'CLAUDE_CONFIG_DIR': str(self.home / '.claude'),
             'CHEWBACCA_HOME': str(self.home / '.chewbacca'),
-            'CHEWBACCA_BRAIN_DIR': str(self.home / 'brain')})
+            'CHEWBACCA_BRAIN_DIR': str(self.home / 'brain'),
+            'CHEWBACCA_TEAM': ''})
         self.env.start()
         self.addCleanup(self.env.stop)
 
+    def test_claude_app_alone_counts_as_claude_code(self):
+        # 2026-10-13: the Code tab in the Claude app reads ~/.claude, needs no
+        # Terminal and no CLI. A Mac with only the app looked agentless, so
+        # --every-agent wired nothing for the person it was meant for.
+        apps = self.home / 'Apps'
+        apps.mkdir()
+        spec = runtime.registry()['runtimes']['claude-code']
+        with patch.dict(os.environ, {'CHEWBACCA_APPLICATIONS_DIR': str(apps), 'PATH': '/usr/bin:/bin'}):
+            self.assertFalse(runtime.detected(spec))
+            (apps / 'Claude.app').mkdir()
+            self.assertTrue(runtime.detected(spec))
+
+    def test_first_session_connects_only_hosts_installed_after_setup(self):
+        # 10/12 stranger run: setup --runtime claude-code, then the first
+        # session's connect --new-only wrote Codex, Cursor and Gemini configs.
+        wired = []
+        with patch.object(runtime, 'selected', side_effect=lambda name: ['claude-code', 'codex', 'cursor']
+                          if name == 'all' else name.split(',')):
+            runtime.remember_hosts_at_setup()
+            with patch.object(runtime, 'setup', side_effect=lambda names, *a, **k: wired.append(names) or None), \
+                    patch.object(runtime, 'terminal_shims', return_value=[]), \
+                    patch.object(runtime, 'export_chat', return_value=None):
+                first = runtime.connect(new_only=True)
+        self.assertEqual(first['connected_now'], [])
+        self.assertEqual(wired, [])
+        with patch.object(runtime, 'selected', side_effect=lambda name: ['claude-code', 'codex', 'cursor', 'gemini']
+                          if name == 'all' else name.split(',')), \
+                patch.object(runtime, 'setup', side_effect=lambda names, *a, **k: wired.append(names) or None), \
+                patch.object(runtime, 'terminal_shims', return_value=[]), \
+                patch.object(runtime, 'export_chat', return_value=None):
+            later = runtime.connect(new_only=True)
+        self.assertEqual(later['connected_now'], ['gemini'])
+        self.assertEqual(wired, ['gemini'])
+
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_install_needs_no_claude_and_preserves_configuration(self):
         home = context.codex_home()
         home.mkdir()
@@ -48,6 +87,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue((self.home / '.agents/skills/debugging/SKILL.md').is_file())
         self.assertEqual(context.brain_root(home), (self.home / 'brain').resolve())
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_capacity_fresh_install_and_reversible_existing_config(self):
         config = context.codex_home() / 'config.toml'
         runtime.setup('codex')
@@ -66,6 +106,7 @@ class RuntimeTests(unittest.TestCase):
         runtime.remove('codex')
         self.assertEqual(config.read_bytes(), original.encode())
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_capacity_preserves_explicit_and_legacy_values(self):
         cases = [
             ('[agents]\nenabled = false\nmax_concurrent_threads_per_session = 3\n', {}),
@@ -94,6 +135,7 @@ class RuntimeTests(unittest.TestCase):
                 if not additions:
                     self.assertEqual(updated, original)
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_unsupported_config_refuses_before_any_install_writes(self):
         for original in ('not valid TOML', 'agents = {enabled = false}\n', 'agents = 3\n'):
             with self.subTest(original=original):
@@ -203,10 +245,64 @@ class RuntimeTests(unittest.TestCase):
                 runtime.setup('codex')
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_stranger_install_never_loads_team_memory(self):
+        # 2026-10-09: a fresh install put Amber's client notes in a stranger's sessions.
+        self.assertFalse(runtime.is_teammate())
+        target = self.home / 'CLAUDE.md'
+        target.write_text('no team line here\n')
+        self.assertFalse(runtime.is_teammate(target))
+
+    def test_teammate_keeps_team_memory_by_flag_env_or_existing_install(self):
+        with patch.dict(os.environ, {'CHEWBACCA_TEAM': '1'}):
+            self.assertTrue(runtime.is_teammate())
+        target = self.home / 'CLAUDE.md'
+        target.write_text(runtime.instruction_block(runtime.registry()['runtimes']['claude-code'], True))
+        self.assertTrue(runtime.is_teammate(target))
+        shared = runtime.shared_home()
+        shared.mkdir(parents=True, exist_ok=True)
+        (shared / 'context.json').write_text('{"brain_dir": "/x", "team": true}')
+        self.assertTrue(runtime.is_teammate())
+
+    def test_team_choice_survives_setup_and_can_be_removed(self):
+        claude = runtime.claude_home() / 'CLAUDE.md'
+        runtime.setup('claude-code', team=True)
+        saved = json.loads((runtime.shared_home() / 'context.json').read_text())
+        self.assertEqual(saved['brain_dir'], str((self.home / 'brain').resolve()))
+        self.assertIs(saved['team'], True)
+        compact = '@' + str(runtime.team_index_path())
+        self.assertIn(compact, claude.read_text())
+        runtime.setup('claude-code')
+        self.assertIn(compact, claude.read_text())
+        runtime.setup('claude-code', no_team=True)
+        self.assertNotIn(runtime.TEAM_LINE, claude.read_text())
+        runtime.setup('claude-code')
+        self.assertNotIn(runtime.TEAM_LINE, claude.read_text())
+
+    def test_teammate_imports_compact_index_with_every_slug_and_lesson(self):
+        # 2026-10-11: the full index was 11,636 tokens of every session.
+        path = runtime.write_team_index()
+        body = path.read_text()
+        source = (ROOT / 'team/memory/MEMORY.md').read_text()
+        slugs = [line[2:].split(':', 1)[0] for line in source.splitlines() if line.startswith('- ')]
+        for slug in slugs:
+            self.assertIn('- ' + slug, body)
+        for line in source.splitlines():
+            if line.startswith('- feedback_'):
+                self.assertIn(line, body)
+        self.assertIn('never goes here', body)
+        self.assertLess(len(body), len(source))
+        spec = runtime.registry()['runtimes']['claude-code']
+        self.assertIn('@' + str(path), runtime.instruction_block(spec, True))
+        path.unlink()
+        self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), runtime.instruction_block(spec, True))
+
     def test_shared_guidance_is_discoverable_without_hooks_for_each_runtime(self):
         for key in ('claude-code', 'codex'):
-            block = runtime.instruction_block(runtime.registry()['runtimes'][key])
+            spec = runtime.registry()['runtimes'][key]
+            block = runtime.instruction_block(spec)
             self.assertIn(str(ROOT / 'config/instructions/agent-neutral.md'), block)
+            self.assertNotIn('team/memory/MEMORY.md', block)
+            self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), runtime.instruction_block(spec, True))
         source = (ROOT / 'setup.sh').read_text()
         helper = source.split('install_agent_neutral_rule() {', 1)[1].split('\n}', 1)[0]
         self.assertNotIn('paths:', helper)
@@ -248,6 +344,33 @@ class RuntimeTests(unittest.TestCase):
             for name in scripts:
                 self.assertTrue((ROOT / '.claude/hooks' / name).is_file(), name)
 
+    def test_setup_puts_chewbacca_on_the_terminal_path_and_undo_takes_it_back(self):
+        # 2026-10-13, a client operator's install rehearsed in a scratch HOME:
+        # --every-agent wired five agents and `chewbacca gtme setup`, the next
+        # line of the guide, said command not found.
+        link = self.home / '.local/bin/chewbacca'
+        with patch.dict(os.environ, {'PATH': '/usr/bin:/bin'}):
+            result = runtime.setup('claude-code')
+        self.assertTrue(link.is_symlink(), result.get('cli'))
+        self.assertEqual(link.resolve(), (ROOT / 'bin/chewbacca').resolve())
+        runtime.remove('claude-code')
+        self.assertFalse(link.is_symlink() or link.exists())
+
+    def test_setup_never_takes_over_a_chewbacca_already_on_path(self):
+        # On a Mac with the kit runtime, ~/.local/bin/chewbacca points at
+        # origin/main; a setup run from a checkout must leave it alone.
+        bin_dir = self.home / '.local/bin'
+        bin_dir.mkdir(parents=True)
+        mine = self.home / 'kit-runtime-chewbacca'
+        mine.write_text('#!/bin/sh\n')
+        (bin_dir / 'chewbacca').symlink_to(mine)
+        with patch.dict(os.environ, {'PATH': '/usr/bin:/bin'}):
+            result = runtime.setup('claude-code')
+        self.assertIsNone(result['cli'])
+        self.assertEqual((bin_dir / 'chewbacca').resolve(), mine.resolve())
+        runtime.remove('claude-code')
+        self.assertEqual((bin_dir / 'chewbacca').resolve(), mine.resolve())
+
     def test_remove_restores_only_unchanged_owned_files_and_links(self):
         home = context.codex_home()
         home.mkdir()
@@ -288,7 +411,115 @@ class RuntimeTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)['runtimes'][0]['id'], 'codex')
-        self.assertEqual(list(self.home.iterdir()), [])
+        # Apple's /usr/bin/python3 (3.9) puts its own bytecode cache under
+        # ~/Library/Caches/com.apple.python whenever it imports anything; that
+        # is the interpreter's write, not setup's (seen 10/13 in a temp HOME).
+        made = [p for p in self.home.rglob('*')
+                if p.relative_to(self.home).parts[:3] != ('Library', 'Caches', 'com.apple.python')
+                and p.relative_to(self.home).parts not in (('Library',), ('Library', 'Caches'))]
+        self.assertEqual(made, [])
+
+
+    def test_vscode_gets_instructions_skills_and_mcp_and_undoes_cleanly(self):
+        # 10/13: `--every-agent` promised VS Code and there was no adapter.
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        mcp = user / 'mcp.json'
+        original = b'{\n  "servers": {"mine": {"type": "stdio", "command": "mine"}}\n}\n'
+        mcp.write_bytes(original)
+        self.assertIn('vscode', runtime.selected('all'))
+        for _ in range(2):
+            result = runtime.setup('vscode')
+        instructions = runtime.vscode_instructions().read_text()
+        self.assertTrue(instructions.startswith('---\n'))
+        self.assertIn('applyTo: "**"', instructions)
+        self.assertIn('agent_context.py', instructions)
+        self.assertEqual(instructions.count(runtime.BEGIN), 1)
+        servers = json.loads(mcp.read_text())['servers']
+        self.assertEqual(servers['mine'], {'type': 'stdio', 'command': 'mine'})
+        import host_mcp
+        if host_mcp.chewbacca_server():
+            self.assertEqual(servers['chewbacca']['type'], 'stdio')
+        self.assertTrue((self.home / '.agents/skills/debugging/SKILL.md').is_file())
+        backup = mcp.with_name('mcp.json' + runtime.BACKUP_SUFFIX)
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(result['runtimes'][0]['backups'], [])  # the rerun kept the first backup
+        self.assertEqual(runtime.vscode_profile_instructions().read_text(), instructions)
+        runtime.remove('vscode')
+        self.assertEqual(mcp.read_bytes(), original)
+        self.assertFalse(runtime.vscode_instructions().exists())
+        self.assertFalse(runtime.vscode_profile_instructions().exists())
+
+    def test_vscode_instructions_symlink_survives_setup_and_undo(self):
+        dotfiles = self.home / 'dotfiles/chewbacca.instructions.md'
+        dotfiles.parent.mkdir()
+        dotfiles.write_text('mine\n')
+        link = runtime.vscode_instructions()
+        link.parent.mkdir(parents=True)
+        link.symlink_to(dotfiles)
+        runtime.vscode_user_dir().mkdir(parents=True)
+        runtime.setup('vscode')
+        self.assertTrue(link.is_symlink())
+        self.assertIn('applyTo', dotfiles.read_text())
+        runtime.remove('vscode')
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(dotfiles.read_text(), 'mine\n')
+
+    def test_vscode_mcp_symlink_survives_setup_and_undo(self):
+        import host_mcp
+        if not host_mcp.chewbacca_server():
+            self.skipTest('no node, so nothing is written to mcp.json')
+        dotfiles = self.home / 'dotfiles/mcp.json'
+        dotfiles.parent.mkdir()
+        dotfiles.write_text('{"servers": {}}\n')
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        (user / 'mcp.json').symlink_to(dotfiles)
+        runtime.setup('vscode')
+        self.assertTrue((user / 'mcp.json').is_symlink())
+        self.assertIn('chewbacca', dotfiles.read_text())
+        runtime.remove('vscode')
+        self.assertTrue((user / 'mcp.json').is_symlink())
+        self.assertEqual(dotfiles.read_text(), '{"servers": {}}\n')
+
+    def test_vscode_mcp_with_comments_is_left_alone_and_setup_finishes(self):
+        user = runtime.vscode_user_dir()
+        user.mkdir(parents=True)
+        jsonc = '{\n  // mine\n  "servers": {"mine": {"type": "stdio", "command": "x"},},\n}\n'
+        (user / 'mcp.json').write_text(jsonc)
+        result = runtime.setup('vscode')
+        self.assertEqual(result['runtimes'][0]['mcp_added'], [])
+        self.assertEqual((user / 'mcp.json').read_text(), jsonc)
+        self.assertTrue((runtime.shared_home() / 'runtime-installs/vscode.json').is_file())
+
+    def test_mcp_entry_prefers_the_stable_link_over_a_snapshot_path(self):
+        import host_mcp
+        if not host_mcp.chewbacca_server():
+            self.skipTest('no node')
+        link = self.home / '.local/bin/chewbacca-mcp'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(ROOT / 'bin/chewbacca-mcp')
+        self.assertEqual(host_mcp.chewbacca_server()['args'], [str(link)])
+
+    def test_export_works_for_hosts_without_an_instruction_file(self):
+        for name in ('vscode', 'cursor', 'gemini'):
+            out = Path(runtime.export(name, self.home / ('export-' + name)))
+            self.assertEqual(out.name, 'AGENTS.md')
+            self.assertIn(runtime.BEGIN, out.read_text())
+
+    def test_backup_holds_the_file_from_before_chewbacca_ever_touched_it(self):
+        settings = runtime.claude_home() / 'settings.json'
+        settings.parent.mkdir(parents=True)
+        original = b'{"model": "mine", "hooks": {}}\n'
+        settings.write_bytes(original)
+        first = runtime.setup('claude-code')
+        backup = settings.with_name('settings.json' + runtime.BACKUP_SUFFIX)
+        self.assertIn(str(backup), first['runtimes'][0]['backups'])
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertNotEqual(settings.read_bytes(), original)
+        runtime.setup('claude-code')
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == '__main__':

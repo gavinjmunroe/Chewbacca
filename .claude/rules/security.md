@@ -18,6 +18,7 @@ paths:
 - **Never log secrets, tokens, passwords, or PII**: not even at `debug` level.
 - Secrets live in env vars only. Never commit `.env` files. Document all required vars in `.env.example`.
 - Redact sensitive fields before logging or broadcasting to SSE/WebSocket.
+- A key the owner shared on purpose gets one line naming the risk and no more. Caleb, 2026-11-05, on keys he texted a teammate: "Keep using them bruh idc my computer is secure". Don't propose rotating them again unless a leak or misuse shows up.
 
 ## Authentication and authorization
 

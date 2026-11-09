@@ -42,8 +42,8 @@ agent-desktop type @s8f3k2p9:e4 "hello"
 ```
 
 **If typing silently does nothing, it is Secure Input.** A password field somewhere has
-focus and macOS is discarding your keystrokes with no error. `chewie doctor
---secure-input` names the process holding it. Fix by moving focus off the field:
+focus and macOS is discarding your keystrokes with no error. `chewie doctor --secure-input`
+names the process holding it. Fix by moving focus off the field:
 `open -a Finder`, then retry.
 
 ## Keys, menus, windows
@@ -83,3 +83,14 @@ usually happens on the step you were not watching.
 Send, pay, delete, post, submit, reply-all, purchase, confirm: **stop and ask.** State
 exactly what you are about to do. This does not lift because the user said to act
 without asking; what needs authorizing is the outbound consequence, not your autonomy.
+
+## Watching a background press
+
+`chewie app press`, `do` and `batch` put a marker on the control on Kyber's glass
+for about 300 ms before pressing, so a person can see what's about to happen. It
+never decides anything: Kyber closed means no marker and no wait, a gated press
+draws nothing, and a window that isn't on screen draws nothing.
+
+Attacking a press means `chewie app see` first. An index or label reads the last
+snapshot, so after an app relaunch the driver answers `window N not found`, which
+is the driver being right, not the marker breaking (2026-11-06).

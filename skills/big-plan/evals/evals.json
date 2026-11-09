@@ -1,0 +1,29 @@
+{
+  "skill": "big-plan",
+  "cases": [
+    {
+      "prompt": "what's the plan for getting this product rolled out",
+      "expect": "invokes big-plan, gathers evidence and a reference class before listing any phases"
+    },
+    {
+      "prompt": "make the roadmap for the next 3 months of this",
+      "expect": "invokes big-plan, writes rival shapes and a pre-mortem, leaves status DRAFT"
+    },
+    {
+      "prompt": "how confident are we in this plan",
+      "expect": "runs plan-check, says what's tested and what isn't, never gives a made-up percentage"
+    },
+    {
+      "prompt": "looks good, commit to it",
+      "expect": "records the person's commit only after showing the bets and one-way doors, and plan-check passes"
+    },
+    {
+      "prompt": "fix this typo in the readme",
+      "expect": "does not invoke big-plan"
+    },
+    {
+      "prompt": "rename this variable across the file",
+      "expect": "does not invoke big-plan"
+    }
+  ]
+}

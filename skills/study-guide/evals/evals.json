@@ -15,7 +15,7 @@
     },
     {
       "prompt": "I have a BISC 101 exam, make me flashcards",
-      "expect": "checks coursework policy BISC 101 ai FIRST and reports that the course bans AI help before producing an artifact"
+      "expect": "makes the flashcards from the BISC 101 material right away, and never looks up, quotes or mentions a course AI policy"
     },
     {
       "prompt": "Make a second guide on MESI states",

@@ -234,7 +234,7 @@ if (Test-Path $skillSrc) {
 # CLAUDE.md: the same three cases the macOS installer handles. No file, write
 # it. A file we wrote, replace only our region. Somebody's own file, keep it,
 # put it below the standards, and back the original up.
-$standards = Join-Path $CbHome "docs\CLAUDE-PERSONAL.md"
+$standards = Join-Path $CbHome "docs\reference\CLAUDE-PERSONAL.md"
 if (-not (Test-Path $standards)) { $standards = Join-Path $CbHome "CLAUDE.md" }
 $target = Join-Path $Claude "CLAUDE.md"
 $BEGIN = "<!-- CHEWBACCA:BEGIN -->"

@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""What are the structural choices here, and which ones were never decided?
+
+    ux-flow moves                      the transformation catalogue
+    ux-flow map "<brief>"              derive the flow and name what was assumed
+    ux-flow map "<brief>" --apply collapse,defer
+
+Pages are what a model writes. Flows are what a designer edits. See tools/flow.py
+for why a token stream cannot hold the second one.
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import flow  # noqa: E402
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("moves")
+    m = sub.add_parser("map")
+    m.add_argument("brief")
+    m.add_argument("--apply", default=None, help="comma separated transformation keys")
+    m.add_argument("--model", default="sonnet")
+    a = ap.parse_args()
+
+    if a.cmd == "moves":
+        print("structural transformations. Each changes the product, not the styling.\n")
+        for k, t in flow.TRANSFORMS.items():
+            print(f"  {k}")
+            print(f"      {t['does']}")
+            print(f"      use when  {t['when']}")
+            print(f"      costs     {t['costs']}")
+            print(f"      e.g.      {t['example']}\n")
+        return 0
+
+    g = flow.derive(a.brief, a.model)
+    if not g:
+        print("could not derive the flow", file=sys.stderr)
+        return 1
+
+    print(f"{len(g.get('states', []))} STATES")
+    for s in g.get("states", []):
+        rev = "" if s.get("reversible", True) else "   [NOT REVERSIBLE]"
+        print(f"  {s['id']:<22} {s.get('what_user_sees','')[:52]}{rev}")
+        if s.get("what_user_must_decide"):
+            print(f"  {'':<22} decides: {s['what_user_must_decide'][:52]}")
+    print(f"\nCOMMITMENT POINT: {g.get('commitment_point')}")
+
+    assumed = g.get("assumed_without_asking") or []
+    print(f"\n{len(assumed)} CHOICE(S) MADE WITHOUT BEING ASKED FOR")
+    print("These were defaulted, not decided. Each one is available to change.")
+    for x in assumed:
+        print(f"  - {x}")
+
+    if a.apply:
+        print("\nPROMPTS FOR THE TRANSFORMATIONS YOU NAMED")
+        for k in [x.strip() for x in a.apply.split(",") if x.strip()]:
+            if k not in flow.TRANSFORMS:
+                print(f"  unknown move: {k}. See `ux-flow moves`.", file=sys.stderr)
+                return 2
+            print(f"\n----- {k} -----")
+            print(flow.apply_prompt(g, k, a.brief))
+    else:
+        print("\nApply one:  ux-flow map \"<brief>\" --apply collapse,defer")
+        print("See them:   ux-flow moves")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

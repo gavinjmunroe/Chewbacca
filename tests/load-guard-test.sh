@@ -3,6 +3,9 @@ H="${LOAD_GUARD_HOOK:-$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/load-guard
 # Pin the load average. Without this the "single heavy job" case passes or
 # fails depending on what the machine is doing, which it did on 2026-09-22.
 export LOAD_GUARD_LOAD=1.0
+# And the rest of the Mac: the reference 10P + 4E, someone at it, on power.
+FIX="$(cd "$(dirname "$0")" && pwd)/fixtures/machine"
+export MACHINE_PROFILE="$FIX/reference-14core.json"
 pass=0; fail=0
 t() { # name, expected_exit, command
   out=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$3")" | bash "$H" 2>/dev/null)
@@ -75,5 +78,18 @@ LOAD_GUARD_LOAD=30.0 t "chewbacca jobs submit --heavy" 0 'chewbacca jobs submit 
 # 2026-10-10: a headless Nalana render sat at 305% CPU while the Mac swapped.
 LOAD_GUARD_LOAD=30.0 t "nalana headless render" 2 '/Applications/Nalana.app/Contents/MacOS/Nalana -b --python shot6.py'
 LOAD_GUARD_LOAD=1.0 t "nalana render, quiet machine" 0 '/Applications/Nalana.app/Contents/MacOS/Nalana -b --python shot6.py'
+# The load limit is a share of the Mac (bin/lib/machine_profile.py), not a
+# fixed 8. Before 2026-10-13 an 8-core laptop got the 14-core Mac's 8, and a
+# Mac nobody had touched for an hour still refused at 8.
+LG_T=$(mktemp -d)
+python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); r["idle_s"]=3600; json.dump(r, open(sys.argv[2], "w"))' \
+  "$FIX/reference-14core.json" "$LG_T/away.json"
+echo "MACHINE-SHAPED (load limit from the profile):"
+MACHINE_PROFILE="$FIX/laptop-8core.json" LOAD_GUARD_LOAD=5.0 t "8-core laptop at load 5 is busy" 2 'yt-transcript abc123'
+MACHINE_PROFILE="$FIX/laptop-8core.json" LOAD_GUARD_LOAD=3.0 t "8-core laptop at load 3 is not" 0 'yt-transcript abc123'
+LOAD_GUARD_LOAD=8.0 t "reference Mac at 8, someone at it" 2 'yt-transcript abc123'
+MACHINE_PROFILE="$LG_T/away.json" LOAD_GUARD_LOAD=12.0 t "reference Mac at 12, nobody at it" 0 'yt-transcript abc123'
+MACHINE_PROFILE="$LG_T/away.json" LOAD_GUARD_LOAD=20.0 t "reference Mac at 20, nobody at it" 2 'yt-transcript abc123'
+rm -rf "$LG_T"
 echo; echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

@@ -11,6 +11,9 @@
 #   chrome-js --match "console.cloud" --text            # innerText of the page
 #   chrome-js --match "console.cloud" --click "Next"    # click a button by label
 #   chrome-js --list                                    # every tab Chrome exposes
+#   chrome-js --real --match "linkedin.com" --file x.js # the user's own Chrome, by PID
+#   chrome-js --real --url "https://www.linkedin.com/feed/" --file x.js
+#                                   # the tab whose URL is exactly this, no substring
 #
 # Requires: View > Developer > Allow JavaScript from Apple Events, in Chrome.
 #
@@ -18,16 +21,28 @@
 #   1. Chrome runs one AppleScript-visible instance. Windows belonging to other
 #      profiles or other user-data-dirs are invisible to it, so --open takes a
 #      --profile and you should confirm with --list before assuming a tab exists.
+#      Worse, when automation has launched Chrome clones (--user-data-dir, e.g.
+#      chewie's debug-port copies), `tell application "Google Chrome"` binds to
+#      a clone and the user's real windows vanish (2026-10-10: it saw 0 windows
+#      while the real Chrome held a signed-in LinkedIn tab). --real addresses
+#      the one Chrome process with no --user-data-dir by PID, through
+#      ScriptingBridge, and --open under --real hands the URL to that running
+#      browser's singleton instead of launching anything.
 #   2. Quoting JS through shell into AppleScript into the page mangles it. The
 #      script always goes through a file, never through an argument string.
 set -euo pipefail
 
 MATCH=""; JSFILE=""; OPEN_URL=""; PROFILE=""; MODE="js"; CLICK_TEXT=""; INLINE=""
 ACTIVATE=false
+REAL=false
+EXACT=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --match)   MATCH="$2"; shift 2 ;;
+    # --url: exact equality. A substring match lets https://evil.example/?x=linkedin.com
+    # stand in for LinkedIn (security review, 2026-10-10).
+    --url)     MATCH="$2"; EXACT=true; shift 2 ;;
     --file)    JSFILE="$2"; shift 2 ;;
     --eval)    INLINE="$2"; shift 2 ;;
     --open)    OPEN_URL="$2"; shift 2 ;;
@@ -37,7 +52,8 @@ while [ $# -gt 0 ]; do
     --list)    MODE="list"; shift ;;
     --check)   MODE="check"; shift ;;
     --activate) ACTIVATE=true; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --real)    REAL=true; shift ;;
+    -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "chrome-js: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -75,6 +91,46 @@ refuse_password_access() {
   fi
 }
 
+# The user's own Chrome: the main process with no --user-data-dir and no
+# --type (helpers). Clones always carry --user-data-dir.
+real_pid() {
+  ps -axo pid=,command= | awk '/\/Contents\/MacOS\/Google Chrome( |$)/ && !/--user-data-dir/ && !/--type=/ && !f {print $1; f=1}'
+}
+
+# One JXA runner for --list and script modes under --real. argv: mode pid match jsfile
+REAL_JXA='ObjC.import("ScriptingBridge"); ObjC.import("Foundation");
+function run(argv) {
+  var mode = argv[0], pid = parseInt(argv[1], 10), match = argv[2], file = argv[3], exact = argv[4] === "true";
+  var app = $.SBApplication.applicationWithProcessIdentifier(pid);
+  if (!app || app.isNil()) return "NO_REAL_CHROME";
+  var wins = app.valueForKey("windows"), out = [];
+  for (var i = 0; i < wins.count; i++) {
+    var tabs = wins.objectAtIndex(i).valueForKey("tabs");
+    for (var j = 0; j < tabs.count; j++) {
+      var t = tabs.objectAtIndex(j), u = ObjC.unwrap(t.valueForKey("URL")) || "";
+      if (mode === "list") { out.push(u); continue; }
+      if (exact ? u === match : u.indexOf(match) >= 0) {
+        var js = ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(file, $.NSUTF8StringEncoding, null));
+        var r = t.performSelectorWithObject("executeJavascript:", $(js));
+        if (!r || r.isNil()) return "missing value";
+        var v = ObjC.unwrap(r.description ? r.description : r);
+        return String(v);
+      }
+    }
+  }
+  return mode === "list" ? out.join("\n") : "NO_TAB_MATCHING: " + match;
+}'
+
+run_real() {
+  local mode="$1" pid
+  pid="$(real_pid)"
+  if [ -z "$pid" ]; then echo "chrome-js: no running Chrome without --user-data-dir" >&2; exit 4; fi
+  local runner; runner="$(mktemp "${TMPDIR:-/tmp}/chrome-js-real.XXXXXX")"
+  printf '%s' "$REAL_JXA" > "$runner"
+  osascript -l JavaScript "$runner" "$mode" "$pid" "${MATCH:-}" "$TMP_JS" "$EXACT" 2>&1 || true
+  rm -f "$runner"
+}
+
 if [ "$MODE" = "check" ]; then
   # "Allow JavaScript from Apple Events" is per PROFILE, not per browser, and a
   # profile without it fails every --eval with the same opaque error. Report the
@@ -109,6 +165,11 @@ PY
   exit 0
 fi
 
+if [ "$MODE" = "list" ] && $REAL; then
+  run_real list
+  exit 0
+fi
+
 if [ "$MODE" = "list" ]; then
   osascript <<'AS'
 tell application "Google Chrome"
@@ -127,10 +188,24 @@ fi
 if [ -n "$OPEN_URL" ]; then
   # A named profile needs its own instance argument; Chrome ignores the profile
   # when it just reuses an existing window.
-  if [ -n "$PROFILE" ]; then
-    open -na "Google Chrome" --args --profile-directory="$PROFILE" --new-window "$OPEN_URL"
+  # Agent tabs open behind whatever Caleb is using: a page that jumps to the
+  # front takes his keystrokes into a form an agent is filling (2026-10-10,
+  # "I could be interfering with the agent's clicks/types"). -g for open, and
+  # the Chrome binary path, which always comes forward, hands focus back.
+  FRONT_APP=$(osascript -e 'tell application "System Events" to get bundle identifier of first process whose frontmost is true' 2>/dev/null || true)
+  if $REAL; then
+    # Chrome's own binary with the default user-data-dir forwards to the
+    # running browser's singleton and exits ("Opening in existing browser
+    # session"). No second instance survives this.
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      ${PROFILE:+--profile-directory="$PROFILE"} "$OPEN_URL" >/dev/null 2>&1 || true
+  elif [ -n "$PROFILE" ]; then
+    open -g -na "Google Chrome" --args --profile-directory="$PROFILE" --new-window "$OPEN_URL"
   else
-    open -a "Google Chrome" "$OPEN_URL"
+    open -g -a "Google Chrome" "$OPEN_URL"
+  fi
+  if [ -n "$FRONT_APP" ] && [ "$FRONT_APP" != "com.google.Chrome" ]; then
+    osascript -e "tell application id \"$FRONT_APP\" to activate" >/dev/null 2>&1 || true
   fi
   # Give the console app time to render past its own loading spinner. Chrome
   # reports loading=false well before an Angular console has painted a form.
@@ -181,6 +256,9 @@ esac
 # on purpose: a guard on only the paths someone remembered is not a guard.
 refuse_password_access "$TMP_JS" "the script"
 
+if $REAL; then
+  RESULT="$(run_real js)"
+else
 # `|| true`: osascript exits non-zero when the page rejects the script, and
 # set -e would abort here before the diagnosis below ever prints.
 RESULT="$(osascript <<AS 2>&1 || true
@@ -189,11 +267,12 @@ tell application "Google Chrome"
   repeat with w in windows
     repeat with tabIndex from 1 to count of tabs of w
       set t to tab tabIndex of w
-      if (URL of t) contains "$MATCH" then
+      if ($EXACT and (URL of t) is "$MATCH") or ((not $EXACT) and (URL of t) contains "$MATCH") then
         if $ACTIVATE then
+          -- The tab becomes the active one in its window so it renders, but
+          -- Chrome is never brought in front of what Caleb is using
+          -- (2026-10-11, "a flashbang tab opening and taking over").
           set active tab index of w to tabIndex
-          set index of w to 1
-          activate
         end if
         return execute t javascript js
       end if
@@ -203,6 +282,7 @@ tell application "Google Chrome"
 end tell
 AS
 )"
+fi
 if printf '%s' "$RESULT" | grep -q "Executing JavaScript through AppleScript is turned off"; then
   echo "chrome-js: this Chrome profile has JS-from-Apple-Events turned off." >&2
   echo "           Run: chrome-js --check     (shows which profiles are enabled)" >&2

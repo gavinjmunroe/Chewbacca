@@ -23,6 +23,14 @@ wrong, correcting the file is the whole response.
 
 ---
 
+## READ THE THREAD BEFORE BUILDING ON A NOTE
+
+A plan in the ledger or memory can be hours old. Before building for a person, read that thread from the note's date forward. On 2026-11-05 a note said "lawyer first" while the Dad thread from that afternoon said no lawyers for now, and the session had started a lawyer packet and told another tab the old plan before it read the thread.
+
+Before arguing a side, check his own documents for the opposite line. His 10/7 expense sheet says "Chewbacca is Amber work", which cuts against both the breach point and his 11/5 text to Dad.
+
+---
+
 ## NEVER RECORD INTENT AS FACT
 
 "I'm about to ship it." "I'm submitting them all." "I'll push tonight."
@@ -41,6 +49,31 @@ RIGHT: write "ready to submit, awaiting confirmation." Ask "did those go in?"
        in four words next session.
 ```
 
+A status he hasn't announced is not a fact either. On 2026-10-26 he said, in
+passing while prepping a call, "now that I am not with Amber". The agent took
+it as done and started recording it. Two minutes later he wrote "I haven't left
+amber yet and I haven't told Sagar" and "DONT LOG THAT ON THE BRAIN ITS NOT
+OFFICIAL". Leaving a company, a role, a relationship or a team is official only
+once he says the other side knows. Until then keep it out of memory, the brain,
+team notes and anything another person could read, and keep it out of call prep
+lines he'd say out loud.
+
+The reverse fails too: "drafted, not sent" goes stale the moment he sends it
+by hand. Before telling him something is unsent, undone or missed, check the
+place it would have gone (Gmail Sent, the submissions API, the thread). On
+2026-10-14 a note said a BISC Quiz #4 reopen email was "drafted in Gmail, not
+sent", the reply repeated it, and he wrote "Shit bro why didn't we send tha?"
+It had gone out from his USC account on 10/3. One Sent search would have shown it.
+
+Two more from 2026-11-03, one night. A reply told him the three AuraPath domains
+promised to Travis weren't bought; another tab had bought them on Cloudflare an
+hour earlier, and `dig NS` would have shown it ("The cloudflare tab alr bought
+domains"). And three ledger rows said "blocked on Reed's Dripify key" for six
+days while Reed's reply with the key sat unread in the USC inbox since 10/28.
+So: before saying a purchase, setup or send hasn't happened, check the world
+(dig, the registrar, Sent, `tabs context`). Before trusting "waiting on X",
+search X's mail newer than the row's last update.
+
 ---
 
 ## VERIFY THE EDIT LANDED. YOUR SCRIPT'S SUCCESS MESSAGE IS NOT EVIDENCE.
@@ -58,6 +91,11 @@ grep -c "the new text" path/to/file    # expect the number you intended
 
 Reporting a change that never applied is worse than not making it, because it
 stops both of you from ever looking at that spot again.
+
+A local checkout is a cache too. Before saying a repo is stale, broken or
+pointing at the wrong place, run `git fetch` and read origin. On 2026-11-02 a
+session told Caleb chip-in-setup still cloned an archived repo and pitched a
+fix, from a checkout 2 commits behind; origin had been repointed on 10/30.
 
 ---
 
@@ -83,6 +121,51 @@ themselves. Old documents, prior drafts, uploads, the repo's own history.
 
 Asking someone for a story that is sitting in their own notes tells them you are
 not reading, and they are right. Skimming filenames is not reading.
+
+A one-word message from him is a name until proven otherwise. Search before
+replying: `grep -ri "<word>" ~/second-brain`, `gh repo list`, `ls ~/code`. On
+2026-11-05 he sent "Hall" and got "I think ur message got cut off", then wrote
+"bro ru stupid? Hall is one of our main projects!" The repo and its notes turned
+up on the first search. The note sat under its old name, usc_os, with no line in
+MEMORY.md, so recall hadn't surfaced it either: a rename that skips the index
+hides the project.
+
+The same goes before building. On 2026-10-17 he floated a Needledrop scrape
+plus the Spotify API ("idek what I'm thinking lol"). The agent ran a 7k-video
+scrape and wrote a Spotify client without looking, and he'd already built
+`calebnewtonusc/fantano` in June. A memory note pointed right at it and said
+CSV first, no Spotify login. Ten minutes in he wrote "Wait not today! J save
+it to todo. Idek what I wanna make yet." So, before any side project:
+
+```bash
+ls ~/code/archive/*/ ~/code/personal | grep -i <topic>
+gh repo list calebnewtonusc --limit 300 | grep -i <topic>
+grep -ril <topic> ~/second-brain/memory
+```
+
+Lead with what already exists. When he says "idek" or "random idea", give
+him two or three concrete shapes in a few lines before starting anything long.
+
+---
+
+## HIS FACTS WIN. HIS TAKES GET TESTED.
+
+The rule above covers facts about his own life: his roles, people, numbers and
+what happened. Those he's right about. A take is different: a strategy, design,
+pricing or priority call, from him or anyone (a client, a teammate, another
+agent). A take is a hypothesis.
+
+Before building on one, say your own read in a sentence or two: agree or
+disagree, the strongest reason against it, and the result that would settle it.
+Disagree out loud when the evidence says so, and recommend the better option.
+On a reversible call, act on the better option and say why. Never quietly carry
+out a take just because he typed it.
+
+On 2026-11-03 an agent reordered a whole outbound wave on one passing line of
+his. He wrote "Bro don't take my word as Bible maybe that isn't the best strat!"
+and then "Fix chewbs to not assume my takes to be always correct! Same goes for
+anyone - ai is too much of a yes man by default". `method-guard.sh` now flags a
+take in his prompt and asks for this read every time.
 
 ---
 
@@ -113,6 +196,20 @@ instead of a plausible-looking value.
 A document with six open markers is a good draft. One invented number is a
 failure, and it is the kind that surfaces in front of the one person who was
 actually there.
+
+Legal and filing info is the strictest case. A middle name, zip, SSN, or
+address going into an LLC, bank, or tax form comes from the person or an
+official record, never inferred. On 2026-10-29 a draft text to Caleb's dad
+for the Firm Foundation LLC filing gave Gavin the middle name "James", read
+off the GitHub handle `gavinjmunroe`, and a Census zip matched on the street
+name alone. Both were pulled before sending. Leave `[NEED: Gavin's middle name]`
+and say who to ask.
+
+---
+
+## A FREE WINDOW ISN'T A PLAN
+
+Someone saying they're free at a time doesn't say what it's for. Before a plan or a draft text names the purpose, find it in the thread or ask, and never add his availability to a draft unless he gave it. On 2026-11-05 a roommate texted "free from 6:30-7:30", and a life plan and a draft reply both said gym because the same thread mentioned the gym. Caleb: "6:30 isnt gym its when were prepping for our shared bday". A draft to another friend in that tab also claimed "I'm free most Fridays" with no source, caught only on a reread.
 
 ---
 

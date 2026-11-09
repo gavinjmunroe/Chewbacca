@@ -10,8 +10,8 @@
 # 2026-09-27).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-command -v ffmpeg >/dev/null || { echo "SKIP reel_check: ffmpeg not installed"; exit 0; }
-python3 -c "import PIL, numpy" 2>/dev/null || { echo "SKIP reel_check: Pillow or numpy missing"; exit 0; }
+command -v ffmpeg >/dev/null || { echo "SKIP reel_check: ffmpeg not installed"; exit 77; }
+python3 -c "import PIL, numpy" 2>/dev/null || { echo "SKIP reel_check: Pillow or numpy missing"; exit 77; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -38,7 +38,7 @@ ffmpeg -v error -y -f lavfi -i "testsrc2=size=1080x1920:rate=30:duration=2" fram
 ffmpeg -v error -y -f lavfi -i "sine=frequency=330:duration=2" tone.wav
 FONT="$(fc-match -f '%{file}' 'Helvetica:bold' 2>/dev/null)"
 [ -f "$FONT" ] || FONT="$(ls /System/Library/Fonts/Supplemental/Arial\ Bold.ttf 2>/dev/null)"
-[ -f "$FONT" ] || { echo "SKIP reel_assemble: no font found"; exit 0; }
+[ -f "$FONT" ] || { echo "SKIP reel_assemble: no font found"; exit 77; }
 cat > edit.json <<JSON
 {"out": "made.mp4", "size": "1080x1920", "fps": 30, "seconds": 2,
  "frames": "frames/f_%04d.png",

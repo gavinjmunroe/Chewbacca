@@ -1,0 +1,467 @@
+# TODO
+
+Ordered by (measured impact / effort). Every item has an acceptance criterion
+that is a number or a demonstrated refusal, because this repo's parent kit has
+three logged incidents of a thing being built, reported done, and never
+actually running.
+
+**The rule for every item here: tune on `bench/queries.json` (25 dev), report
+on `bench/queries_independent.json` (73 sealed). Running the sealed set more
+than once per change is how 68% becomes a fictional 80%.**
+
+---
+
+## P0, wiring. Done 2026-10-09 except the skill
+
+`brain-recall.sh` calls `brain ask` on every prompt, `~/.local/bin/brain`
+links to `src/brain.py`, and launchd keeps the index fresh. What is left is
+item 1's skill file.
+
+### 1. Ship `brain` as a skill, not an MCP server
+
+The retriever works and nothing calls it. MCP tool schemas load into every
+session whether used or not; a CLI behind a skill costs ~60 tokens standing.
+
+- Write `skills/brain/SKILL.md`, name plus description only, body holds the CLI contract.
+- Symlink `src/brain.py` to `~/.local/bin/brain`. Not a copy. A Sept 5 copy of
+  `hud-listen` sat in `~/.local/bin` passing zero flags for two weeks.
+- **Accept:** a session with no prior context answers "what did Joel George say
+  about loneliness" by calling `brain ask` and citing the file. Prove it in a
+  transcript, do not assert it.
+
+### 2. Cut the always-on context using the retriever
+
+~28k tokens load every session. Measured proposal is 6.6k, a 76% cut.
+
+- Keep eager: the enforcement rules (writing, untrusted-content, do-it-yourself,
+  git, security). A rule that fires only when retrieved fails silently the one
+  time it mattered.
+- Retrieve on demand: `core/{identity,now,people,voice}`, `memory/MEMORY.md`.
+- SessionStart hook emits a ~900-token digest, not an `@import`, because an
+  import is static text and cannot say `index=STALE(3)`.
+- **Accept:** measured startup token count under 10k, and a held-out set of 20
+  questions previously answered from eager context still answered correctly.
+
+### 3. Incremental indexing. DONE 2026-10-09
+
+`brain index` now re-embeds only changed files (4.7s for 20 changed, 175
+removed) and launchd runs it every 10 minutes. Renames still re-embed, because
+the path is part of the embedded text. The spec below is kept for history.
+
+Full rebuild is 85s. A one-file change should be ~175ms. Design measured and
+specced: hash with blake2b-128, prefilter on (mtime, bytes), rechunk and
+re-embed only changed files, rematerialize `emb.npy` in ~20ms.
+
+- mtime is a hint, never the authority. Git checkouts rewrite it without
+  changing bytes.
+- A new path whose sha matches a vanished path is a **rename**: update the path,
+  re-embed nothing.
+- **Accept:** `brain index --file X` completes under 300ms for a median file and
+  `brain status` reports zero stale.
+
+### 4. Query cache plus keep_alive. PARTLY DONE 2026-10-09
+
+keep_alive is 2h, and a timed-out ask starts a detached warm-up instead of
+aborting the load forever (findings/RESULTS.md). No query cache yet.
+
+Query embedding is the only unreliable cost: warm p50 12ms, cold ~90ms,
+model-not-resident 460ms. Cache query vectors keyed on the normalized string.
+`keep_alive` is `2h` in `src/brain.py` since 2026-10-09.
+
+- **Accept:** p90 end-to-end under 300ms across 50 real queries, and the 120ms
+  timeout path demonstrably returns lexical results with `degraded=embed_timeout`
+  in the header. Force it by stopping ollama mid-run.
+
+---
+
+## P1, worth doing, measurable
+
+### 5. Beat 68%. Mostly done, and mostly negative.
+
+Ablations ran. Full table in findings/RESULTS.md. Summary of what is now closed:
+
+- **Context prefix: keep it.** Stripping `filepath | frontmatter description`
+  costs 12 points. It was the most suspicious choice in the harness and it
+  turned out load-bearing in the opposite direction.
+- **Embedding model: do not bother.** mxbai-embed-large, embeddinggemma and
+  all-minilm were all a wash or worse on recall@5. Bigger models move MRR and
+  leave the top-5 set alone.
+- **Chunk size: do not shrink.** 75 words looks like +20 on dev against the
+  untuned baseline and loses 10 points on the sealed set against the tuned one.
+  Small chunks and mean aggregation are substitutes. See the chunk-size trap.
+- **Task prefixes: no.** +4 on the coarse baseline, negative once chunks shrink.
+
+Still open and still worth trying:
+
+- **A real cross-encoder rerank.** Only a BM25 reorder of vector top-20 was
+  tested (+8 on the untuned baseline, 0 once tuned). No cross-encoder was run.
+- **Query expansion / agentic retry.** The measured grep number is single-shot.
+  Nobody tested letting the retriever reformulate after a miss, which is the
+  mechanism Anthropic's agentic-search argument actually rests on.
+- **Accept:** any change must beat 68% on the sealed set, not on dev. Four
+  variants tied at 80% on dev and spread across 10 points on the sealed set.
+
+### 6. Fix the 16 broken wikilinks and the contradiction regex
+
+`bench/graph0.py` found 1,495 resolved links and 16 broken. Separately its
+CONTRADICTS count of 0 is a **bug in the matcher, not a property of the
+corpus**: the regex is same-line, and `> [!contradiction]` callouts span lines.
+16 callouts exist, 7 have a link in the block.
+
+- **Accept:** broken count is 0, and the callout matcher reports 7.
+
+### 7. Build the eval set from the corrections that already exist
+
+The parent kit has a backlog item reading "Close the learning loop. The score
+has never moved." Every `feedback_*.md` file is a logged failure with a known
+correct behavior and a date. That is a labeled dataset sitting unused.
+
+- Turn each into one case: the query the agent would face, the expected behavior.
+- Score **index-hit separately from answer correctness**. Conflating them is the
+  most common error in this literature.
+- **Accept:** a score that moves when the retriever changes.
+
+### 8. Duplicate detection at write time, lexical only
+
+291 memory files and growing, nothing merges. Jaccard over H1 plus first 200
+chars against every existing memory file; refuse at >= 0.55.
+
+- **Lexical, not embedding.** An ollama call inside a PreToolUse hook fails open
+  on timeout, and a gate that fails open is exactly the shape of the guard that
+  shipped 12 bad outputs.
+- **Accept:** the hook refuses a deliberately duplicated file, exits 2, and a
+  sibling benign write exits 0. Both in CI.
+
+---
+
+## P2, specced but unproven, do not start without re-reading the evidence
+
+### 9. Staleness surfacing
+
+Per-relation decay (status 7d, roles 45d, enrollment 120d, beliefs 365d,
+evidence never). Surfaces at most 3 per session, **as questions, never as
+facts**, snoozed 14 days whether answered or not. Never auto-deletes.
+Motivated by `core/now.md` going 36 days stale and asserting things that had
+stopped being true.
+
+### 10. Frequency promotion
+
+When k>=3 notes cluster on one lesson, collapse to one rule with the originals
+as evidence. Trigger on a shared edge target, widened by cosine >= 0.82, never
+similarity alone. Nightly scan writes a proposal; a human applies it.
+Nothing mainstream does frequency-threshold promotion, so this is genuinely
+novel and correspondingly likely to be wrong.
+
+### 11. Atomic rename
+
+`brain-rename <old> <new> --dry-run`. Filename, frontmatter, index line, and
+every backlink change together or the tree rolls back to the pre-run sha.
+Index lines must **lead with the new name and keep the old one** so both resolve.
+
+---
+
+## Do not build
+
+- **A typed relation ontology.** Falsified. Shuffled labels tied hand-curated
+  ones across three seeds. Cost would have been ~$10 and a week.
+- **Bare 1-hop graph expansion.** Null by construction at boost 0, and drops
+  recall to 48% then 12% as the boost grows. Independently reproduces
+  HippoRAG's Table 5 ablation.
+- **PPR on top of tuned retrieval.** Flat recall, join metric 17% to 6%.
+- **GraphRAG / LightRAG / PathRAG.** $3-15 per reindex at a scale where they
+  lost to TF-IDF in published benchmarks.
+- **Pinecone or any hosted vector DB.** 1,536 vectors. Brute force is 0.027ms.
+- **sqlite-vec.** Pulling the BLOBs out of SQLite costs 6.1ms, which is 220x the
+  entire dot product. Revisit at 500k vectors.
+- **float16 vectors.** Halves the file, multiplies search cost by 130, because
+  there is no f16 BLAS path on this machine.
+- **Blocking a `[[link]]` to a file that does not exist.** An unwritten target
+  is a to-do and is correct. This would fire on the most common good action.
+- **"Number with no source" checks.** Most numbers in `core/` are his own.
+  Sounds strongest, would be the loudest false positive.
+
+---
+
+## Found 2026-10-09
+
+### Hub files win unrelated queries
+
+Live sealed recall@5 is 50.8% on 701 files, against 68% on 476 in September.
+Most misses lose to two long folders under `domains/`,
+long files that rank top 3 for questions they do not answer.
+
+- Try on dev only: chunk-count normalisation under mean aggregation, a per-folder
+  cap in the top 5, and a BM25 length penalty.
+- **Accept:** beats 50.8% on the sealed set, run once.
+
+**Measured 2026-10-10. Shipped: a cap of one file per `domains/<x>` subfolder.**
+Snapshot of the live index (717 files, 3,790 chunks), one knob at a time, via
+`bench/hubs.py`, which calls `brain.rank()` itself. Dev is 25 queries, so one
+query is 4 points and the 95% interval is about +/-18.
+
+| variant (dev, n=25)               | r@5       | MRR       |
+| --------------------------------- | --------- | --------- |
+| baseline (mean agg, w=0.7)        | 68.0%     | 0.536     |
+| chunk-count, dense mean x n^-0.01 | 64.0%     | 0.489     |
+| chunk-count, n^-0.03              | 68.0%     | 0.474     |
+| chunk-count, n^-0.05              | 68.0%     | 0.443     |
+| chunk-count, n^-0.1               | 56.0%     | 0.349     |
+| chunk-count, n^-0.5               | 20.0%     | 0.151     |
+| chunk-count, n^-1.0               | 16.0%     | 0.117     |
+| **folder cap 1**                  | **68.0%** | **0.542** |
+| folder cap 2                      | 68.0%     | 0.539     |
+| folder cap 3                      | 68.0%     | 0.537     |
+| BM25 length b=0.25                | 64.0%     | 0.487     |
+| BM25 length b=0.5                 | 68.0%     | 0.481     |
+| BM25 length b=0.75                | 64.0%     | 0.480     |
+| BM25 length b=1.0                 | 68.0%     | 0.509     |
+
+Chunk-count normalisation is strongly negative: any penalty on long files
+floods the top 5 with one-chunk notes, and dev misses mostly lose to those
+already. The BM25 length divisor never beat baseline. The folder cap tied on
+r@5 and was the only change that raised MRR, so it was picked by the
+r@5-then-MRR rule. The dev gain is noise-sized; dev barely shows the hub
+problem (3 of 8 misses), which is why it had to be decided on structure.
+
+| sealed, run once (n=65 answerable) | r@5       | 95% CI  | MRR   |
+| ---------------------------------- | --------- | ------- | ----- |
+| baseline on the same snapshot      | 52.3%     | +/-12.1 | 0.350 |
+| folder cap 1                       | **55.4%** | +/-12.1 | 0.357 |
+
+Beats the 50.8% acceptance bar and the same-snapshot baseline by 2 queries,
+well inside the interval, and still 12.6 points short of the 68% target. The
+cap halved the hub folders' presence on misses (one folder 24 to 13 top-5
+slots, the other 15 to 11), but the slots went to long single files at
+`domains/` top level (mission, technical-mind, story), which the cap does not
+touch because a lone file is not a folder. Next lever: those top-level hub
+files, which needs a new dev-tuned idea, not another sealed run of these.
+`tests/test_brain_hubs.py` holds the cap with a synthetic hub fixture and fails
+when the cap is removed (checked: 4 of 13 fail at FOLDER_CAP=0).
+
+**Measured 2026-10-10, second pass: lone hub files. Nothing shipped.**
+Frozen copy of the live index (728 files, 3,805 chunks), every variant on top
+of the shipped folder cap, through `brain.rank()`, via `bench/lone.py`. Dev is
+25 queries, so one query is 4 points.
+
+| variant (dev, n=25)                              | r@5       | MRR       |
+| ------------------------------------------------ | --------- | --------- |
+| shipped (folder cap 1)                           | 68.0%     | 0.542     |
+| (a) best chunk, top_m=1 (max)                    | 52.0%     | 0.428     |
+| (a) mean of best 2 chunks                        | 60.0%     | 0.459     |
+| (a) mean of best 3 chunks                        | 60.0%     | 0.481     |
+| (a) mean of best 5 chunks                        | 68.0%     | 0.550     |
+| (b) section unit (file = best section)           | 56.0%     | 0.399     |
+| (b) section unit, top_m=1                        | 56.0%     | 0.397     |
+| (b) section unit, top_m=3                        | 56.0%     | 0.399     |
+| (c) chunk-space k-occurrence, beta=0.05          | 68.0%     | 0.519     |
+| (c) chunk-space k-occurrence, beta=0.1           | 68.0%     | 0.533     |
+| (c) chunk-space k-occurrence, beta=0.2           | 64.0%     | 0.466     |
+| (c) chunk-space k-occurrence, beta=0.3           | 68.0%     | 0.417     |
+| (c) chunk-space k-occurrence, beta=0.5           | 52.0%     | 0.344     |
+| (c) chunk-space k-occurrence, beta=1.0           | 36.0%     | 0.242     |
+| (c) CSLS gamma=0.25                              | 64.0%     | 0.504     |
+| (c) CSLS gamma=0.5                               | 56.0%     | 0.466     |
+| (c) CSLS gamma=1.0                               | 52.0%     | 0.335     |
+| (c) query-space k-occ, heading probes, beta=0.05 | 76.0%     | 0.548     |
+| (c) query-space k-occ, heading probes, beta=0.1  | 72.0%     | 0.571     |
+| (c) query-space k-occ, heading probes, beta=0.2  | 72.0%     | 0.563     |
+| (c) query-space k-occ, heading probes, beta=0.3  | 72.0%     | 0.525     |
+| (c) query-space k-occ, heading probes, beta=0.5  | 64.0%     | 0.378     |
+| (c) query-space k-occ, heading probes, beta=1.0  | 24.0%     | 0.163     |
+| (c) query-space k-occ, slug probes, beta=0.05    | 72.0%     | 0.603     |
+| **(c) query-space k-occ, slug probes, beta=0.1** | **80.0%** | **0.674** |
+| (c) query-space k-occ, slug probes, beta=0.2     | 80.0%     | 0.609     |
+| (c) query-space k-occ, slug probes, beta=0.3     | 64.0%     | 0.541     |
+| (c) query-space k-occ, slug probes, beta=0.5     | 56.0%     | 0.442     |
+| (c) query-space k-occ, slug probes, beta=1.0     | 40.0%     | 0.347     |
+| (d) lone domains/*.md cap 1 (taken together)     | 64.0%     | 0.531     |
+| (d) lone domains/*.md cap 2                      | 68.0%     | 0.542     |
+
+Chunk-space hubness points the wrong way: with every chunk as a pseudo-query,
+mission, technical-mind and story score 0.24, 0.13 and 0.27 times the mean
+k-occurrence (median file 0.68). They are anti-hubs among chunks and win only
+against real questions. Query-space hubness (649 file-slug probes, each probe
+barred from voting for its own file, top 5 under the shipped ranker) does see
+hubs, but its top 15 are all short memory/ notes; mission is 1.57x the mean,
+so the discount barely touched it. Picked by the r@5-then-MRR rule.
+
+| sealed, run once (n=65 answerable)       | r@5   | 95% CI  | MRR   |
+| ---------------------------------------- | ----- | ------- | ----- |
+| shipped (folder cap 1), same snapshot    | 55.4% | +/-12.1 | 0.357 |
+| query-space k-occ, slug probes, beta=0.1 | 43.1% | +/-12.0 | 0.331 |
+
+A 12.3-point loss, 8 queries. The +12 on dev was 3 queries and did not
+survive. The folder cap stays the shipped config at 55.4%; the knobs stay in
+`rank()` defaulted off so `bench/lone.py` reproduces this table, and
+`tests/test_brain_hubs.py` checks each knob does what its name says and that
+the default path equals all of them off. The lone-file problem is still open
+and dev cannot see it: on the shipped config dev's 8 misses include no lone
+domains/ file. The next attempt needs a dev set that contains the failure
+(a fresh blind batch of questions whose answers sit outside domains/), not
+another knob tuned on these 25.
+
+**Measured 2026-10-10, third pass: dev2, a set built to contain the lone-hub
+failure. Nothing tuned.** 46 new questions in
+`~/second-brain/.bench/brain-retrieval/queries_dev2.json` (private, untracked,
+like the other two sets). Targets were picked first, across memory/ (30),
+projects/ (6), wiki/ (5), domains/ subfolders (2), core/, systems/ and team
+memory (1 each), then each question was written from the target note alone,
+before any ranker ran. 32 of the 46 targets are short notes whose topic sits
+in the vocabulary of a long top-level domains/*.md file (mission, story,
+health, technical-mind, faith, pre-usc, work, academics, the syllabi digest),
+and each was checked by grep so the long file does not also hold the answer.
+Fields match the sealed set (`q`, `gold`, `hops`, `why`) plus `overlap`, the
+lone files each question was written to collide with.
+
+| shipped ranker (folder cap 1), frozen index 729 files / 3,821 chunks | r@5       | 95% CI  | MRR   |
+| -------------------------------------------------------------------- | --------- | ------- | ----- |
+| dev2, n=46                                                           | **84.8%** | +/-10.4 | 0.662 |
+
+7 misses. **1** is caused by lone domains/*.md files by the strict test (a
+lone file holds a top-5 slot, and removing lone files puts the gold in the
+top 5). 3 more have a lone file in the top 5 but the gold ranks 21st or below
+50, so no lone-file fix rescues them. The other 3 lose to memory/ and team
+memory notes. Lone files took 7 of the 35 top-5 slots on misses; memory/ and
+team memory took 21.
+
+So dev2 does not reproduce the sealed failure either: aimed straight at it,
+the lone hubs cost one query in 46. Two readings, and the next step is to
+tell them apart rather than tune: (a) the sealed misses are about question
+style (the sealed questions were written to avoid lexical overlap, while
+dev2's plain phrasing often carries the note's subject by name) more than
+about lone files, or (b) the lone-hub effect is real but concentrated in
+topics dev2 sampled lightly. A cheap test of (a): strip every proper noun and
+note-specific term from dev2's 32 overlap questions and rerun `bench/dev2.py`
+once. `bench/dev2.py` runs `brain.rank()` with its defaults and refuses the
+sealed file.
+
+**Measured 2026-10-12 night: dev3, rank fusion, and doc2query.** Step 14 of
+docs/plans/reengineer-flat-plan.md: the memory indexes load whole until the
+shipped retriever holds 55.4% recall@5 sealed (tools/recall_gate.py).
+
+dev3 is a third blind set, 70 questions in
+`~/second-brain/.bench/brain-retrieval/queries_dev3.json` (private,
+untracked). A separate agent that never saw the retriever, the sealed set or
+the other dev sets sampled targets first (seed 1013 over the 839 indexed
+files), then wrote one question per note: 43 single-hop questions share no
+4+ letter word with the note's path, name or description, 12 are plain, 15
+are multi-hop. Leakage check: no question over 0.75 of its words in the gold.
+
+The control, on one frozen copy of the live index (839 files, 4,006 chunks):
+
+| shipped minmax ranker | r@5   | MRR   |
+| --------------------- | ----- | ----- |
+| dev  (24 resolve)     | 66.7% | 0.468 |
+| dev2 (46)             | 84.8% | 0.689 |
+| dev3 (70)             | 44.3% | 0.345 |
+
+dev3 is the first dev set that reproduces the sealed number (47.7% live on
+10/12 morning), so it is the first that can see the failure. Its 39 misses:
+18 have the gold below rank 50 (the embedding never puts it near the
+question), 12 at 6 to 20, 9 at 21 to 50. Hard-paraphrase single-hop scored
+13 of 43. In several misses the gold was a long note whose best chunk ranked
+1st to 6th of all 4,006 chunks, and the file mean buried it.
+
+Sweep, `bench/cards.py`, net queries gained against minmax over dev+dev2+dev3
+(140). Every variant goes through the same fusion and folder cap as
+`brain.rank()`, checked equal at the control:
+
+| family                                        | best variant           | net      |
+| --------------------------------------------- | ---------------------- | -------- |
+| card: one vector per file (name, description, headings), blended into the dense mean | c=0.15 | +1 (+3 -2); c>=0.3 loses on dev3 |
+| nomic task prefixes on both sides (re-embedded 4,006 chunks) | prefix alone | -2; prefix+card loses 4 on dev2 |
+| stopwords out of the lexical OR query         | any                    | loses up to 27 on dev3 |
+| RRF of dense mean and lexical                 | k=10                   | +5 (+9 -4) |
+| best-chunk cosine mixed into the mean         | a=0.3                  | -2 alone |
+| **RRF of mean, best chunk and lexical (rrf3)** | k=10                  | **+9 (+11 -2)** |
+| pseudo-relevance feedback alone               | b=0.6, m=5             | +2 |
+| **rrf3 + feedback b=0.6 m=5**                 | shipped                | **+15 (+17 -2)** |
+
+RRF rows are after review found that the first rrf3 broke score ties by file
+name (every file with no lexical match sat in alphabetical order, team memory
+last); tied scores now share a rank, and that fix alone took the shipped
+config from +14 -1 to +17 -2. Shipped config by set: dev 66.7% -> 75.0%, dev2
+84.8% -> 93.5%, dev3 44.3% -> 57.1%.
+
+Shipped as `brain.rank()`'s default (`FUSION`, `RRF_K`, `PRF_B`, `PRF_M`);
+`fusion="minmax"` reproduces every older table. Feedback is for ranking only:
+abstention and the cosines brain-recall gates on stay raw.
+
+| sealed, run once (n=65), same frozen index | r@5   | 95% CI  | MRR   |
+| ------------------------------------------ | ----- | ------- | ----- |
+| minmax (shipped before)                    | 50.8% | +/-12.2 | 0.333 |
+| rrf3 + feedback                            | 53.8% | +/-12.1 | 0.389 |
+
++6 -4 sealed, MRR up 0.056, still under the 55.4% floor. This run measured
+the name-ordered ties (fixed after it); the fixed ranker's sealed number is
+the baseline row of the doc2query run below, so the sealed set was not opened
+a second time for this family. `bench/frozen/rrf3_prf.json.sealed-run` holds
+the aggregate.
+
+**doc2query, same night. Tried, not shipped.** `bench/d2q.py` asks
+llama3.2 3B on this Mac (Ollama, loopback only) for five everyday-word
+questions per note; `bench/d2q_build.py` wrote them for all 839 notes in
+3,707 s (4.4 s a note at load 6 to 35, 2 notes got none), and
+`bench/d2q_eval.py` embeds them and passes each file's best question cosine
+to `brain.rank(probes=)`. Against the shipped rrf3 + feedback, dev+dev2+dev3:
+
+| variant                               | dev   | dev2  | dev3  |
+| ------------------------------------- | ----- | ----- | ----- |
+| fourth RRF list, w=0.3                | +2 -0 | +0 -1 | +2 -2 |
+| fourth RRF list, w=0.7                | +2 -0 | +0 -2 | +7 -7 |
+| merged into the best-chunk list       | +0 -1 | +0 -0 | +0 -0 |
+| merged, feedback off (vs feedback off) | +3 -1 | +0 -1 | +4 -5 vs +1 -6 |
+
+The questions recover about what one feedback round does, and the two do
+not stack. No dev win, so no sealed run. An hour of local inference per full
+build for nothing over feedback; the probe knobs stay in `rank()` off.
+
+**Neighbourhood check.** `bench/fusion_grid.py` sets W_DENSE, RRF_K, PRF_B and
+PRF_M over 108 cells and scores `brain.rank()` on all 140 dev questions. The
+best cell nets +1 (+6 -5) over the shipped constants: the shipped config sits
+at a local optimum, and more knob turning on these sets is noise.
+
+`feedback()` now returns true cosines (divided by the moved query's length,
+computable from dense alone). Rankings are identical, checked on all three
+dev sets; it matters only for csls and for any probe compared against it.
+
+**A second embedding model, shipped 2026-10-13.** `bench/ensemble.py`: nomic
+and mxbai-embed-large, each with one feedback round in its own space, cosines
+averaged per chunk, then rrf3 as before. The September ablation had swapped
+models one at a time (a wash); averaging was never tried. Chunk strings are
+the ones nomic embeds, cut at 2,000 characters for mxbai's 512 tokens; the
+question gets mxbai's query instruction. Same frozen index, vs shipped rrf3 +
+feedback:
+
+| variant           | dev (24)       | dev2 (46)      | dev3 (70)      |
+| ----------------- | -------------- | -------------- | -------------- |
+| ensemble 0.3      | 83.3% (+3 -1)  | 95.7% (+1 -0)  | 60.0% (+4 -2)  |
+| **ensemble 0.5**  | **87.5% (+4 -1)** | **93.5% (+1 -1)** | **60.0% (+5 -3)** |
+| mxbai alone       | 83.3% (+4 -2)  | 91.3% (+1 -2)  | 52.9% (+5 -8)  |
+
+0.3 and 0.5 tie at +5 net; 0.5 picked on MRR, the stated tie-break, before
+the run. Ship rule written into the frozen file before the run: clear 55.4%
+or gain 3+ net queries, since it costs a second model resident (669 MB) and a
+second embed per prompt (run in parallel; warm p50 20 ms against nomic's 17).
+
+| sealed, run once (n=65), same frozen index | r@5   | 95% CI  | MRR   |
+| ------------------------------------------ | ----- | ------- | ----- |
+| shipped rrf3 + feedback (ties fixed)       | 52.3% | +/-12.1 | 0.385 |
+| nomic + mxbai 0.5                          | **56.9%** | +/-12.0 | 0.460 |
+
++3 -0. The first ranker over the 55.4% floor, by one question, well inside
+the interval. The production path (`brain.rank(dense2=, E2=)`, the index's
+`npy2`) reproduces the bench to the query on all three dev sets. With the
+model not pulled or `BRAIN_MODEL2` empty, brain is nomic only
+(`tests/test_brain_ensemble.py`).
+
+**Live, 2026-10-13 01:15.** The live index (857 files, 4,031 chunks) got its
+second vectors in 4.5 minutes once the brain-index service ran the kit's
+brain.py (it had been running the shared checkout's; see team memory
+feedback_services_run_from_the_kit). `tools/recall_gate.py check`: **55.4%,
+n=65, pass, at exactly the floor** (36 of 65). The daily 06:30 check decides
+again tomorrow, and anything under the floor puts the indexes back whole.
+Headless first turn (`claude -p`, cwd ~): whole 120,963 tokens, recall
+110,197 (-10,766, the team index; `-p` never loaded memory/MEMORY.md in
+either mode, so its 6,772 tokens are not in that number). `brain ask` p50
+208 ms before, 233 ms after, 16 asks each at load 3 to 5.

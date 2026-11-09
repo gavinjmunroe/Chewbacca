@@ -252,8 +252,8 @@ nonisolated struct DiagramCanvas: View, Animatable {
         RoundedRectangle(cornerRadius: 11, style: .continuous)
     }
 
-    /// One node as a tiny window: square, mono, a one-point rule in its tone
-    /// and the same hard drop the surface has. `fill: true` inverts it, light
+    /// One node as a tiny window: square, pixel caps, a one-point white rim
+    /// and the same hard drop the surface has; its tone is the corner pip. `fill: true` inverts it, light
     /// ground and dark type, which is how TypeSafe marks the one that matters
     /// ("Jev (TypeSafe)" in their benchmark table). Set it on one node.
     private func windowChip(_ shape: Primitive, index: Int, in size: CGSize) -> some View {
@@ -265,11 +265,14 @@ nonisolated struct DiagramCanvas: View, Animatable {
         let box = Rectangle()
         let inverted = shape.filled
 
-        return Text(shape.label.uppercased())
+        // No minimumScaleFactor: the pixel face only stays sharp at 11 and 22,
+        // so a label too long for its tile wraps or truncates instead.
+        return Text(shape.label)
+            .textCase(.uppercase)
             .pixelFont(11)
             .foregroundStyle(inverted ? Color.black : HUD.ink)
             .lineLimit(2)
-            .minimumScaleFactor(0.75)
+            .truncationMode(.tail)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 3)
             .frame(width: values[5] * size.width, height: values[6] * size.height)

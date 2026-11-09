@@ -3,12 +3,25 @@
 import argparse
 import json
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ImportError:
+    # tomllib arrived in 3.11 and hooks run on macOS's stock /usr/bin/python3
+    # 3.9. A top-level import made `import codex_integrations` raise there, so
+    # Codex setup through host_mcp crashed whenever Claude had MCP servers to
+    # copy, and four test files failed to collect (2026-10-10).
+    tomllib = None
 
 
 def import_servers(source, target, names, node=None):
     servers = json.loads(source.read_text()).get('mcpServers', {})
     original = target.read_text() if target.exists() else ''
+    if tomllib is None:
+        # Without a parser nothing proves an entry is new or that the result
+        # still parses, so change nothing, the same rule as
+        # agent_runtime.codex_capacity_config.
+        return {'added': [], 'preserved': [], 'unchanged': 'no TOML parser (needs Python 3.11+)'}
     existing = tomllib.loads(original).get('mcp_servers', {})
     sections, added, skipped = [], [], []
     for name in names:

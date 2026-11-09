@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Find and rewrite text across every Apple Contacts card in one pass.
+
+  contacts-bulk find <text> [--json]
+  contacts-bulk replace <old> <new> [--dry-run] [--case]
+  contacts-bulk undo [<snapshot.json>]
+
+Every read is one bulk Apple Event per field (`people.firstName()` returns the
+whole column), never a loop over people. On 2026-10-21 renaming A2F to
+GenCollege started as an AppleScript `repeat with p in people` reading six
+fields per card: one Apple Event per field per person, still running at 5
+minutes when Caleb asked "What's taking so long?". The bulk read of the same
+fields took 3.7 s, and writing the 41 matching cards took about a second.
+
+`replace` saves the old values of every field it touches before writing, and
+`undo` puts back only the fields that snapshot names.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+FIELDS = ["firstName", "middleName", "lastName", "nickname", "organization",
+          "jobTitle", "department", "note"]
+SNAP_DIR = os.path.expanduser("~/.chewbacca/state/contacts-bulk")
+
+# One bulk read per field. JXA returns each column as an array in card order.
+READ_JS = """
+function run(argv) {
+  const p = Application('Contacts').people;
+  const fields = JSON.parse(argv[0]);
+  const ids = p.id();
+  const cols = fields.map(f => p[f]());
+  return JSON.stringify(ids.map((id, i) => {
+    const r = {id: id};
+    fields.forEach((f, j) => { r[f] = cols[j][i] || ""; });
+    return r;
+  }));
+}
+"""
+
+# Writes go by id, only to the cards that change, then one save.
+WRITE_JS = """
+function run(argv) {
+  const C = Application('Contacts');
+  const edits = JSON.parse($.NSString.stringWithContentsOfFileEncodingError(
+      argv[0], $.NSUTF8StringEncoding, null).js);
+  let n = 0;
+  for (const e of edits) {
+    const card = C.people.byId(e.id);
+    for (const f in e.set) { card[f] = e.set[f]; n++; }
+  }
+  C.save();
+  return String(n);
+}
+"""
+
+
+def osa(js, *args):
+    out = subprocess.run(["osascript", "-l", "JavaScript", "-e", js, *args],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        sys.exit("contacts-bulk: Contacts refused: " + out.stderr.strip())
+    return out.stdout.strip()
+
+
+def read_all():
+    return json.loads(osa(READ_JS, json.dumps(FIELDS)))
+
+
+def matcher(text, case=False):
+    return re.compile(re.escape(text), 0 if case else re.IGNORECASE)
+
+
+def matches(rows, text, case=False):
+    rx = matcher(text, case)
+    return [r for r in rows if any(rx.search(r.get(f) or "") for f in FIELDS)]
+
+
+def plan(rows, old, new, case=False):
+    """Edits for every field holding `old`: [{id, name, set, was}]."""
+    rx = matcher(old, case)
+    edits = []
+    for r in rows:
+        changed = {f: rx.sub(lambda _m: new, r[f]) for f in FIELDS
+                   if r.get(f) and rx.search(r[f])}
+        if changed:
+            edits.append({"id": r["id"], "name": display(r), "set": changed,
+                          "was": {f: r[f] for f in changed}})
+    return edits
+
+
+def display(r):
+    return " ".join(x for x in (r.get("firstName"), r.get("lastName")) if x) \
+        or r.get("organization") or r["id"]
+
+
+def write(edits):
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump([{"id": e["id"], "set": e["set"]} for e in edits], fh)
+    try:
+        return int(osa(WRITE_JS, fh.name) or 0)
+    finally:
+        os.unlink(fh.name)
+
+
+def cmd_find(args):
+    if not args:
+        sys.exit("usage: contacts-bulk find <text> [--json]")
+    hits = matches(read_all(), args[0], "--case" in args)
+    if "--json" in args:
+        print(json.dumps(hits, indent=1))
+        return
+    rx = matcher(args[0], "--case" in args)
+    for r in hits:
+        where = ", ".join(f for f in FIELDS if rx.search(r.get(f) or ""))
+        print(f"{display(r)}  ({where})")
+    print(f"{len(hits)} card(s)")
+
+
+def cmd_replace(args):
+    pos = [a for a in args if not a.startswith("--")]
+    if len(pos) != 2:
+        sys.exit("usage: contacts-bulk replace <old> <new> [--dry-run] [--case]")
+    old, new = pos
+    case = "--case" in args
+    edits = plan(read_all(), old, new, case)
+    fields = sum(len(e["set"]) for e in edits)
+    for e in edits:
+        print(f"{e['name']}: " + "; ".join(
+            f"{f} {e['was'][f][:40]!r} -> {v[:40]!r}" for f, v in e["set"].items()))
+    if "--dry-run" in args or not edits:
+        print(f"{len(edits)} card(s), {fields} field(s){' (dry run)' if edits else ''}")
+        return
+    os.makedirs(SNAP_DIR, exist_ok=True)
+    snap = os.path.join(SNAP_DIR, time.strftime("%Y%m%d-%H%M%S") + ".json")
+    with open(snap, "w") as fh:
+        json.dump({"old": old, "new": new, "edits": edits}, fh, indent=1)
+    wrote = write(edits)
+    left = len(matches(read_all(), old, case))
+    print(f"wrote {wrote} field(s) on {len(edits)} card(s); {left} card(s) still hold {old!r}")
+    print(f"snapshot: {snap}  (contacts-bulk undo puts it back)")
+    if left:
+        sys.exit(1)
+
+
+def cmd_undo(args):
+    if args:
+        snap = args[0]
+    else:
+        snaps = sorted(os.listdir(SNAP_DIR)) if os.path.isdir(SNAP_DIR) else []
+        if not snaps:
+            sys.exit("contacts-bulk: no snapshot to undo")
+        snap = os.path.join(SNAP_DIR, snaps[-1])
+    with open(snap) as fh:
+        edits = json.load(fh)["edits"]
+    wrote = write([{"id": e["id"], "set": e["was"]} for e in edits])
+    print(f"restored {wrote} field(s) on {len(edits)} card(s) from {snap}")
+    os.rename(snap, snap + ".undone")
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+    cmd = {"find": cmd_find, "replace": cmd_replace, "undo": cmd_undo}.get(argv[0])
+    if not cmd:
+        sys.exit(f"contacts-bulk: unknown command {argv[0]!r} (find, replace, undo)")
+    cmd(argv[1:])
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

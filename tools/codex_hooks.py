@@ -9,12 +9,10 @@ import os
 from pathlib import Path
 import re
 import shlex
-import shutil
 import sqlite3
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -152,6 +150,11 @@ def turn_state(payload):
     sid = payload.get('session_id')
     if not sid:
         return {}
+    event = payload.get('hook_event_name')
+    # On 2026-10-15 independent reviews failed with "database is locked":
+    # repository hashing held the one receipt database's write lock across tabs.
+    # Observe first, then serialize only the receipt state update.
+    snapshots = review_snapshots(payload) if event in ('PreToolUse', 'PostToolUse') else {}
     directory = context.codex_home() / 'chewbacca-turn-state'
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = directory / 'receipts.sqlite'
@@ -164,7 +167,6 @@ def turn_state(payload):
         if 'review_scope_version' not in state:
             state['legacy_review_required'] = list(state.get('review_required', []))
             state['review_scope_version'] = 2
-        event = payload.get('hook_event_name')
         if event == 'UserPromptSubmit':
             state = {'prompt': payload.get('prompt', ''), 'prompt_started_at': time.time(), 'sequence': 0,
                      'last_write': 0, 'last_success': -1, 'review_scope_failed': False,
@@ -175,7 +177,7 @@ def turn_state(payload):
                      'review_inflight': state.get('review_inflight', {})}
         elif event == 'PreToolUse':
             key = review_tool_key(payload)
-            state.setdefault('review_before', {}).setdefault(key, review_snapshots(payload))
+            state.setdefault('review_before', {}).setdefault(key, snapshots)
             inflight = state.setdefault('review_inflight', {})
             inflight[key] = inflight.get(key, 0) + 1
         elif event == 'PostToolUse':
@@ -196,7 +198,7 @@ def turn_state(payload):
             required = set(state.get('review_required', []))
             key = review_tool_key(payload)
             before = state.setdefault('review_before', {}).get(key, {})
-            for repo, digest in review_snapshots(payload).items():
+            for repo, digest in snapshots.items():
                 if repo not in before and not digest.startswith('unavailable:'):
                     import review_gate
                     if review_gate.repo_root(repo) is not None:
@@ -455,15 +457,7 @@ def dispatch_event_body(payload):
         parts.append(tabs.handle(payload, 'codex'))
     if event == 'SessionStart':
         root = context.brain_root(context.codex_home())
-        with contextlib.redirect_stdout(io.StringIO()) as output:
-            print('Chewbacca startup briefing loaded by a native Codex hook. '
-                  'Use this briefing without running the fallback reader again.\n')
-            print((ROOT / 'config/instructions/agent-neutral.md').read_text())
-            context.read_sources(root)
-            standing = context.standing_instructions(root)
-            if standing:
-                print('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
-        parts.append(output.getvalue())
+        parts.append(context.startup_briefing(root))
         checker = root / 'brain-check.sh'
         if checker.is_file():
             try:
@@ -504,6 +498,7 @@ def dispatch_event_body(payload):
             parts.append(shared_hook('write-log.sh', payload, cwd))
         if event == 'PreToolUse' and payload.get('session_id'):
             parts.append(tabs.overlap(payload['session_id'], changed_paths(payload)))
+            tabs.lease(payload['session_id'], 'codex', changed_paths(payload))
         writes = proposed_writes(payload) if event == 'PreToolUse' else {}
         for filename in changed_paths(payload):
             translated = dict(payload, tool_input={'file_path': filename})
@@ -550,11 +545,12 @@ def dispatch_event_body(payload):
             translated = dict(payload, prompt_id=hashlib.sha256(identity.encode()).hexdigest(),
                               user_message=state.get('prompt', ''),
                               agent='codex', durable_since=state.get('prompt_started_at'), codex_evidence_after_write=(
-                                  state.get('last_success', -1) > state.get('last_write', 0)))
+                                  state.get('last_success', -1) > state.get('last_write', 0)),
+                              codex_wrote=bool(state.get('last_write', 0)))
             feedback = '\n\n'.join(filter(None, (
                 shared_hook(name, translated, cwd)
                 for name in ('slop-guard.sh', 'handoff-guard.sh',
-                             'durable-guard.sh', 'vibe-guard.sh'))))
+                             'durable-guard.sh', 'vibe-guard.sh', 'break-it-guard.sh'))))
             if feedback:
                 return stop_feedback(payload, feedback)
         notice = git_notice(cwd)

@@ -15,9 +15,11 @@ THE SECURITY LINE, the same bar as files.py's allowlist:
 - HTTP goes only to 127.0.0.1, ::1 or localhost, plain http, no userinfo, no
   proxy from the environment and no redirect followed, because a redirect is
   the engine choosing where the next request goes.
-- An entry whose repo is not in config/data/oss-apps/apps.json, or is there but is
-  not remixable (GPL, AGPL, no license, source-available), is refused when the
-  file is loaded and never runs. So is any key this file does not know.
+- An entry whose repo is not in config/data/oss-apps/apps.json is refused when
+  the file is loaded and never runs. So is any key this file does not know. Its
+  license is never a reason: open source is the user's to use as they choose
+  (Caleb, 2026-10-11: "Chewbacca should never care abt open source repos not
+  being mit ... it is the user's choice what they do. Not chewbs").
 - Output is capped before it is parsed, and every string bound for the HUD has
   control and bidi characters stripped, because an engine's data (a peer's
   host name, a repo description) was written by someone else.
@@ -117,12 +119,10 @@ def http_for(ctx: Context):
 
 
 def _remix_verdict(app: dict | None) -> str | None:
-    """None when the repo may be built on; otherwise why not, in words."""
+    """None when the repo is a known one; the license is the user's call, never ours."""
     if app is None:
         return "its repo isn't in config/data/oss-apps/apps.json"
-    if app.get("remixable") is True or app.get("remixable_with_caveat") is True:
-        return None
-    return f"{app.get('license') or 'no'} license isn't remixable"
+    return None
 
 
 def _strs(value, most: int) -> bool:

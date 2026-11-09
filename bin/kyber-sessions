@@ -10,7 +10,12 @@
                                        (--fork only as the first word after send; an id
                                        prefix must name exactly one session)
     kyber-sessions run <id> <what>     an allowlisted command in its folder: status, diff, tests
+    kyber-sessions tree <id> [--json]  what it touched plus one level, the tree beside its card
     kyber-sessions route "<words>"     which session a sentence is for (the hook for hud-listen)
+    kyber-sessions new "<task>" [--in <folder>]  a new background run, no window ("in lemma: ..." works too)
+    kyber-sessions draft "<task>"      put a task in the panel's New task box; only Start runs it
+    kyber-sessions stop <id>           stop a run the glass started (never a VS Code tab)
+    kyber-sessions watch               one look: toast what newly needs you (launchd runs it each minute)
     kyber-sessions serve [--open <id>] draw the sessions surface and answer its presses
 
 Sessions come from Claude Code's own transcripts (~/.claude/projects/*/*.jsonl,
@@ -46,17 +51,20 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import hud_events  # noqa: E402
+import session_tree  # noqa: E402
 import sessions_inbox  # noqa: E402
 
 HOME = Path.home()
@@ -87,6 +95,8 @@ ABANDONED_S = 2 * 3600.0
 # (reviewer runs, the voice's own `claude -p`): on 2026-10-04 they were 19 of
 # the 25 newest transcripts and buried the four Caleb was actually in.
 INTERACTIVE = frozenset({"cli", "claude-vscode", "claude-desktop"})
+# Where throwaway one-shot runs live. tab-rescue skips these folders too.
+SCRATCH_DIRS = ("/private/var/folders/", "/var/folders/", "/private/tmp/", "/tmp/")
 # The most rows the surface shows. Miller's seven plus two.
 MAX_ROWS = 9
 # How many turns a session card draws.
@@ -97,6 +107,11 @@ CARD_TURNS = 40
 # that on 2026-10-05. The first press now shows the command and folder, and
 # only a second press inside this window runs it. Guessed, never measured.
 TESTS_CONFIRM_S = 15.0
+
+# Where a session runs, as the rail names it. A VS Code session is a row like
+# any other (CHW-134): the name only says where Send will type.
+ORIGINS = {"claude-vscode": "VS Code", "cli": "terminal", "claude-desktop": "desktop",
+           "sdk-cli": "script", "sdk-py": "script"}
 
 RANK = {"needs": 0, "working": 1, "failed": 2, "finished": 3}
 WORDS = {"needs": "needs you", "working": "working", "failed": "failed", "finished": "finished"}
@@ -216,6 +231,8 @@ def meta(entries: list[dict]) -> dict:
     """Title, model and folder: the newest of each in the tail."""
     out = {"title": "", "model": "", "cwd": "", "mode": ""}
     points = {str(e.get("entrypoint")) for e in entries if e.get("entrypoint")}
+    newest = next((str(e["entrypoint"]) for e in reversed(entries) if e.get("entrypoint")), "")
+    out["origin"] = ORIGINS.get(newest, "")
     for e in reversed(entries):
         if not out["mode"] and e.get("permissionMode"):
             out["mode"] = str(e["permissionMode"])
@@ -229,6 +246,13 @@ def meta(entries: list[dict]) -> dict:
         if out["title"] and out["model"] and out["cwd"] and out["mode"]:
             break
     out["interactive"] = bool(points & INTERACTIVE) or not points
+    turns = sum(1 for e in entries if e.get("type") == "user" and is_turn(e) and first_text(e))
+    out["turns"] = turns
+    if turns <= 1 and out["cwd"].startswith(SCRATCH_DIRS):
+        # A one-shot `claude -p` (a blind image judge, an eval) inherits its
+        # parent's desktop entrypoint. On 2026-10-10 two judges in
+        # /var/folders sat in the agents list as failed tabs.
+        out["interactive"] = False
     if not out["title"]:
         first_user = next((e for e in entries if e.get("type") == "user" and is_turn(e) and first_text(e)), None)
         out["title"] = first_text(first_user)[:80] if first_user else ""
@@ -319,14 +343,27 @@ def from_transcript(config: Path, path: Path, now: float) -> dict:
     mtime = path.stat().st_mtime
     state, detail = classify(entries, now - mtime)
     m = meta(entries)
+    if state == "failed" and m.get("turns", 0) <= 1:
+        # Failed on its first message, the way tab-rescue's MIN_TURNS reads
+        # it: an eval prompt run through the desktop app, or a tab whose
+        # owner saw the error on their own screen. On 2026-10-10 five
+        # "Just cloned this repo" evals from that morning filled the agents
+        # panel as failed tabs.
+        m["interactive"] = False
     m["mode"] = effective_mode(path, m["mode"])
+    if state == "needs" and m["mode"] == "bypassPermissions":
+        # Nothing asks in bypass mode, so a tool call that has run a while is
+        # a long command (a deploy wait loop, a build), not a dialog. On
+        # 2026-10-11 at 2:31am two tabs' curl loops toasted "needs u: Bash:
+        # for i in $(seq 1 40)..." over Caleb's work.
+        state = "working"
     cwd = m["cwd"]
     return {
         "id": path.stem, "agent": "claude", "config": str(config), "transcript": str(path),
         "cwd": cwd, "project": project_of(cwd) if cwd else path.parent.name,
-        "interactive": m["interactive"], "mode": m["mode"],
+        "interactive": m["interactive"], "mode": m["mode"], "origin": m["origin"],
         "title": m["title"], "model": short_model(m["model"]), "last": mtime,
-        "state": state, "detail": detail, "ask": "",
+        "state": state, "detail": detail, "ask": "", "turns": m.get("turns", 0),
     }
 
 
@@ -351,7 +388,7 @@ def codex_sessions(now: float) -> Iterator[dict]:
                     title = " ".join(text.split())[:80]
         yield {
             "id": path.stem, "agent": "codex", "config": "", "transcript": str(path), "cwd": cwd,
-            "interactive": True,
+            "interactive": True, "origin": "Codex",
             "project": Path(cwd).name if cwd else "codex", "title": title, "model": model,
             "last": mtime, "state": "working" if now - mtime <= WORKING_S else "finished",
             "detail": "", "ask": "",
@@ -420,10 +457,118 @@ def discover(now: float | None = None, board: dict | None = None, everything: bo
         live = {}
     merge_live(found, live)
     merge_board(found, board)
+    merge_runs(found, runs(now), now)
     for s in codex_sessions(now):
         found.setdefault(s["id"], s)
-    rows = found.values() if everything else (s for s in found.values() if s.get("interactive", True))
+    if not everything:
+        kinds = session_kinds()
+        classify_later([s for s in found.values() if borderline(s) and s["id"] not in kinds])
+    else:
+        kinds = {}
+    rows = found.values() if everything else (
+        s for s in found.values() if s.get("interactive", True) and kinds.get(s["id"]) != "run")
     return order(rows)
+
+
+# ── Which sessions are a person's tab, by meaning (Jev) ──────────────────────
+
+# The rules above (scratch folder, failed on its first message) are the floor.
+# What they miss is a one-prompt program run from a real folder: on 2026-10-10
+# the panel listed "Erik Fish site security review", "Warm-up" and "Partners.tsx
+# landing page security review" as tabs. A title like that is a meaning
+# question, so Jev answers it once per session and the answer is cached.
+KINDS_FILE = Path(os.environ.get("KYBER_KINDS_FILE", str(HOME / ".bob" / "session-kinds.json")))
+# Below this Jev is not sure enough to hide a row; a hidden real tab costs
+# more than one extra row. Measured once on 10 real borderline rows
+# (2026-10-10 midnight): 7 named tab, all right; 3 unsure, including a
+# title-generator prompt and "approval e2e"; none wrongly hidden. Recall on
+# runs is low, so the floor can come down once a sealed set says it is safe.
+RUN_FLOOR = 0.8
+# Sessions asked per pass, and the gap between passes. Guessed, never measured.
+KIND_BATCH = 6
+KIND_EVERY_S = 60.0
+_kind_lock = threading.Lock()
+_kind_last = [0.0]
+
+
+def borderline(s: dict) -> bool:
+    """A Claude row the rules let through but that is short enough to be a
+    program's one prompt. Long conversations are tabs; Jev is not asked."""
+    return s.get("agent") == "claude" and s.get("interactive", True) and 0 < int(s.get("turns") or 0) <= 3 \
+        and s.get("origin") != "Kyber"
+
+
+def session_kinds() -> dict[str, str]:
+    try:
+        got = json.loads(KINDS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in got.items() if v in ("tab", "run")} if isinstance(got, dict) else {}
+
+
+def save_kinds(kinds: dict[str, str]) -> None:
+    try:
+        KINDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = KINDS_FILE.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(kinds, f)
+        tmp.replace(KINDS_FILE)
+    except OSError as err:
+        print(f"kyber-sessions: kinds: {err}", file=sys.stderr)
+
+
+def kind_of(title: str, ask: Callable | None = None) -> str | None:
+    """'run' when Jev is sure a title is a program's one prompt, 'tab' when
+    it is a person's work, None when Jev is down or unsure."""
+    try:
+        if ask is None:
+            import jev  # noqa: PLC0415  bin/lib; only when a borderline row exists
+
+            def ask(state, questions):
+                return jev.ask(state, questions, decision="session-kind")
+        criteria = {
+            "tab": "A person working in a chat tab: a project, a question, a request in their own words",
+            "run": "A program sent one fixed prompt: a security review, a judge, a warm-up, a test, an eval, a probe",
+        }
+        answers = ask({"title": sessions_inbox.clean(title)[:160]}, {"kind": {
+            "type": "choice",
+            "instructions": "Is this AI coding session a person's own tab, or a one-prompt run a program started?",
+            "criteria": criteria,
+        }})
+        answer = answers.get("kind") if isinstance(answers, dict) else None
+        import jev as _jev  # noqa: PLC0415
+        got = _jev.validate_choice(answer, criteria)
+    except Exception:  # noqa: BLE001  Jev is a bonus; the rules still decide
+        return None
+    if not got:
+        return None
+    choice, confidence = got
+    if choice == "run" and confidence < RUN_FLOOR:
+        return None
+    return choice
+
+
+def classify_now(rows: list[dict], ask: Callable | None = None) -> dict[str, str]:
+    kinds = session_kinds()
+    for s in rows[:KIND_BATCH]:
+        got = kind_of(s.get("title") or "", ask)
+        if got:
+            kinds[s["id"]] = got
+    save_kinds(kinds)
+    return kinds
+
+
+def classify_later(rows: list[dict]) -> None:
+    """At most one background pass a minute; never blocks a listing."""
+    if not rows or os.environ.get("KYBER_NO_JEV"):
+        return
+    now = time.monotonic()
+    with _kind_lock:
+        if now - _kind_last[0] < KIND_EVERY_S:
+            return
+        _kind_last[0] = now
+    threading.Thread(target=classify_now, args=(list(rows),), daemon=True).start()
 
 
 def matches(sid: str, now: float | None = None) -> list[dict]:
@@ -718,8 +863,12 @@ def send(session: dict, text: str, on_text: Callable[[str], None], fork: bool = 
         return {"is_error": True, "result": "That is not a session id this can resume."}
     proc = subprocess.Popen(argv, cwd=session["cwd"], stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, stdin=subprocess.PIPE, text=True,
-                            env=scrubbed_env(Path(session["config"]) if session.get("config") else None))
+                            env=scrubbed_env(Path(session["config"]) if session.get("config") else None),
+                            start_new_session=True)
     assert proc.stdin is not None and proc.stdout is not None
+    if not fork:
+        # A resume from the glass is a run the glass owns, so Stop reaches it.
+        record_run(str(session["id"]), proc.pid, session["cwd"], session.get("title") or "")
 
     def feed() -> None:
         # Written from a thread and closed, so a prompt longer than the pipe
@@ -735,6 +884,241 @@ def send(session: dict, text: str, on_text: Callable[[str], None], fork: bool = 
     proc.wait()
     result["via"] = "fork" if fork else "resume"
     return result
+
+
+# ── Runs the glass starts and stops ──────────────────────────────────────────
+
+# One JSON record per process the glass started (a new task, or a resume
+# from Send): its pid, that pid's start time, the folder and the task. Stop
+# only ever signals a pid named here whose start time still matches, so a
+# recycled pid, or a session open in VS Code, is never touched.
+RUNS_DIR = Path(os.environ.get("KYBER_RUNS_DIR", str(HOME / ".bob" / "kyber-runs")))
+# Stop sends SIGINT (what Esc does in a client: the turn ends, the transcript
+# keeps everything written), then SIGTERM, then SIGKILL, this long apart.
+# Guessed, never measured.
+STOP_GRACE_S = 5.0
+# Where a task with no folder named runs. The home folder, because that is
+# where Caleb opens a fresh VS Code tab with nothing else in mind.
+DEFAULT_RUN_DIR = Path(os.environ.get("KYBER_RUN_DIR", str(HOME)))
+CODE_ROOT = Path(os.environ.get("KYBER_CODE_ROOT", str(HOME / "code")))
+# A task said or typed to hud-listen waits here for the Start press. Speech
+# is not consent: any audio near the mic (a video, a call) reaches the same
+# path, and a run gets Caleb's full permission mode, so a sentence only ever
+# fills the New task box (commit review, 2026-10-10).
+DRAFT_FILE = Path(os.environ.get("KYBER_DRAFT_FILE", str(HOME / ".bob" / "kyber-task-draft.json")))
+# "in chewbacca: fix the tests", "in lemma, write a README". The folder is a
+# single word or hyphenated name, matched against real folder names only.
+IN_FOLDER = re.compile(r"(?is)^\s*in\s+(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]{0,63})\s*[:,]\s*(?P<task>.+)$")
+
+
+def proc_start(pid: int) -> str:
+    return sessions_inbox._proc_starts([pid]).get(pid, "")
+
+
+def record_run(sid: str, pid: int, cwd: str, task: str) -> dict:
+    rec = {"id": sid, "pid": pid, "start": proc_start(pid), "cwd": str(cwd),
+           "task": " ".join(task.split())[:80], "t": time.time()}
+    try:
+        RUNS_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = RUNS_DIR / f"{sid}.json"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(rec, f)
+    except OSError as err:
+        print(f"kyber-sessions: could not record run {sid[:8]}: {err}", file=sys.stderr)
+    return rec
+
+
+def runs(now: float | None = None) -> dict[str, dict]:
+    """Every run the glass started in the last RECENT_S, by session id."""
+    now = time.time() if now is None else now
+    out: dict[str, dict] = {}
+    try:
+        paths = list(RUNS_DIR.glob("*.json"))
+    except OSError:
+        return out
+    for path in paths:
+        try:
+            rec = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("id") == path.stem and now - float(rec.get("t") or 0) <= RECENT_S:
+            out[path.stem] = rec
+    return out
+
+
+def run_alive(rec: dict, starts: Callable[[int], str] | None = None) -> bool:
+    """The recorded process is still running, and it is the same process."""
+    try:
+        pid = int(rec.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 1 or not rec.get("start"):
+        return False
+    return (starts or proc_start)(pid) == rec["start"]
+
+
+def resolve_folder(name: str) -> Path | None:
+    """A folder named exactly `name` (any case): ~/code/<name>, one level
+    below that, or ~/<name>. None unless exactly one matches."""
+    key = name.lower()
+    hits: list[Path] = []
+    for parent in (CODE_ROOT, *(d for d in sorted(CODE_ROOT.glob("*")) if d.is_dir()), HOME):
+        try:
+            for child in parent.iterdir():
+                if child.name.lower() == key and child.is_dir() and not child.is_symlink():
+                    hits.append(child.resolve())
+        except OSError:
+            continue
+    unique = list(dict.fromkeys(hits))
+    return unique[0] if len(unique) == 1 else None
+
+
+def plan_task(words: str, folder: str = "") -> tuple[str, Path]:
+    """What to do and where, from what was typed or said. Raises ValueError
+    with words for the glass when either is unclear."""
+    text = sessions_inbox.clean(words).strip()
+    m = IN_FOLDER.match(text)
+    if m and not folder:
+        folder, text = m.group("name"), m.group("task").strip()
+    if not text:
+        raise ValueError("Say what the task is.")
+    if not folder:
+        return text, DEFAULT_RUN_DIR
+    where = Path(folder).expanduser()
+    if where.is_absolute():
+        if not where.is_dir():
+            raise ValueError(f"{where} is not a folder.")
+        return text, where.resolve()
+    found = resolve_folder(folder)
+    if not found:
+        raise ValueError(f"No single folder is named {folder}. Say the full path.")
+    return text, found
+
+
+def queue_draft(text: str) -> None:
+    """Put `text` in the New task box of the sessions panel, unsent."""
+    DRAFT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(DRAFT_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"text": sessions_inbox.clean(text)[:sessions_inbox.MAX_CHARS], "t": time.time()}, f)
+
+
+def take_draft(now: float | None = None) -> str:
+    """The queued draft, once, and only a fresh one."""
+    now = time.time() if now is None else now
+    try:
+        got = json.loads(DRAFT_FILE.read_text())
+        DRAFT_FILE.unlink()
+    except (OSError, ValueError):
+        return ""
+    # A draft older than this was meant for a panel that never opened.
+    # Guessed, never measured.
+    if not isinstance(got, dict) or now - float(got.get("t") or 0) > 120:
+        return ""
+    return str(got.get("text") or "")
+
+
+def start_run(task: str, cwd: Path, spawn: Callable = subprocess.Popen) -> tuple[dict, object]:
+    """A new headless Claude Code session on `task` in `cwd`, detached so it
+    outlives whatever pressed Start. No window opens and no permission flag
+    is added: the run gets the mode Caleb's own settings give every session,
+    as `send_argv` does. The task goes on stdin, never argv."""
+    sid = str(uuid.uuid4())
+    RUNS_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    argv = [CLAUDE_BIN, "-p", "--session-id", sid, "--output-format", "stream-json", "--verbose"]
+    with open(RUNS_DIR / f"{sid}.log", "w") as log:
+        proc = spawn(argv, cwd=str(cwd), stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT,
+                     text=True, env=scrubbed_env(None), start_new_session=True)
+    try:
+        proc.stdin.write(task)
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    return record_run(sid, proc.pid, str(cwd), task), proc
+
+
+def descendants(pid: int) -> list[int]:
+    """Every process below `pid`, read in one `ps`. Claude Code runs a tool's
+    shell in its own process group, so signalling the run's group alone left
+    a `sleep 90` from its Bash tool running after Stop (seen 2026-10-10)."""
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    kids: dict[int, list[int]] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            kids.setdefault(int(parts[1]), []).append(int(parts[0]))
+    found, todo = [], [pid]
+    while todo:
+        for child in kids.get(todo.pop(), []):
+            if child not in found and child != pid:
+                found.append(child)
+                todo.append(child)
+    return found
+
+
+def stop_run(sid: str, kill: Callable = os.killpg, starts: Callable[[int], str] | None = None,
+             sleep: Callable[[float], None] = time.sleep, grace: float = STOP_GRACE_S,
+             tree: Callable[[int], list[int]] = descendants, kill_one: Callable = os.kill) -> tuple[bool, str]:
+    """Stop a run the glass started, and everything its tools started.
+    (stopped, words for the glass)."""
+    rec = runs().get(sid)
+    if not rec:
+        s = find(sid)
+        where = (s or {}).get("open_in") or (s or {}).get("origin") or "its own window"
+        return False, f"Only runs started from Kyber stop from here. Stop this one in {where}."
+    if not run_alive(rec, starts):
+        return False, "It already stopped."
+    pid = int(rec["pid"])
+    # Read before the first signal: once the run exits its children are
+    # reparented to launchd and nothing links them to it.
+    below = tree(pid)
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+        if not run_alive(rec, starts):
+            break
+        try:
+            kill(pid, sig)
+        except ProcessLookupError:
+            break
+        except PermissionError:
+            return False, "macOS refused the stop."
+        waited = 0.0
+        while waited < grace and run_alive(rec, starts):
+            sleep(0.25)
+            waited += 0.25
+    if run_alive(rec, starts):
+        return False, "It didn't stop."
+    for child in below:
+        try:
+            kill_one(child, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            continue
+    return True, "Stopped. Everything it wrote is still in the transcript."
+
+
+def merge_runs(sessions: dict[str, dict], recs: dict[str, dict], now: float,
+               alive: Callable[[dict], bool] = run_alive) -> None:
+    """Runs the glass started are listed like a VS Code tab, and a live one
+    is working whatever its transcript's tail says. One with no transcript
+    yet is drawn from its record, so Start shows a row at once."""
+    for sid, rec in recs.items():
+        live = alive(rec)
+        s = sessions.get(sid)
+        if s is None:
+            if not live:
+                continue
+            cwd = str(rec.get("cwd") or "")
+            s = sessions[sid] = {
+                "id": sid, "agent": "claude", "config": str(HOME / ".claude"), "transcript": "",
+                "cwd": cwd, "project": project_of(cwd) if cwd else "kyber", "interactive": True,
+                "mode": "", "title": str(rec.get("task") or ""), "model": "",
+                "last": float(rec.get("t") or now), "state": "working", "detail": "starting", "ask": ""}
+        s["origin"], s["interactive"], s["run"] = "Kyber", True, live
+        if live and s["state"] in ("finished", "failed"):
+            s["state"], s["detail"] = "working", ""
 
 
 # ── Routing a sentence (the hud-listen hook) ─────────────────────────────────
@@ -775,26 +1159,116 @@ def surface_name(sid: str) -> str:
     return "s-" + re.sub(r"[^A-Za-z0-9]", "", sid)[:8]
 
 
-def session_rows(sessions: list[dict], now: float) -> list[dict]:
+# The list is a glance (kyber-surfaces rules 2 and 3): what needs Caleb and
+# what is running, nothing he has to read past. On 2026-10-10 nine rows of
+# full titles plus origin and model read to him as "a fat wall of text".
+GLANCE_ROWS = 5
+# A failure older than this is history, not something to act on tonight, and
+# a finished session older than FINISHED_S is done. Both guessed, never measured.
+FAILED_S = 6 * 3600.0
+FINISHED_S = 3600.0
+TITLE_CHARS = 40
+
+
+def short_title(text: str) -> str:
+    """The first clause of a title, cut on a word at TITLE_CHARS."""
+    one = " ".join(sessions_inbox.clean(text or "").split())
+    one = re.split(r"\s[(\[]|[?!.](?:\s|$)", one, maxsplit=1)[0].strip(" ,:;-") or "untitled"
+    if len(one) <= TITLE_CHARS:
+        return one
+    return one[:TITLE_CHARS].rsplit(" ", 1)[0].rstrip(" ,:;-") + "\u2026"
+
+
+def glance(sessions: list[dict], now: float) -> list[dict]:
+    keep = []
+    for s in sessions:
+        age = now - float(s.get("last") or 0)
+        if s["state"] in ("needs", "working") or (s["state"] == "failed" and age <= FAILED_S) \
+                or (s["state"] == "finished" and age <= FINISHED_S):
+            keep.append(s)
+    return keep
+
+
+LANES = (("needs", "Needs u"), ("working", "Running"), ("done", "Done"))
+
+
+def lane_of(s: dict) -> str:
+    return "done" if s["state"] in ("finished", "failed") else s["state"]
+
+
+def counts(sessions: list[dict], now: float) -> dict[str, int]:
+    shown = glance(sessions, now)
+    return {k: sum(1 for s in shown if lane_of(s) == k) for k, _ in LANES}
+
+
+def pick_lane(lane: str, n: dict[str, int]) -> str:
+    """The lane asked for, or the first one with something in it."""
+    if lane in n:
+        return lane
+    return next((k for k, _ in LANES if n.get(k)), "working")
+
+
+def session_rows(sessions: list[dict], now: float, lane: str = "") -> list[dict]:
     rows = []
-    for s in sessions[:MAX_ROWS]:
-        bits = [WORDS.get(s["state"], s["state"]), s["model"], age_words(now - s["last"])]
+    for s in glance(sessions, now):
+        if lane and lane_of(s) != lane:
+            continue
+        word = "needs u" if s["state"] == "needs" else WORDS.get(s["state"], s["state"])
         rows.append({
             "id": s["id"], "accent": s["state"] == "needs",
-            "text": sessions_inbox.clean(f"{s['project']}: {s['title'] or 'untitled'}")[:90],
-            "time": " · ".join(b for b in bits if b),
+            "text": short_title(s.get("title") or ""),
+            "time": " · ".join(b for b in (word, s.get("project") or "", age_words(now - s["last"])) if b),
         })
+        if len(rows) == GLANCE_ROWS:
+            break
     return rows
 
 
-def sessions_surface(rows: list[dict]) -> list[str]:
+def list_caption(sessions: list[dict], now: float, lane: str = "") -> str:
+    n = counts(sessions, now)
+    if not any(n.values()):
+        return "Nothing running. Start one below."
+    if lane and not n.get(lane):
+        return {"needs": "Nothing needs u.", "working": "Nothing running.", "done": "Nothing done in the last hour."}[lane]
+    return ""
+
+
+def lane_options(n: dict[str, int]) -> list[dict]:
+    return [{"id": k, "label": label, "count": n.get(k, 0)} for k, label in LANES]
+
+
+def sessions_surface(rows: list[dict], caption: str = "", n: dict[str, int] | None = None,
+                     lane: str = "working") -> list[str]:
+    """Counts on top, lanes under them, the lane's rows, then a new task.
+    Opal's task glass was the bar (kyber-surfaces skill): numbers that say
+    what to do, and Stuck/Ready lanes as first-class states."""
+    n = n or {k: 0 for k, _ in LANES}
     return [
-        "@ sessions at=left w=400",
-        'c s Screen title="SESSIONS"',
+        "@ sessions at=left w=380",
+        'c s Screen title="AGENTS"',
         "r s",
-        'c l Events caption="What needs you first" action=open actionLabel="Open" items=@/rows',
-        "> s l",
+        "c nums Stack direction=horizontal gap=3",
+        'c mn Metric label="Need u" value=@/n/needs thresholds=[{"at":1,"tone":"bad"}]',
+        'c mw Metric label="Running" value=@/n/working',
+        'c md Metric label="Done" value=@/n/done',
+        "> nums mn mw md",
+        "c lanes Segmented value=@/lane options=@/lanes",
+        'c l Events caption=@/caption action=open actionLabel="Open" items=@/rows',
+        "c new Stack direction=horizontal gap=2",
+        'c task Field label="New task" placeholder="What should an agent do?" value=@/sessions/draft',
+        'c start Button label="Start" action=start variant=primary',
+        "> new task start",
+        "c st Status message=@/sessions/status/message level=@/sessions/status/level",
+        # The Status line joins the layout only once it has words: empty, it
+        # drew a lone blue dot under the panel (screenshot, 2026-10-10).
+        "> s nums lanes l new",
+        f"d /n {json.dumps(n)}",
+        f"d /lane {json.dumps(lane)}",
+        f"d /lanes {json.dumps(lane_options(n))}",
         f"d /rows {json.dumps(rows)}",
+        f"d /caption {json.dumps(caption)}",
+        'd /sessions/draft ""',
+        'd /sessions/status {"message": "", "level": "info"}',
     ]
 
 
@@ -847,7 +1321,11 @@ def card_surface(s: dict, items: list[dict], changes: list[dict], why: str | Non
         'c reply Button label="Reply" action=reply',
         'c tests Button label="Run tests" action=tests',
         'c diff Button label="Open diff" action=diff',
-        "> acts go fork reply tests diff",
+    ] + ([
+        # Only a run the glass started can be stopped from it.
+        'c stop Button label="Stop" action=stop variant=destructive',
+        "> acts go fork reply tests diff stop",
+    ] if s.get("run") else ["> acts go fork reply tests diff"]) + [
         "> s sub st t live ch msg acts",
         f'd {draft_pointer(name)} ""',
         f"d /status {json.dumps({'message': message, 'level': level})}",
@@ -869,6 +1347,29 @@ def git_changes(cwd: str) -> list[dict]:
         if path:
             rows.append({"id": path, "text": f"{line[:2].strip() or '?'}  {path}"})
     return rows
+
+
+def change_codes(changes: list[dict]) -> dict[str, str]:
+    """git_changes' rows as repo path -> git's status letters, for the tree."""
+    return {c["id"]: c["text"].split("  ", 1)[0] for c in changes}
+
+
+def tree_name(card: str) -> str:
+    return card + "-tree"
+
+
+def tree_surface(name: str, project: str, rows: list[dict]) -> list[str]:
+    """The tree beside a card: what the session touched plus one level
+    (bin/lib/session_tree.py). A file row's press opens its Diff when git
+    says it changed, else the file itself, editable."""
+    return [
+        f"@ {name} at=right w=320",
+        f"c s Screen title={q('FILES · ' + sessions_inbox.clean(project))}",
+        "r s",
+        "c tr Tree items=@/rows action=open",
+        "> s tr",
+        f"d /rows {json.dumps(rows)}",
+    ]
 
 
 def parse_event(line: str) -> dict | None:
@@ -894,6 +1395,12 @@ class Serve:
         self.drafts: dict[str, str] = {}
         # Surface name -> when Run tests was first pressed on that card.
         self.tests_armed: dict[str, float] = {}
+        # Tree surface name -> (card surface, row id -> absolute path, repo root).
+        # A press on a tree row can only name a row this daemon drew.
+        self.trees: dict[str, tuple[str, dict[str, str], str]] = {}
+        self.trees_drawn: dict[str, str] = {}
+        # Trees the person took down; not redrawn while their card is open.
+        self.trees_closed: set[str] = set()
         self.closed = False
         # False once the person closes the list: redrawing it would bring
         # back a surface they just took down.
@@ -907,12 +1414,18 @@ class Serve:
         if not self.list_open:
             return
         now = time.time()
-        rows = session_rows(discover(now), now)
-        drawn = json.dumps(rows)
+        found = discover(now)
+        n = counts(found, now)
+        lane = pick_lane(getattr(self, "lane", ""), n)
+        rows = session_rows(found, now, lane)
+        caption = list_caption(found, now, lane)
+        drawn = json.dumps([rows, caption, n, lane])
         if not self.rows_drawn:
-            self.send(sessions_surface(rows))
+            self.send(sessions_surface(rows, caption, n, lane))
         elif drawn != self.rows_drawn:
-            self.send(["@ sessions", f"d /rows {drawn}"])
+            self.send(["@ sessions", f"d /n {json.dumps(n)}", f"d /lanes {json.dumps(lane_options(n))}",
+                       f"d /lane {json.dumps(lane)}", f"d /rows {json.dumps(rows)}",
+                       f"d /caption {json.dumps(caption)}"])
         self.rows_drawn = drawn
 
     def open_card(self, sid: str) -> None:
@@ -922,8 +1435,44 @@ class Serve:
         name = surface_name(s["id"])
         self.cards[name] = s
         entries = tail_entries(Path(s["transcript"]))
-        self.send(card_surface(s, card_items(entries), git_changes(s["cwd"]), self.blocked(s)))
+        changes = git_changes(s["cwd"])
+        self.send(card_surface(s, card_items(entries), changes, self.blocked(s)))
         self.seen[name] = (Path(s["transcript"]).stat().st_mtime, s["state"])
+        self.trees_closed.discard(tree_name(name))
+        self.draw_tree(name, s, entries, changes)
+
+    def draw_tree(self, card: str, s: dict, entries: list[dict], changes: list[dict]) -> None:
+        """Draw or update the card's tree. Only the rows go on a redraw."""
+        name = tree_name(card)
+        if name in self.trees_closed or not s.get("cwd"):
+            return
+        try:
+            rows, ids, root = session_tree.build(s["cwd"], entries, change_codes(changes))
+        except Exception as err:  # the tree is beside the card; the card stands without it
+            print(f"kyber-sessions: tree: {err}", file=sys.stderr)
+            return
+        if not rows:
+            return
+        drawn = json.dumps(rows)
+        if name not in self.trees:
+            self.send(tree_surface(name, s["project"], rows))
+        elif drawn != self.trees_drawn.get(name):
+            self.send([f"@ {name}", f"d /rows {drawn}"])
+        self.trees[name] = (card, ids, root)
+        self.trees_drawn[name] = drawn
+
+    def open_path(self, s: dict, path: str, root: str) -> None:
+        """A tree row: its Diff when git lists it as changed, else the file,
+        editable when it is a regular file inside the repo."""
+        rel = Path(path).relative_to(root).as_posix() if root and Path(path).is_relative_to(root) else ""
+        if rel and rel in {c["id"] for c in git_changes(s["cwd"])}:
+            self.open_change(s, rel)
+            return
+        if not session_tree.editable(path, root):
+            return
+        name = surface_name(s["id"]) + "-file"
+        self.send([f"@ {name} at=right w=560", f"c s Screen title={q(sessions_inbox.clean(Path(path).name))}",
+                   "r s", f"c f File path={q(path)} editable=true", "> s f"])
 
     def refresh_cards(self) -> None:
         for name, old in list(self.cards.items()):
@@ -941,17 +1490,21 @@ class Serve:
             message, level = status_line(s, self.blocked(s))
             message = sessions_inbox.clean(message)
             entries = tail_entries(Path(s["transcript"]))
+            changes = git_changes(s["cwd"])
             self.send([f"@ {name}",
                        f"d /status {json.dumps({'message': message, 'level': level})}",
                        f"d /t {json.dumps(card_items(entries))}",
-                       f"d /changes {json.dumps(git_changes(s['cwd']))}"])
+                       f"d /changes {json.dumps(changes)}"])
+            self.draw_tree(name, s, entries, changes)
 
-    def show_text(self, name: str, title: str, text: str, beside: str) -> None:
-        """A Diff surface beside the card: read-only text, coloured as a diff."""
+    def show_text(self, name: str, title: str, text: str, beside: str, path: str = "") -> None:
+        """A Diff surface beside the card: read-only text, coloured as a diff,
+        and syntax coloured by the language its `+++` header (or `path`) names."""
         lines = sessions_inbox.clean(text).splitlines()[-600:]
         title = sessions_inbox.clean(title)
+        lang = f" path={q(sessions_inbox.clean(Path(path).name))}" if path else ""
         self.send([f"@ {name} at=right w=520", f"c s Screen title={q(title)}", "r s",
-                   "c d Diff text=@/text", "> s d", f"d /text {json.dumps(chr(10).join(lines))}"])
+                   f"c d Diff text=@/text{lang}", "> s d", f"d /text {json.dumps(chr(10).join(lines))}"])
 
     def run_into(self, s: dict, what: str, path: str | None = None) -> None:
         argv = allowlisted(what, Path(s["cwd"]), path)
@@ -989,12 +1542,38 @@ class Serve:
         if ev["name"] == "open" and surface == "sessions":
             self.open_card(str(ev.get("row") or ""))
             return
+        if ev["name"] == "select" and surface == "sessions":
+            # A lane press. Only a lane this surface drew counts.
+            if str(ev.get("row") or "") in dict(LANES):
+                self.lane = str(ev["row"])
+                self.rows_drawn = self.rows_drawn and "-"
+                self.refresh_list()
+            return
+        if ev["name"] == "start" and surface == "sessions":
+            self.start_task(self.drafts.get("sessions", ""))
+            return
+        if surface in self.trees:
+            card, ids, root = self.trees[surface]
+            if ev["name"] == "closed":
+                self.trees.pop(surface, None)
+                self.trees_drawn.pop(surface, None)
+                self.trees_closed.add(surface)
+            elif ev["name"] == "open" and card in self.cards and str(ev.get("row") or "") in ids:
+                self.open_path(self.cards[card], ids[str(ev["row"])], root)
+            return
         s = self.cards.get(surface)
         if not s:
             return
         if ev["name"] == "closed":
             self.cards.pop(surface, None)
             self.drafts.pop(surface, None)
+            tree = tree_name(surface)
+            if tree in self.trees:
+                # The tree belongs to the card: it goes when the card goes.
+                self.trees.pop(tree, None)
+                self.trees_drawn.pop(tree, None)
+                self.send([f"- {tree}"])
+            self.trees_closed.discard(tree)
             return
         if ev["name"] == "reply":
             why = can_send(find(s["id"]) or s)
@@ -1022,6 +1601,8 @@ class Serve:
             self.drafts[surface] = ""
             self.send([f"@ {surface}", f'd {draft_pointer(surface)} ""'])
             threading.Thread(target=self.send_message, args=(surface, text, fork), daemon=True).start()
+        elif ev["name"] == "stop":
+            threading.Thread(target=self.stop_card, args=(surface, s), daemon=True).start()
         elif ev["name"] == "diff" and ev.get("row"):
             # A changed file's own row: its diff, or the file itself when git
             # has nothing to diff (untracked).
@@ -1032,6 +1613,53 @@ class Serve:
             threading.Thread(target=self.run_into, args=(s, ev["name"]), daemon=True).start()
         elif ev["name"] == "open" and ev.get("row"):
             self.open_item(s, str(ev["row"]))
+
+    def take_queued(self) -> None:
+        """A task said to the voice: into the New task box, never run."""
+        text = take_draft()
+        if not text:
+            return
+        if not self.list_open:
+            self.list_open, self.rows_drawn = True, ""
+            self.refresh_list()
+        try:
+            _, cwd = plan_task(text)
+            where = f"in {project_of(str(cwd))}"
+        except ValueError as err:
+            where = f"once fixed ({err})"
+        self.drafts["sessions"] = text
+        self.send(["@ sessions", f"d /sessions/draft {q(text)}"])
+        self.list_status(f"Press Start to run it {where}. Nothing runs until you do.", "info")
+
+    def list_status(self, message: str, level: str) -> None:
+        self.send(["@ sessions", "> s nums lanes l new st", f"d /sessions/status {json.dumps({'message': sessions_inbox.clean(message), 'level': level})}"])
+
+    def start_task(self, words: str) -> None:
+        """Start: what is typed in the list's New task Field becomes a new
+        background run, and its card opens. A refusal keeps the draft."""
+        try:
+            task, cwd = plan_task(words)
+        except ValueError as err:
+            self.list_status(str(err), "warning")
+            return
+        try:
+            rec, proc = start_run(task, cwd)
+        except OSError as err:
+            self.list_status(f"It didn't start: {err}", "error")
+            return
+        # Reaped here so a finished run is not left a zombie under the daemon.
+        threading.Thread(target=proc.wait, daemon=True).start()
+        self.drafts["sessions"] = ""
+        self.send(["@ sessions", 'd /sessions/draft ""'])
+        self.list_status(f"Started in {project_of(str(cwd))}. Its card is open.", "success")
+        self.rows_drawn = self.rows_drawn or "-"
+        self.refresh_list()
+        self.open_card(rec["id"])
+
+    def stop_card(self, surface: str, s: dict) -> None:
+        self.send([f"@ {surface}", f"d /status {json.dumps({'message': 'Stopping.', 'level': 'info'})}"])
+        stopped, words = stop_run(s["id"])
+        self.send([f"@ {surface}", f"d /status {json.dumps({'message': words, 'level': 'success' if stopped else 'warning'})}"])
 
     def confirm_tests(self, surface: str, s: dict, now: float | None = None) -> bool:
         """True on the second Run tests press within TESTS_CONFIRM_S. The
@@ -1057,7 +1685,7 @@ class Serve:
         out = subprocess.run(["git", "diff", "--no-color", "--", rel], cwd=s["cwd"],
                              capture_output=True, text=True, timeout=20).stdout
         if out.strip():
-            self.show_text(surface_name(s["id"]) + "-diff", "DIFF · " + Path(rel).name, out, "")
+            self.show_text(surface_name(s["id"]) + "-diff", "DIFF · " + Path(rel).name, out, "", rel)
             return
         path = under_home(str(Path(s["cwd"]) / rel))
         if path:
@@ -1097,7 +1725,7 @@ class Serve:
             return
         pointer = parts[1]
         name = pointer[1:-len("/draft")] if pointer.startswith("/") and pointer.endswith("/draft") else ""
-        if name not in self.cards:
+        if name not in self.cards and name != "sessions":
             return
         try:
             value = json.loads(parts[2])
@@ -1176,9 +1804,154 @@ class Serve:
             self.open_card(open_first)
         while not self.closed and (self.list_open or self.cards):
             self.refresh_list()
+            self.take_queued()
             self.refresh_cards()
             time.sleep(every)
         return 0
+
+
+# ── Telling Caleb when an agent needs him ────────────────────────────────────
+
+# What `watch` last saw, so it says each thing once. tab-rescue's own --new
+# state belongs to its hook, which reports into whichever tab is typed in
+# next; a person working only on the glass types in no tab, so this keeps
+# its own.
+WATCH_STATE = Path(os.environ.get("KYBER_WATCH_STATE", str(HOME / ".bob" / "kyber-watch.json")))
+HUD_BIN = Path(__file__).resolve().parent / "hud"
+TAB_RESCUE = Path(__file__).resolve().parent / "tab-rescue"
+# hud-watch holds itself to 2 an hour for due dates. An agent stopped on a
+# permission or a dead tab is more urgent than a due date, so 6; one toast
+# carries every alert found in the same minute. Guessed, never measured.
+ALERTS_PER_HOUR = 6
+# Long enough to read two lines, short enough that it is gone before it
+# covers what he is studying. Guessed, never measured.
+ALERT_LIFE_S = 12
+# How long an alert that could not be said yet (over the cap, display down)
+# is still worth saying. Two hours, so a full hourly cap cannot drop one.
+# Guessed, never measured.
+PENDING_S = 7200
+# Rule 11 of the surfaces skill: someone else may see the glass.
+ALERT_CHARS = 90
+
+
+def alert_text(text: str) -> str:
+    one = " ".join(sessions_inbox.clean(text).split())
+    return one if len(one) <= ALERT_CHARS else one[:ALERT_CHARS - 1].rstrip() + "\u2026"
+
+
+def alerts(rows: list[dict], dead: list[dict], prev: dict[str, str]) -> list[tuple[str, str]]:
+    """(key, line) for each thing that newly needs Caleb: a session that
+    started waiting on him, a run the glass started that finished or failed,
+    a tab that failed mid-turn, and a tab tab-rescue found dead on a usage
+    limit. `prev` is each session's state at the last look."""
+    out: list[tuple[str, str]] = []
+    dead_ids = {str(d.get("session") or "") for d in dead}
+    for r in rows:
+        sid, state, old = r["id"], r["state"], prev.get(r["id"])
+        name = r.get("project") or "an agent"
+        if state == "needs" and old != "needs":
+            # The board's ask is words a person wrote; a raw tool line is a
+            # command, which is noise on the glass and can leak a path or a URL.
+            ask = r.get("ask") or ""
+            out.append((f"needs:{sid}:{ask or r.get('detail')}",
+                        alert_text(f"{name} needs u: {ask}" if ask else f"{name} is waiting on u")))
+        elif r.get("origin") == "Kyber" and old in (None, "working", "needs") and state in ("finished", "failed"):
+            # None: a short run can start and finish between two looks (a
+            # 12 s "pong" did on 2026-10-10 and was never said).
+            word = "finished" if state == "finished" else "failed: " + (r.get("detail") or "see its card")
+            out.append((f"done:{sid}:{int(r.get('last') or 0)}", alert_text(f"{name} {word}")))
+        elif state == "failed" and old in ("working", "needs") and sid not in dead_ids:
+            out.append((f"failed:{sid}:{int(r.get('last') or 0)}",
+                        alert_text(f"{name} tab failed: {r.get('detail') or 'see its card'}")))
+    for d in dead:
+        cwd = str(d.get("cwd") or "")
+        name = project_of(cwd) if cwd else "a tab"
+        resets = f", resets {d['resets']}" if d.get("resets") else ""
+        out.append((f"dead:{d.get('session')}:{d.get('died_at')}",
+                    alert_text(f"{name} tab died on a usage limit{resets}. Fork it from ur agents to keep going")))
+    return out
+
+
+def alert_lines(lines: list[str]) -> list[str]:
+    body = [f"@ agent-alert at=top w=440 life={ALERT_LIFE_S}", 'c s Screen title="AGENTS"', "r s"]
+    ids = []
+    for i, line in enumerate(lines[:3]):
+        body.append(f"c a{i} Text value={q(line)}")
+        ids.append(f"a{i}")
+    if len(lines) > 3:
+        body.append(f"c more Text value={q(f'and {len(lines) - 3} more. Say show my agents')} tone=muted")
+        ids.append("more")
+    body.append("> s " + " ".join(ids))
+    return body
+
+
+def dead_tabs() -> list[dict]:
+    try:
+        done = subprocess.run([sys.executable, str(TAB_RESCUE), "--hours", "3", "--json"],
+                              capture_output=True, text=True, timeout=60)
+        got = json.loads(done.stdout or "[]")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return []
+    return [d for d in got if isinstance(d, dict)] if isinstance(got, list) else []
+
+
+def watch_once(rows: list[dict] | None = None, dead: list[dict] | None = None, now: float | None = None,
+               draw: Callable[[list[str]], bool] | None = None) -> list[str]:
+    """One look. Returns the lines it put on the glass. The first look ever
+    only remembers, so turning this on never replays three days of history."""
+    now = time.time() if now is None else now
+    rows = discover(now) if rows is None else rows
+    dead = dead_tabs() if dead is None else dead
+    try:
+        state = json.loads(WATCH_STATE.read_text())
+    except (OSError, ValueError):
+        state = None
+    first = not isinstance(state, dict)
+    state = state if isinstance(state, dict) else {}
+    said: dict[str, float] = {k: v for k, v in (state.get("said") or {}).items() if now - float(v) < RECENT_S}
+    shown = [t for t in state.get("shown") or [] if now - float(t) < 3600]
+    # Alerts found but not yet said (over the cap, or no display) wait here,
+    # because the state they were found from has already moved on.
+    pending: dict[str, list] = {k: v for k, v in (state.get("pending") or {}).items()
+                                if isinstance(v, list) and len(v) == 2 and now - float(v[1]) < PENDING_S}
+    for k, line in alerts(rows, dead, state.get("states") or {}):
+        if k not in said and k not in pending:
+            pending[k] = [line, now]
+    lines: list[str] = []
+    if first:
+        said.update({k: now for k in pending})
+        pending = {}
+    elif pending and len(shown) < ALERTS_PER_HOUR:
+        lines = [v[0] for v in pending.values()]
+        if (draw or draw_alert)(alert_lines(lines)):
+            shown.append(now)
+            said.update({k: now for k in pending})
+            pending = {}
+        else:
+            lines = []
+    state = {"states": {r["id"]: r["state"] for r in rows}, "said": said, "shown": shown, "pending": pending}
+    try:
+        WATCH_STATE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = WATCH_STATE.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f)
+        tmp.replace(WATCH_STATE)
+    except OSError as err:
+        print(f"kyber-sessions: watch state: {err}", file=sys.stderr)
+    return lines
+
+
+def draw_alert(lines: list[str]) -> bool:
+    """A toast on the glass through `hud draw`. It never takes focus and
+    takes itself down; with no display running it is simply not said, and
+    `said` is left alone so the next look tries again."""
+    try:
+        done = subprocess.run([str(HUD_BIN), "draw"], input="\n".join(lines) + "\n", capture_output=True,
+                              text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -1190,7 +1963,8 @@ def short_id(sid: str) -> str:
 
 
 def line_for(s: dict, now: float) -> str:
-    bits = [WORDS.get(s["state"], s["state"]), s["project"], s["model"], age_words(now - s["last"])]
+    bits = [WORDS.get(s["state"], s["state"]), s["project"], s.get("origin") or "", s["model"],
+            age_words(now - s["last"])]
     head = "  ".join(b for b in bits if b)
     extra = s.get("ask") or s.get("detail") or ""
     return f"{short_id(s['id'])}  {head}  {s['title'][:60]}" + (f"\n          {extra[:120]}" if extra else "")
@@ -1252,6 +2026,50 @@ def main(argv: list[str]) -> int:
             print("not allowlisted here: status, diff, tests (when the folder declares one)", file=sys.stderr)
             return 2
         return run_streaming(argv2, s["cwd"], print)
+    if cmd == "tree" and rest:
+        s = find(rest[0])
+        if not s:
+            print("no such session", file=sys.stderr)
+            return 1
+        rows, _, root = session_tree.build(s["cwd"], tail_entries(Path(s["transcript"])),
+                                           change_codes(git_changes(s["cwd"])))
+        if "--json" in rest:
+            print(json.dumps({"root": root, "rows": rows}, indent=2))
+        elif rows:
+            print(root)
+            print(session_tree.text_lines(rows))
+        else:
+            print("Nothing touched in a git repo yet.")
+        return 0
+    if cmd == "new" and rest:
+        folder = ""
+        if "--in" in rest[:-1]:
+            i = rest.index("--in")
+            folder, rest = rest[i + 1], rest[:i] + rest[i + 2:]
+        try:
+            task, cwd = plan_task(" ".join(rest), folder)
+            rec, _ = start_run(task, cwd)
+        except (ValueError, OSError) as err:
+            print(str(err), file=sys.stderr)
+            return 1
+        print(json.dumps({"session": rec["id"], "cwd": rec["cwd"], "pid": rec["pid"]}))
+        return 0
+    if cmd == "stop" and rest:
+        hits = matches(rest[0])
+        if len(hits) != 1:
+            print(f"{len(hits)} sessions match {rest[0]!r}; give more of the id" if hits
+                  else "no such session", file=sys.stderr)
+            return 1
+        stopped, words = stop_run(hits[0]["id"])
+        print(words)
+        return 0 if stopped else 1
+    if cmd == "draft" and rest:
+        queue_draft(" ".join(rest))
+        return 0
+    if cmd == "watch":
+        for line in watch_once():
+            print(line)
+        return 0
     if cmd == "route" and rest:
         print(json.dumps(route(" ".join(rest))))
         return 0

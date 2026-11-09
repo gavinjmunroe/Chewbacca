@@ -37,9 +37,12 @@
     {
       "prompt": "What did Mom say last week?",
       "expect_tools": [
-        "sqlite3"
+        "people texts"
       ],
-      "why": "read the database, do not screenshot the app"
+      "why": "read the people texts store, never chat.db by hand or a screenshot (texts SKILL.md; the sqlite3 expectation contradicted case 'Who have I not replied to?', fixed 2026-10-31)",
+      "reject": [
+        "querying chat.db directly"
+      ]
     },
     {
       "prompt": "Text Dad I am running late",
@@ -52,7 +55,7 @@
     {
       "prompt": "Find where we talked about the car",
       "expect_tools": [
-        "sqlite3"
+        "people texts search"
       ],
       "expect_behavior": "search the index, not a scroll"
     },

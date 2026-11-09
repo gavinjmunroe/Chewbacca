@@ -1,4 +1,11 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of the heavy tools
+# its first check requires (the case list and the python import below).
+# Proven by tools/hookd_replay.py: 0.073 s of CPU on every Bash call before
+# (2026-10-12).
+# gate: whisper yt-transcript ffmpeg ollama llama-cli llama-server stable-diffusion
+# gate: comfyui blender nalana torch upscayl handbrakecli
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
@@ -46,6 +53,21 @@ tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
+# chewbacca-bashparse (crates/bashparse, tree-sitter-bash) blanks the words
+# the shell hands to a command that only prints, searches or lists them
+# (echo, grep, which, ls, command -v, a commit message), when that output
+# goes nowhere but the screen. Everything below then reads that text, so it
+# refuses a subset of what it did; the parse's own finds are added further
+# down. No binary, a parse error, or anything decided at run time: the raw
+# command, exactly as before. Measured 2026-10-12 over 7 days: 29 of
+# load-guard's 54 refusals were lookups like `which ffmpeg` and
+# `grep -E 'transcri|whisper'`, whose quoted | the old split cut through.
+bp="${CHEWBACCA_BASHPARSE:-$HOME/.local/bin/chewbacca-bashparse}"
+raw_cmd="$cmd"
+if [ -x "$bp" ] && masked="$(printf '%s' "$cmd" | "$bp" --mask load 2>/dev/null)"; then
+  cmd="$masked"
+fi
+
 # Test against the command with its DATA stripped out, not the raw text.
 #
 # On 2026-09-22, an hour after this hook shipped, it blocked a python heredoc
@@ -62,7 +84,7 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 # A heredoc body is ALWAYS data. Nothing executes from inside one, so it is
 # stripped unconditionally. This matters more than it looks: the commit
 # message explaining this very fix was itself a heredoc quoting `xargs -P 4
-# python3 -c "import mlx_whisper"`, and the first version of this fix blocked
+# python3 -I -c "import mlx_whisper"`, and the first version of this fix blocked
 # the commit, because it had decided to read the raw text whenever it saw the
 # word xargs anywhere. Describing a fan-out is not performing one.
 nohd="$(printf '%s\n' "$cmd" | awk '
@@ -111,11 +133,88 @@ case "$lower" in
   |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*|*"nalana -b"*|*nalana.app*\
   |*"torch.compile"*|*upscayl*|*handbrakecli*) heavy=1 ;;
 esac
-# `python3 -c "import mlx_whisper"` names the model only inside quotes, which
+# `python3 -I -c "import mlx_whisper"` names the model only inside quotes, which
 # the stripped subject drops. A python command importing it is a real job.
 if [ "$heavy" = 0 ] && printf '%s' "$nohd" | grep -qiE 'python[0-9.]*[^|;&]*(import|-m) *(mlx_whisper|whisper|torch)'; then
   heavy=1
 fi
+# What the parse adds: a heavy tool the shell really runs where the text
+# above can't see it, behind xargs or timeout, inside `bash -c '...'` or
+# `$( )`, or in a heredoc fed to a shell. Before 2026-10-12 `bash -c
+# 'ffmpeg -i a b'` and `cat ids | xargs yt-transcript` under load both passed.
+# Only where it could change the answer: a busy machine, or a fan-out (the
+# two cases that refuse). On a quiet machine this python costs 0.1 s of CPU
+# per call for nothing (0.107 to 0.216 s measured 2026-10-12, load 8).
+parse_running=""
+# The load, and the load where heavy work run straight from a tab is refused,
+# both from bin/lib/machine_profile.py: a share of this Mac's weighted cores,
+# cut on battery, raised when nobody has touched it for 10 minutes. On the
+# reference Mac (10P + 4E), present and on power, the limit is 8, the fixed
+# number this hook carried from 2026-09-22 to 2026-10-13. An 8-core laptop
+# gets 4; nobody at the keyboard gets 18 here. No profile, no load refusal:
+# the width refusal below still stands.
+LG_HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+busy_limit=""; live_load=""
+for cand in "$LG_HERE/../../bin/lib" "$HOME/.chewbacca/kit/current/bin/lib"; do
+  if [ -f "$cand/machine_profile.py" ]; then
+    read -r busy_limit live_load <<EOF
+$(/usr/bin/python3 -I "$cand/machine_profile.py" --get busy_load load 2>/dev/null)
+EOF
+    break
+  fi
+done
+load="${LOAD_GUARD_LOAD:-${live_load:-0}}"
+over_limit=0
+if [ -n "$busy_limit" ] && awk -v l="$load" -v m="$busy_limit" 'BEGIN { exit !(l + 0 >= m + 0) }'; then
+  over_limit=1
+fi
+if [ -x "$bp" ] && { [ "$over_limit" = 1 ] || printf '%s' "$raw_cmd" | grep -qE 'xargs|parallel|&'; } &&
+   facts="$(printf '%s' "$raw_cmd" | "$bp" 2>/dev/null)" && [ -n "$facts" ]; then
+  parse_running=$(LG_FACTS="$facts" python3 -I - <<'PY'
+import json, os, re
+heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
+         "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
+         "handbrakecli", "blender", "nalana", "ollama"}
+ASK = {"--version", "-version", "--help", "-help", "-h", "-encoders", "-decoders", "-codecs", "-formats", "-filters"}
+QUIET = {"-b", "-hide_banner", "--background"}
+wrap = {"nice", "time", "env", "nohup", "caffeinate", "exec", "sudo", "command",
+        "timeout", "gtimeout", "xargs", "parallel", "noglob"}
+try:
+    facts = json.loads(os.environ.get("LG_FACTS") or "null") or {}
+except ValueError:
+    facts = {}
+for c in facts.get("commands", []):
+    words = [c.get("name")] + list(c.get("args") or [])
+    if words[:2] == ["command", "-v"] or words[:1] in (["which"], ["type"]):
+        continue
+    while words and words[0] is not None and (os.path.basename(words[0]) in wrap or "=" in words[0]
+                                               or words[0].startswith("-") or words[0].isdigit()):
+        words = words[1:]
+    if not words or words[0] is None:
+        continue
+    first = os.path.basename(words[0]).lower()
+    # Asked only for a version, help or a capability list: exits at once.
+    # Same rule as chewbacca-bashparse --mask load.
+    args = words[1:]
+    if args and None not in args and any(a in ASK for a in args) and (
+            all(a in ASK or a in QUIET for a in args)
+            or (len(args) == 2 and not args[0].startswith("-") and args[1] in ("--help", "-h", "-help"))):
+        continue
+    rest = " ".join(w for w in words[1:] if w)
+    # Same bar as the text check above: ollama only when it runs a model,
+    # blender and nalana only in the background (-b). `ollama list` at load
+    # 99 was refused by the first cut of this (corpus replay, 2026-10-12).
+    if first == "ollama" and args[:1] != ["run"]:
+        continue
+    if first in ("blender", "nalana") and not ({"-b", "--background"} & set(a for a in args if a)):
+        continue
+    if first in heavy or (first.startswith("python") and re.search(r"(import|-m)\s*(mlx_whisper|whisper|torch)", rest, re.I)):
+        print("yes")
+        break
+PY
+)
+fi
+[ "$parse_running" = "yes" ] && heavy=1
 [ "$heavy" = 1 ] || exit 0
 
 # Reading about it is not running it. submit-guard learned this the hard way
@@ -126,7 +225,7 @@ fi
 # yt-transcript {}` starts with cat, so the guard exempted the exact command
 # that caused the incident it was written for. A leading verb does not
 # describe a pipeline.
-if ! printf '%s' "$cmd" | grep -qE '[|;&]|xargs|parallel'; then
+if [ "$parse_running" != "yes" ] && ! printf '%s' "$cmd" | grep -qE '[|;&]|xargs|parallel'; then
   case "$lower" in
     cat\ *|less\ *|head\ *|tail\ *|grep\ *|rg\ *|wc\ *|ls\ *|find\ *|echo\ *) exit 0 ;;
   esac
@@ -158,24 +257,15 @@ if printf '%s' "$cmd" | grep -qE '(for |while ).*(do|;).*&[[:space:]]*(done|$)';
   width=99
 fi
 
-# Current machine state. One decimal figure, the 1-minute load average.
-#
-# LOAD_GUARD_LOAD overrides it, for tests only. Without a seam here the test
-# for "a single heavy job passes" depends on what the machine happens to be
-# doing, and it flipped from pass to fail between two runs an hour apart with
-# no code change. A test that reports the weather is not a test.
-load="${LOAD_GUARD_LOAD:-}"
-if [ -z "$load" ]; then
-  load=$(uptime | grep -oE 'load averages?: *[0-9.]+' | grep -oE '[0-9.]+$')
-fi
-[ -n "$load" ] || load=0
-load_int=${load%%.*}
-[ -n "$load_int" ] || load_int=0
-
+# $load and $over_limit were read above. LOAD_GUARD_LOAD overrides the load,
+# for tests only: without a seam the test for "a single heavy job passes"
+# depended on what the machine happened to be doing, and flipped from pass to
+# fail between two runs an hour apart with no code change. MACHINE_PROFILE
+# fakes the rest of the Mac the same way.
 block=""
 if [ "$width" -ge 3 ]; then
   block="width"
-elif [ "$load_int" -ge 8 ]; then
+elif [ "$over_limit" = 1 ]; then
   block="load"
 fi
 [ -n "$block" ] || exit 0
@@ -185,7 +275,7 @@ fi
 # 2026-10-09 `command -v ffmpeg`, `ls ~/.cache | grep whisper` and similar
 # lookups were refused at load 30, because the word appeared at all.
 if [ "$block" = "load" ]; then
-  running=$(LG_CMD="$nohd" python3 - <<'PY'
+  running=$(LG_CMD="$nohd" python3 -I - <<'PY'
 import os, re, shlex
 heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
          "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
@@ -211,7 +301,7 @@ for seg in re.split(r"[;|&\n]|\b(?:do|then|else)\b", text):
         print("yes"); break
 PY
 )
-  [ "$running" = "yes" ] || exit 0
+  [ "$running" = "yes" ] || [ "$parse_running" = "yes" ] || exit 0
 fi
 
 cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
@@ -226,7 +316,7 @@ cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
       echo "  Detected: parallel width $width on $cores cores, running local inference or transcode."
     fi
   else
-    echo "  Detected: heavy local work while the 1-minute load average is already $load."
+    echo "  Detected: heavy local work while the 1-minute load average is already $load (this Mac's limit right now: $busy_limit)."
   fi
   echo
   echo "On 2026-09-22 six parallel Whisper jobs took his load average to 50 and he"

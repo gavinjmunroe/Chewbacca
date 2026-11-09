@@ -1,0 +1,1342 @@
+/* Realm on the Chewbacca glass: our stylesheet over Carlton Aikins' Realm
+ * renderer (github.com/31Carlton7/realm). Loaded after his tokens.css and
+ * styles.css (glass/main.tsx), so it wins where it overrides them, and it
+ * only ever uses his tokens: the colour ladder, radii, type and motion are
+ * his. His window chrome stays: the rail, the session sidebar, back and
+ * forward, search, New session and the side panel toggle are on the glass in
+ * every mode (skills/hud/SKILL.md, "His navigation stays"). What we add is
+ * a bar over his frame and our tiles and story inside his main pane.
+ */
+
+:root[data-glass] {
+  /* 96%, not his 84%: on 10/12 his desktop folder icons and their labels
+   * read through the story at 84% and the panel looked like a tinted sheet
+   * over his wallpaper (live-test/first-live-1538.png). !important because
+   * his theme.ts writes --pane-alpha inline on <html>, which beat this rule:
+   * the glass measured 0.84 alpha on 10/13 (headless WebKit, live server),
+   * so the 96% had never applied. */
+  --pane-alpha: 96% !important;
+  /* His sidebar's ground, by the same inline writer: at his default the
+   * whole frame outside the main pane measured 0.528 alpha over the
+   * wallpaper (10/13), the tinted sheet of the 3:38pm screenshot again. */
+  --ground-alpha: 96% !important;
+  --glass-stage-w: min(30vw, 300px);
+  --glass-bar-h: 52px;
+  --glass-gap: 12px;
+  background: transparent;
+}
+
+/* His frame: his whole app, under our bar, in every mode. Before 10/12
+ * glass.css hid his rail, sidebar, lead and trail with !important, and
+ * Caleb's first live test had no way around ("we need buttons to get
+ * through a UX", 4:10pm). Now nothing of his chrome is hidden; his app is
+ * pushed down by the bar's height, and his fixed pieces at the top (the
+ * lead's back, forward and sidebar buttons, the trail's side panel toggle,
+ * the sidebar's seam shade, the connection banner with its Retry) move down
+ * with it. Nothing here makes #root a
+ * stacking context or a containing block, so his palette, sheets, menus,
+ * tooltips and toasts still land over everything at his own z-indexes. */
+:root[data-glass] #root {
+  box-sizing: border-box;
+  padding-top: calc(var(--glass-bar-h) + 6px);
+}
+:root[data-glass] .window-lead,
+:root[data-glass] .window-trail,
+:root[data-glass] .sidebar-shade,
+:root[data-glass] .conn-banner {
+  translate: 0 calc(var(--glass-bar-h) + 6px);
+}
+/* A drop the glass rides out (link.mjs: realm-ui handing over to new code,
+ * redialed in REDIAL_MS) keeps the last frame: his "Connection lost" banner
+ * stays hidden for GRACE_MS, then shows if the line isn't back. Hidden, not
+ * removed, so nothing of his layout moves. */
+:root[data-glass][data-link="handover"] .conn-banner {
+  visibility: hidden;
+}
+:root[data-glass] .app {
+  border-radius: var(--radius-window, 16px);
+  overflow: clip;
+  background: color-mix(in srgb, var(--sidebar-ground, var(--pane-ground)) 96%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+}
+/* The stage takes a column on the right only while it has something on it. */
+:root[data-glass="work"][data-glass-stage] #root {
+  padding-right: calc(var(--glass-stage-w) + var(--glass-gap));
+  transition: padding var(--dur-base) var(--ease-out-strong);
+}
+
+/* His main pane's own loops stop while our tiles or story cover it.
+ * Measured 10/12 on his default build in headless WebKit against the fake
+ * agent (day-ide-report.md): 40 to 44 infinite animations ran under a pane
+ * nobody could see. Only the covered pane: his sidebar's status dots are on
+ * screen and keep moving. Paused, not removed, so his once-in entrances
+ * resume where they were the moment the transcript shows. */
+:root[data-glass="tiles"] #root .main *,
+:root[data-glass="tiles"] #root .main *::before,
+:root[data-glass="tiles"] #root .main *::after,
+:root[data-glass="story"] #root .main *,
+:root[data-glass="story"] #root .main *::before,
+:root[data-glass="story"] #root .main *::after {
+  animation-play-state: paused !important;
+}
+
+/* One owner per region (skills/hud/SKILL.md, "One owner per region"): the
+   pane over his main is a grid, and each region in it is one named area, so
+   two things can't be laid out in the same place. The bar and the stage are
+   fixed to their own strips beside his frame; the light exists only for the
+   320 ms of a morph, over everything, and then is gone. The layer itself
+   is not a box (display: contents), so each piece takes its own z-index
+   among his: over his main pane (z auto), under his lead and trail (36),
+   his sheets (40), palette (50) and menus (100). */
+.glass-layer {
+  display: contents;
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+.glass-pane {
+  position: fixed;
+  z-index: 34;
+  left: var(--glass-main-x, 0px);
+  top: calc(var(--glass-main-y, 0px) + var(--frame-top, 40px));
+  width: var(--glass-main-w, 100vw);
+  height: calc(var(--glass-main-h, 100vh) - var(--frame-top, 40px));
+  pointer-events: none;
+  display: grid;
+  grid-template:
+    "notice" auto
+    "main" minmax(0, 1fr) / minmax(0, 1fr);
+  container-type: inline-size;
+  border-bottom-right-radius: var(--radius-window, 16px);
+  overflow: clip;
+}
+/* Opaque: under the tiles and the story is his own main pane, never the
+ * desktop, and at the pane ground's 84% his hidden composer ("Ask each
+ * time", the model chip, the folder chip) read through behind the Allow
+ * card and the story's doors (A2 verifier, 10/13, a real permission ask). */
+.glass-pane[data-mode="tiles"],
+.glass-pane[data-mode="story"] {
+  background: var(--canvas);
+}
+/* On the tiles nothing is open, so his pane bar (which names whatever his
+ * layout last restored, the dead Gemini "Hello" on 10/12) is covered too.
+ * On a story it shows that agent's space and title, which is true. */
+.glass-pane[data-mode="tiles"] {
+  top: var(--glass-main-y, 0px);
+  height: var(--glass-main-h, 100vh);
+  border-top-right-radius: var(--radius-window, 16px);
+}
+.glass-pane[data-mode="work"] {
+  height: auto;
+}
+
+/* ── tiles ─────────────────────────────────────────────────────────────── */
+.glass-field {
+  grid-area: main;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding: 20px 24px 24px;
+  pointer-events: auto;
+  overflow-y: auto;
+  animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
+}
+.glass-field[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-fade);
+}
+.glass-tiles {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: var(--glass-gap);
+}
+.glass-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+  padding: 14px 16px 14px;
+  text-align: left;
+  border-radius: var(--radius-card, 12px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-card);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    box-shadow var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-tile:hover {
+    background: color-mix(in srgb, var(--surface) 96%, var(--ink) 4%);
+  }
+}
+.glass-tile:active {
+  scale: 0.97;
+}
+.glass-tile[data-picked] {
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px)
+      color-mix(in srgb, var(--accent) 70%, transparent),
+    var(--shadow-card);
+}
+.glass-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A tile that needs the person is the loudest thing on the glass: one edge
+ * of his orange, never a fill. */
+.glass-tile[data-tone="needs"] {
+  box-shadow:
+    inset 0 0 0 1.5px var(--orange),
+    var(--shadow-card);
+}
+.glass-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-2);
+}
+/* One line, whatever the tile's width: at 1440 x 900 a waiting tile's head
+ * wrapped to "Needs / you" beside "15m / 40s" (A2 verifier, 10/13). The
+ * clock never shrinks; the state word gives way first. */
+.glass-tile-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.glass-tile-age {
+  flex: none;
+  white-space: nowrap;
+}
+.glass-tile[data-tone="running"] .glass-tile-state {
+  color: var(--accent-ink);
+}
+.glass-tile[data-tone="needs"] .glass-tile-state {
+  color: var(--orange);
+}
+.glass-tile[data-tone="failed"] .glass-tile-state {
+  color: var(--red);
+}
+.glass-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: currentColor;
+  opacity: 0.8;
+}
+.glass-tile-age {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.glass-tile-age[data-clock="needs"] {
+  color: var(--orange);
+}
+.glass-tile-title {
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-weight-semibold, 560);
+  line-height: 20px;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.glass-tile-now {
+  font-size: var(--text-sm, 13px);
+  line-height: 18px;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.glass-tile-meta {
+  margin-top: auto;
+  font-size: var(--text-xs, 12px);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-quiet {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink-2);
+  font-size: var(--text-sm, 13px);
+}
+
+.glass-more {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-3);
+}
+
+/* ── the notice: a fault that belongs to no one agent ────────────────────── */
+.glass-notice {
+  grid-area: notice;
+  justify-self: center;
+  margin: 16px 16px 0;
+  max-width: 640px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-card, 12px);
+  background: var(--pane-ground);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line);
+  font-size: var(--text-sm, 13px);
+  pointer-events: auto;
+}
+.glass-fault-what {
+  color: var(--ink);
+  font-weight: 560;
+}
+.glass-fault-detail {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 12px);
+}
+.glass-fault-fix {
+  color: var(--ink-2);
+}
+.glass-fault {
+  margin: 0;
+  padding: 6px 14px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: var(--text-sm, 13px);
+}
+.glass-card[data-kind="fault"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  font-size: var(--text-sm, 13px);
+}
+
+/* ── the light morph ───────────────────────────────────────────────────── */
+.glass-light {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  border-radius: var(--radius-window, 16px);
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 85%, white 15%),
+    0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition-property: left, top, width, height, opacity;
+  transition-timing-function:
+    var(--ease-out-strong), var(--ease-out-strong), var(--ease-out-strong),
+    var(--ease-out-strong), var(--ease-fade);
+}
+
+/* ── the stage ─────────────────────────────────────────────────────────── */
+.glass-stage {
+  position: fixed;
+  z-index: 34;
+  top: calc(var(--glass-bar-h) + 6px);
+  right: 0;
+  bottom: 0;
+  width: var(--glass-stage-w);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glass-gap);
+  overflow-y: auto;
+  pointer-events: auto;
+  /* It comes in once his app has made room (its width moves over
+     --dur-base), so the two never draw in the same place: without the delay,
+     headless WebKit caught the stage over his app, 243 x 760, in the first
+     frame of a turn (2026-10-11). */
+  animation: glass-stage-in var(--dur-base) var(--ease-out-strong) var(--dur-base) both;
+}
+.glass-card {
+  flex: none;
+  border-radius: var(--radius-card, 12px);
+  background: var(--pane-ground);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+  overflow: hidden;
+  animation: glass-card-in var(--dur-enter) var(--ease-out-strong) both;
+}
+.glass-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px 8px;
+  font-size: var(--text-sm, 13px);
+}
+.glass-verb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--font-weight-semibold, 560);
+  color: var(--ink);
+}
+.glass-verb[data-live] {
+  color: var(--accent-ink);
+}
+.glass-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.glass-dir {
+  color: var(--ink-3);
+}
+.glass-counts {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+[data-tone="good"] {
+  color: var(--green);
+}
+[data-tone="bad"] {
+  color: var(--red);
+}
+.glass-code {
+  /* A grid, so every line stretches to the widest one and a lit or diff
+     tint runs to the end of a long line when the card scrolls sideways. As
+     display block, a line stopped at the card's visible width (verifier,
+     shots 04 and 05, 10/11). */
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr);
+  margin: 0;
+  padding: 4px 0 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+.glass-line {
+  display: block;
+  padding: 0 14px 0 0;
+  position: relative;
+}
+.glass-ln {
+  display: inline-block;
+  width: 44px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--ink-3);
+  user-select: none;
+}
+/* The changed lines are lit: his accent tint, one lit edge on the leading
+ * side, and the ink brought to full. Before the edit lands, the lines about
+ * to change are lit in his orange. */
+.glass-line[data-lit] {
+  color: var(--ink);
+  background: var(--accent-tint);
+  box-shadow: inset 2px 0 0 var(--accent);
+  transition: background-color var(--dur-swap) var(--ease-fade);
+}
+.glass-line[data-lit="before"] {
+  background: var(--orange-tint);
+  box-shadow: inset 2px 0 0 var(--orange);
+}
+.glass-term {
+  padding-left: 14px;
+}
+.glass-term .glass-line {
+  padding-right: 14px;
+}
+.glass-prompt {
+  color: var(--ink);
+}
+.glass-line[data-diff="add"] {
+  color: var(--ink);
+  background: var(--green-tint);
+}
+.glass-line[data-diff="del"] {
+  color: var(--ink-2);
+  background: var(--red-tint);
+}
+.glass-sign {
+  display: inline-block;
+  width: 14px;
+  color: var(--ink-3);
+}
+.glass-line[data-diff="add"] .glass-sign {
+  color: var(--green);
+}
+.glass-line[data-diff="del"] .glass-sign {
+  color: var(--red);
+}
+.glass-file + .glass-file {
+  border-top: var(--hairline-w, 1px) solid var(--line);
+}
+.glass-file-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 2px;
+  font-size: var(--text-sm, 13px);
+}
+.glass-file-head .glass-word {
+  margin-left: auto;
+}
+.glass-hunk + .glass-hunk {
+  border-top: var(--hairline-w, 1px) solid var(--line-soft, var(--line));
+}
+.glass-hunk-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 10px;
+}
+/* A verb is a lit word, not a pill (hud/CLAUDE.md, Past the window): it
+ * says what it changes, and a press answers on the way down. */
+.glass-word {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-word[data-tone="bad"] {
+  color: var(--red);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-word:hover {
+    background: var(--hover);
+  }
+}
+.glass-word:active {
+  scale: 0.97;
+}
+.glass-word:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.glass-note {
+  margin: 0;
+  padding: 6px 14px 10px;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-2);
+}
+.glass-file-head .glass-note {
+  padding: 0;
+  margin-left: auto;
+}
+
+/* ── the story: one agent turn told by the screen ─────────────────────────
+ * skills/hud/SKILL.md, "An agent turn told by the screen". Seven regions on
+ * one surface, each with one job, in his main pane where his transcript
+ * goes. His transcript is mounted underneath, so Transcript is instant. */
+.story {
+  grid-area: main;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "ask    figure"
+    "tell   figure"
+    "call   doors";
+  column-gap: 40px;
+  row-gap: 24px;
+  padding: 28px 32px 24px;
+  pointer-events: auto;
+  animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
+}
+.story-label {
+  display: block;
+  font-size: var(--text-xs, 11px);
+  line-height: var(--text-xs--line-height, 14px);
+  letter-spacing: var(--text-xs--letter-spacing, -0.2px);
+  color: var(--ink-3);
+}
+.story-ask {
+  grid-area: ask;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.story-asked {
+  margin: 0;
+  font-size: var(--text-base, 14px);
+  line-height: var(--text-base--line-height, 20px);
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.story-meta {
+  font-size: var(--text-xs, 11px);
+  line-height: var(--text-xs--line-height, 14px);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The headline is the one thing to read: the biggest type on the glass. */
+.story-tell {
+  grid-area: tell;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.story-headline {
+  margin: 0;
+  font-size: var(--text-title-lg, 28px);
+  line-height: 36px;
+  letter-spacing: var(--text-title--letter-spacing, -1.5%);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--ink);
+  text-wrap: balance;
+  animation: story-headline-swap var(--dur-pop) var(--ease-out-strong) both;
+}
+.story[data-loading] .story-headline {
+  color: var(--ink-3);
+}
+
+/* The beat line is the whole progress bar: read, lit, ahead. */
+.story-beats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm, 13px);
+  line-height: var(--text-sm--line-height, 16px);
+}
+.story-beats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-3);
+  transition: color var(--dur-slow) var(--ease-fade);
+}
+.story-beats li[data-state="read"] {
+  color: var(--ink-2);
+}
+.story-beats li[data-state="lit"] {
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold, 600);
+}
+.story-beat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: currentColor;
+  opacity: 0.35;
+  transition:
+    opacity var(--dur-slow) var(--ease-fade),
+    background-color var(--dur-slow) var(--ease-fade);
+}
+.story-beats li[data-state="read"] .story-beat-dot {
+  opacity: 0.6;
+}
+.story-beats li[data-state="lit"] .story-beat-dot {
+  opacity: 1;
+  background: var(--accent);
+}
+.story[data-beat="call"] .story-beats li[data-state="lit"] .story-beat-dot {
+  background: var(--orange);
+}
+/* Where a failed turn died: its words in red, its dot red. Never a fill:
+ * on 10/12 a red background on the whole word drew a bare red bar. */
+.story-beats li[data-state="failed"] {
+  color: var(--red);
+  font-weight: var(--font-weight-semibold, 600);
+}
+.story-beats li[data-state="failed"] .story-beat-dot {
+  background: var(--red);
+  opacity: 1;
+}
+/* The one live-work signal: the lit beat's dot breathes while the agent
+ * works. Everything else on the glass is still. */
+.story[data-working] .story-beats li[data-state="lit"] .story-beat-dot {
+  animation: story-breathe 1.6s var(--ease-fade) infinite alternate;
+}
+.story-proof {
+  margin: 0;
+  font-size: var(--text-base, 14px);
+  line-height: var(--text-base--line-height, 20px);
+  color: var(--ink-2);
+}
+.story-proof[data-tone="warn"] {
+  color: var(--orange);
+}
+/* How long it has been at it. Numbers that tick sit on tabular figures so
+ * the line doesn't shiver every second. */
+.story-clock {
+  margin: 0;
+  font-size: var(--text-sm, 12px);
+  line-height: var(--text-sm--line-height, 16px);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.story-clock[data-clock="needs"] {
+  color: var(--orange);
+}
+
+/* Your call: the one decision, at the edge of his orange when it is a
+ * request, his hairline when it is the settled diff. Never a fill. */
+.story-call {
+  grid-area: call;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 10px;
+  border-radius: var(--radius-card, 12px);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line));
+  animation: story-swap var(--dur-slow) var(--ease-out-strong) both;
+}
+.story-call[data-kind="permission"],
+.story-call[data-kind="question"] {
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+}
+.story-call-line {
+  margin: 0;
+  font-size: var(--text-base, 14px);
+  line-height: var(--text-base--line-height, 20px);
+  color: var(--ink);
+}
+.story-call-verbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: -8px;
+}
+
+/* The figure: one object, swapped on one crossfade. */
+.story-figure {
+  grid-area: figure;
+  min-width: 0;
+  min-height: 0;
+  align-self: center;
+  max-height: 100%;
+  overflow-y: auto;
+  animation: story-figure-in var(--dur-base) var(--ease-fade) both;
+}
+.story-figure .glass-card {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line));
+  animation: none;
+}
+/* Inside the figure a long line wraps instead of running out of sight past
+ * the figure's edge (the stage column clipped "boolea" mid-word, verify.md
+ * 2026-10-11). */
+.story-figure .glass-code {
+  /* The stage column sizes its lines to the widest (max-content) so a tint
+   * runs the full width when it scrolls; the figure wraps instead. */
+  grid-template-columns: minmax(0, 1fr);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* A wrapped line hangs under its text, past the line number (44 + 12) and
+ * the diff sign (14). The number and sign keep no indent of their own. */
+.story-figure .glass-line {
+  padding-left: 56px;
+  text-indent: -56px;
+}
+.story-figure .glass-line[data-diff] {
+  padding-left: 70px;
+  text-indent: -70px;
+}
+.story-figure .glass-line > * {
+  text-indent: 0;
+}
+.story-figure .glass-term .glass-line {
+  padding-left: 0;
+  text-indent: 0;
+}
+.story-list ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.story-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: var(--hairline-w, 1px) solid var(--line-soft, var(--line));
+  font-size: var(--text-base, 14px);
+  line-height: var(--text-base--line-height, 20px);
+  color: var(--ink-2);
+}
+/* What a look found sits on its own line under the file it came from. */
+.story-list li:has(.story-found) {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.story-found {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.story-list li[data-lit] .story-file {
+  color: var(--accent-ink);
+}
+.story-file {
+  flex: none;
+  color: var(--ink);
+  font-weight: var(--font-weight-medium, 500);
+}
+.story-list .glass-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm, 13px);
+}
+.story-count {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The review on the story: every file's Keep and Reject stay on screen.
+ * The 12:33am verify saw the second file's diff run off its card with its
+ * Keep and Reject below the fold. The card is a column bounded by the
+ * figure; each hunk's lines give up height first (flex-shrink by size, a
+ * floor of 3 lines each) and scroll inside themselves, while the file heads
+ * and the hunk actions never shrink. Past the floors (many files) the card
+ * itself scrolls, the old behavior. */
+.story-figure[data-figure="review"] {
+  /* Stretched to its grid rows, so its height is definite and the card's
+   * shrink has something to shrink against (a centered figure has none:
+   * the first try left Reject at 903 px in a 780 px window). */
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+.story-figure[data-figure="review"] > .glass-card {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.story-figure[data-figure="review"] .glass-card > *,
+.story-figure[data-figure="review"] .glass-file-head,
+.story-figure[data-figure="review"] .glass-hunk-actions {
+  flex: none;
+}
+.story-figure[data-figure="review"] .glass-file,
+.story-figure[data-figure="review"] .glass-hunk {
+  display: flex;
+  flex-direction: column;
+  /* Never shrunk: the card scrolls instead, and each hunk's Keep and Reject
+   * ride sticky at its top. Shrunk, a hunk's lines ran under the next
+   * file's head (10/12 evening, 1246 frame 05-review). */
+  flex: none;
+}
+.story-figure[data-figure="review"] .glass-hunk .glass-code {
+  flex: 0 1 auto;
+  min-height: calc(3 * 18px + 14px);
+  /* Twelve lines a hunk before it scrolls inside itself. Shrink alone,
+   * weighted by size, squeezed a 9-line hunk to 3 lines beside a 40-line one
+   * in the 10/12 audit (after/06-review.png, first try); capped, the small
+   * hunk shows whole and the big one gives up the room. */
+  max-height: calc(12 * 18px + 14px);
+  overflow-y: auto;
+}
+
+/* The request Allow would run, in full and wrapped: nothing of it sideways
+ * out of sight (beats.mjs permissionView). */
+.story-wants {
+  padding-right: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+/* Typed requests (Story.tsx REQUEST_VIEWS): the path is shown whole and
+ * wraps, since a path cut with an ellipsis is a request not shown in full;
+ * the agent's own note and the run flags sit under the command in its
+ * quieter ink. */
+.glass-path-whole {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
+}
+.story-wants .glass-request-note {
+  color: var(--ink-3);
+  font-family: var(--font-sans, inherit);
+}
+/* The sign sits 14 px in from the card's edge, as the stage's diffs do, and
+ * a wrapped line continues under the text, not under the sign. */
+.story-figure .story-wants .glass-line[data-diff] {
+  padding-left: 28px;
+  text-indent: -14px;
+}
+/* The request Allow would run never scrolls inside the figure: all of it is
+ * laid out, and on narrow glass the story scrolls instead, so Allow (enabled
+ * only while the whole request is in view) can't be pressed on a part. */
+.story-figure[data-figure="permission"] {
+  max-height: none;
+  overflow: visible;
+}
+.glass-word:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+.story-doors {
+  grid-area: doors;
+  align-self: end;
+  justify-self: end;
+  display: flex;
+  gap: 4px;
+  margin-right: -8px;
+}
+.story-doors {
+  gap: 8px;
+  margin-right: 0;
+  align-items: center;
+}
+/* Where to stop a turn realm's engine doesn't run: one line in the doors,
+ * where Stop would sit. */
+.story-elsewhere {
+  font-size: var(--text-sm, 12px);
+  line-height: var(--text-sm--line-height, 16px);
+  color: var(--ink-2);
+  margin-right: 4px;
+}
+
+/* No figure for the beat: one column, so the telling doesn't huddle in the
+ * left five elevenths with the rest of the panel empty (10/12 3:38pm). */
+.story[data-figureless] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas: "ask" "tell" "call" "doors";
+}
+/* The telling sits under what he asked and the call right under it, read
+ * top to bottom, never the headline floating mid-panel over a void. */
+.story[data-figureless] .story-tell {
+  align-self: start;
+  margin-top: 28px;
+}
+.story[data-figureless] .story-call {
+  align-self: start;
+}
+.story[data-figureless] .story-tell,
+.story[data-figureless] .story-call {
+  max-width: 640px;
+}
+
+/* A failed turn's call: the named state and the one thing to do, then the
+ * system's own words small and quiet under it. */
+.story-call[data-kind="failed"] {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 60%, transparent);
+}
+.story-call-detail {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 12px);
+  line-height: 16px;
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A door is a button you can see: a hairline and a fill, at least 32 px
+ * tall. Grey words alone in a corner were the only way to the transcript
+ * on 10/12. */
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-button[data-primary] {
+  color: var(--accent-ink);
+  background: var(--accent-tint, var(--surface));
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) color-mix(in srgb, var(--accent) 55%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-button:hover {
+    background: var(--hover);
+  }
+}
+.glass-button:active {
+  scale: 0.97;
+}
+.glass-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A narrow main pane (his sidebar open on a 1000 pt glass): one column,
+ * the figure under the telling. A container query, since the pane is
+ * narrower than the window. */
+@container (max-width: 760px) {
+  .story {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "ask" "tell" "figure" "call" "doors";
+    padding: 24px 20px 16px;
+    overflow-y: auto;
+  }
+  .story-doors {
+    justify-self: start;
+    margin: 0 0 0 -8px;
+  }
+}
+
+/* The headline comes in already half there. From opacity 0 it and the
+ * figure (story-figure-in, also from 0) faded in together on every beat
+ * change, so the 10/12 rehearsal's frame right after the request landed
+ * showed the story with nothing readable on it, the "blank beat" again in
+ * motion. The headline is what tells the beat, so it is never invisible. */
+@keyframes story-headline-swap {
+  from {
+    opacity: 0.5;
+    translate: 0 4px;
+  }
+}
+@keyframes story-swap {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+@keyframes story-figure-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes story-breathe {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+@keyframes glass-in {
+  from {
+    opacity: 0;
+    scale: 0.985;
+  }
+}
+@keyframes glass-stage-in {
+  from {
+    opacity: 0;
+    translate: 12px 0;
+  }
+}
+@keyframes glass-card-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-field,
+  .glass-stage,
+  .glass-card,
+  .story,
+  .story-headline,
+  .story-call {
+    animation-name: glass-fade;
+  }
+  .story[data-working] .story-beats li[data-state="lit"] .story-beat-dot {
+    animation: none;
+  }
+  :root[data-glass="work"] #root {
+    transition: opacity var(--dur-fast) var(--ease-fade);
+  }
+}
+@keyframes glass-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* His boot mark sweeps until the engine answers. Once the notice has said the
+   engine is down, the sweep stops: nothing spins forever on the glass
+   (headless WebKit, 2026-10-11: boot-sweep ran with iterations Infinity on a
+   stopped engine, beside the notice). */
+:root[data-glass-notice] #boot .boot-shine {
+  animation: none;
+}
+
+/* Once his app has booted, his mark goes at once instead of fading for
+   200 ms: the glass draws its tiles on the same answer, and the fading cube
+   sat over the seventh tile in the first frame at 1440 x 900 (A2 verifier,
+   10/13, headless WebKit against the live server). */
+:root[data-glass] #boot[data-done] {
+  display: none;
+}
+
+/* The New agent door on the tiles: a tile's shape, quieter than an agent
+ * (no state colour, a thinner ground), so the agents still read first. */
+.glass-tile-new {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong);
+  color: var(--ink-2);
+}
+.glass-tile-new .glass-tile-title {
+  color: var(--ink-2);
+}
+
+/* ── the bar: the way around, in every mode ─────────────────────────────
+ * One owner (Nav in GlassLayer.tsx). A strip over his frame with All agents,
+ * the open agent's Story and Transcript, New agent and Close, each a labeled
+ * button. Another agent is his sidebar, right under it. Never only a key: on
+ * 10/12 the only ways out were Escape, a small x over his desktop icons,
+ * and grey words in a corner. */
+.glass-nav {
+  position: fixed;
+  z-index: 37;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--glass-bar-h);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: var(--radius-window, 16px);
+  background: var(--pane-ground);
+  box-shadow:
+    inset 0 0 0 var(--hairline-w, 1px) var(--card-ring, var(--line)),
+    var(--shadow-overlay);
+  animation: glass-in var(--dur-slow) var(--ease-out-strong) both;
+}
+.glass-nav-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--hover);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.glass-nav-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 4px;
+  font-size: var(--text-sm, 13px);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-nav-here {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+}
+.glass-nav-here-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-nav-views {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  margin-right: auto;
+  padding: 2px;
+  border-radius: var(--radius-control, 8px);
+  background: var(--hover);
+}
+.glass-nav-all,
+.glass-nav-new,
+.glass-nav-close,
+.glass-nav-view {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: var(--radius-control, 8px);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-hover) var(--ease-fade),
+    scale var(--dur-press) var(--ease-out-strong);
+}
+.glass-nav-view {
+  min-height: 32px;
+  padding: 4px 12px;
+  color: var(--ink-2);
+}
+.glass-nav-view[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+}
+.glass-nav-all {
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line-strong, var(--line));
+}
+.glass-nav-all[aria-current] {
+  cursor: default;
+}
+.glass-nav-new {
+  color: var(--accent-ink);
+  background: var(--accent-tint, var(--surface));
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.glass-nav-close {
+  color: var(--ink-2);
+}
+.glass-nav-close kbd {
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs, 11px);
+  color: var(--ink-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glass-nav-all:not([aria-current]):hover,
+  .glass-nav-new:hover,
+  .glass-nav-close:hover,
+  .glass-nav-view:hover {
+    background: var(--hover);
+  }
+}
+.glass-nav-all:active,
+.glass-nav-new:active,
+.glass-nav-close:active,
+.glass-nav-view:active {
+  scale: 0.97;
+}
+.glass-nav-all:focus-visible,
+.glass-nav-new:focus-visible,
+.glass-nav-close:focus-visible,
+.glass-nav-view:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── keys, Show all, the review bar (ux-apply, 10/12) ─────────────────────
+ * Patterns from shipped agent apps, ux-universe-report.md steal list: every
+ * press says its key (Realm's and Claude.app's permission cards, Cursor's
+ * review bar), the tiles past nine are a press, and a hunk's Keep and Reject
+ * ride at its top so they are on screen whenever any of the hunk is. */
+.glass-key {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 4px;
+  min-width: 16px;
+  justify-content: center;
+  border-radius: 4px;
+  font: 500 10.5px/16px var(--font-sans, inherit);
+  color: var(--ink-3);
+  box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--line);
+}
+.glass-word:disabled .glass-key {
+  opacity: 0.6;
+}
+.glass-tile-key {
+  margin-left: 2px;
+}
+.glass-tile:not([data-picked]) .glass-tile-key {
+  opacity: 0.55;
+}
+button.glass-more {
+  justify-self: center;
+  margin: 14px 0 0;
+  color: var(--ink-2);
+}
+.story-figure[data-figure="review"] > .glass-card {
+  overflow: hidden;
+}
+.glass-review-bar {
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.story-figure[data-figure="review"] .glass-card > .glass-review-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.glass-review-bar .glass-review-next {
+  margin-left: auto;
+}
+.story-figure[data-figure="review"] .glass-hunk-actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-wrap: wrap;
+  padding: 6px 8px 4px;
+  background: var(--surface);
+}
+.story-doors .glass-button[data-tone="bad"] {
+  color: var(--red);
+}

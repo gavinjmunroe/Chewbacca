@@ -1,0 +1,61 @@
+#!/bin/bash
+# chewbacca cloud: your own always-on CRM and Claude connector, one command.
+#
+#   chewbacca cloud up <name> "<Owner Name>" [--no-bridge]   deploy one, bridge this Mac
+#   chewbacca cloud list                                    every instance this Mac set up
+#
+# The service is the joel-os template (calebnewtonusc/joel-os). It deploys from
+# GitHub on Railway, so pushes to its main redeploy every instance. Its README
+# and docs/ONBOARDING.md hold the details. Secrets live in
+# ~/.chewbacca/secrets/<name>-os.env and are never printed.
+set -euo pipefail
+
+TEMPLATE_REPO="${CHEWBACCA_CLOUD_REPO:-calebnewtonusc/joel-os}"
+# The exact template commit this kit runs. Bump it on purpose, after reading
+# the diff, never by following the remote head (security review, 11/2).
+TEMPLATE_SHA="095a6ec18d9becaa07c7790d2868d1ca5cda5124"
+TEMPLATE="${CHEWBACCA_CLOUD_TEMPLATE:-$HOME/.chewbacca/cloud/template}"
+SECRETS_DIR="$HOME/.chewbacca/secrets"
+
+usage() {
+  echo 'usage: chewbacca cloud up <name> "<Owner Name>" [--no-bridge]'
+  echo '       chewbacca cloud list'
+}
+
+template() {
+  if [ ! -d "$TEMPLATE/.git" ]; then
+    mkdir -p "$(dirname "$TEMPLATE")"
+    gh repo clone "$TEMPLATE_REPO" "$TEMPLATE" -- --quiet
+  fi
+  git -C "$TEMPLATE" fetch --quiet origin || echo "template fetch failed, using the copy on disk" >&2
+  git -C "$TEMPLATE" checkout --quiet --detach "$TEMPLATE_SHA" \
+    || { echo "template commit $TEMPLATE_SHA isn't available" >&2; exit 1; }
+}
+
+case "${1:-}" in
+  up)
+    shift
+    [ $# -ge 2 ] || { usage; exit 1; }
+    template
+    exec bash "$TEMPLATE/bin/cloud-up" "$@"
+    ;;
+  list)
+    found=0
+    for f in "$SECRETS_DIR"/*-os.env; do
+      [ -e "$f" ] || continue
+      found=1
+      name="$(basename "$f" .env)"
+      url="$(sed -n 's/^URL=//p' "$f")"
+      health="$( [ -n "$url" ] && curl -s -m 5 "$url/health" || true)"
+      people="$(printf '%s' "$health" | sed -n 's/.*"people":\([0-9]*\).*/\1/p')"
+      if [ -n "$people" ]; then
+        printf '%-24s %-44s %s people\n' "$name" "$url" "$people"
+      else
+        printf '%-24s %-44s not answering\n' "$name" "${url:-no url}"
+      fi
+    done
+    [ "$found" = 1 ] || echo "No instances yet. chewbacca cloud up <name> \"<Owner Name>\""
+    ;;
+  ""|-h|--help|help) usage ;;
+  *) usage; exit 1 ;;
+esac

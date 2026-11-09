@@ -1,0 +1,304 @@
+/* Hover, focus-visible and pressed states for every control on the page.
+
+   Every value here was read off the reference by hovering, keyboard-focusing
+   and holding the mouse down on each control with Playwright at 1440x900 and
+   diffing the computed style of the control and its descendants. The sweep
+   and its findings are docs/spec/states.md. The testimonial carousel's states
+   live in testimonials.css with the rest of that module.
+
+   Loaded LAST, after every section stylesheet. The rules it overrides are
+   spread over styles.css, chrome.css and lower.css with specificities up to
+   (1,1,0) (`#lower .x`) and (0,4,1) (`body .header .right .btn-ghost:hover`).
+   Every selector here starts with `html:not(#_)`: `:not(#_)` matches any
+   element without that id, which is every element, and adds one id's worth of
+   specificity. So these rules win on specificity and do not depend on load
+   order or on `!important`.
+
+   Colours use the tokens in styles.css: --accent is their rgb(117,92,254),
+   --ink rgb(29,25,86), --navy-lite rgb(50,44,138), --accent-dp
+   rgb(93,78,231), --bg rgb(242,242,242).
+
+   The plate labels in the hero are not here: their hover lives in
+   hero-scene.css, which is another writer's file. */
+
+/* ---- focus rings ------------------------------------------------------- */
+/* Two kinds of ring on theirs, and nothing else.
+
+   1. Their shadcn buttons (Login, Book a demo, Read the docs, View trust
+      center, the carousel arrows) draw a Tailwind ring instead of an
+      outline: box-shadow 0 0 0 2px rgb(242,242,242), 0 0 0 4px
+      rgb(117,92,254). The inner 2px is the page background, so the purple
+      sits 2px off the edge. Ours keeps a 2px TRANSPARENT outline under the
+      ring: invisible normally, so the pixels match theirs, but it is what
+      forced-colors mode paints, because that mode drops box-shadow and
+      theirs then shows no focus at all.
+
+   2. Everything else (nav, brand, banner link, dismiss, copy, footer and
+      newsletter links, cookie settings, the dots, the testimonial cards) has
+      NO focus style of its own and shows the browser's ring: outline auto 1px
+      rgb(0,95,204), offset 1px on links and 0 on buttons. `revert` hands the
+      outline back to the browser, which is exactly that, instead of
+      approximating it with a solid line. Several of ours had been given a 2px
+      solid accent outline; theirs never do. */
+html:not(#_) .brand:focus-visible,
+html:not(#_) .header .nav a:focus-visible,
+html:not(#_) .banner a:focus-visible,
+html:not(#_) .bclose:focus-visible,
+html:not(#_) .lw-copy:focus-visible,
+html:not(#_) .tst-viewport:focus-visible,
+html:not(#_) .tst-dot:focus-visible,
+html:not(#_) .lw-issue-t:focus-visible,
+html:not(#_) .lw-link-latest:focus-visible,
+html:not(#_) .lw-link-all:focus-visible,
+html:not(#_) .lw-foot-logo:focus-visible,
+html:not(#_) .lw-foot-col a:focus-visible,
+html:not(#_) .lw-cookie-btn:focus-visible,
+html:not(#_) .feat-block:focus-visible {
+  outline: revert;
+  outline-offset: revert;
+  box-shadow: none;
+}
+
+html:not(#_) .btn:focus-visible,
+html:not(#_) .lw-btn:focus-visible,
+html:not(#_) .tst-arrow:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--accent);
+}
+
+/* ---- the square buttons ----------------------------------------------- */
+/* Their transition on every shadcn button: color, background-color,
+   box-shadow, scale at 150ms cubic-bezier(0,0,.2,1). Pressed, scale .96
+   (`active:scale-[0.96]`, measured 0.96 with the mouse held down). */
+html:not(#_) .btn,
+html:not(#_) .lw-btn {
+  transition:
+    color 150ms cubic-bezier(0, 0, 0.2, 1),
+    background-color 150ms cubic-bezier(0, 0, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0, 0, 0.2, 1),
+    scale 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+html:not(#_) .btn:active,
+html:not(#_) .lw-btn:active {
+  scale: 0.96;
+}
+
+/* Ghost: #e8e8e8 -> #e0e0e0 hovered, measured on Login, Read the docs and
+   View trust center alike. Ours had drifted to #dedde6 and #dedede. */
+html:not(#_) .header .right .btn-ghost:hover,
+html:not(#_) .btn-ghost:hover,
+html:not(#_) .lw-btn-ghost:hover {
+  background: #e0e0e0;
+}
+
+/* Primary: the background does NOT change on theirs. A layer inside the
+   button goes opacity 0 -> 1 over 300ms cubic-bezier(0,0,.2,1), painted
+   linear-gradient(135deg, rgb(50,44,138) 0%, rgb(93,78,231) 50%,
+   rgb(29,25,86) 100%) under the label. Ours swapped the background to a flat
+   colour instead. Drawn here as ::before behind the text: `isolation` makes
+   the button its own stacking context, so z-index -1 puts the layer above
+   the button's background and below its label. */
+html:not(#_) .btn-primary {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+html:not(#_) .btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    var(--navy-lite) 0%,
+    var(--accent-dp) 50%,
+    var(--ink) 100%
+  );
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+html:not(#_) .btn-primary:hover::before {
+  opacity: 1;
+}
+html:not(#_) .header .right .btn-primary:hover,
+html:not(#_) .btn-primary:hover {
+  background: var(--ink);
+}
+
+/* ---- header ------------------------------------------------------------ */
+/* The brand has no hover on theirs: nothing in it changed. It rests at
+   --navy-lite on ours, so hovered it stays there. */
+html:not(#_) .header .brand:hover {
+  color: var(--navy-lite);
+}
+
+/* Nav links: colour only, rgb(108,105,145) -> rgb(29,25,86) over 150ms
+   cubic-bezier(.4,0,.2,1). The sweep found no underline, no pseudo-element
+   and no child that changes, so the growing underline ours drew is removed. */
+html:not(#_) .header .nav a.ul-grow::after {
+  display: none;
+}
+
+/* Banner: the link and the dismiss both go opacity 1 -> .8 over 150ms
+   cubic-bezier(.4,0,.2,1). The dismiss rests at 1 on theirs; ours rested at
+   .85 and brightened, the opposite direction. Theirs is a <button> with a
+   default cursor and a 28px box; ours is 24x22, so the hit area grows to 30x28
+   without moving the glyph. */
+html:not(#_) .banner a,
+html:not(#_) .bclose {
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* No `position` here: the dismiss is already absolutely placed at the
+   banner's right edge, which also makes it the containing block for the
+   ::after below. Setting it relative dropped it into the text run. */
+html:not(#_) .bclose {
+  opacity: 1;
+  cursor: default;
+}
+html:not(#_) .bclose::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
+html:not(#_) .banner a:hover,
+html:not(#_) .bclose:hover {
+  opacity: 0.8;
+}
+
+/* ---- the copy-prompt button --------------------------------------------- */
+/* Glyph rgb(161,160,184) -> rgb(21,17,80) on hover, colour over 250ms ease. */
+html:not(#_) .lw-copy {
+  transition: color 250ms ease;
+}
+html:not(#_) .lw-copy:hover {
+  color: rgb(21, 17, 80);
+}
+
+/* ---- text links with a wipe underline ------------------------------------ */
+/* Newsletter title, both newsletter links, every footer link and Cookie
+   settings share one treatment on theirs: colour to rgb(117,92,254) over
+   150ms cubic-bezier(.4,0,.2,1), and an underline revealed left to right by
+   clip-path inset(0 100% 0 0) -> inset(0) over 300ms cubic-bezier(0,0,.2,1).
+   Ours draws the same reveal with scaleX from a left origin; only the timing
+   was off, 150ms on the wrong curve. */
+html:not(#_) .lw-issue-t,
+html:not(#_) .lw-link-latest,
+html:not(#_) .lw-link-all,
+html:not(#_) .lw-foot-col a,
+html:not(#_) .lw-cookie-btn {
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Their line is `-bottom-px h-px`: it fills the 1px directly under the text
+   span's box. Ours sat at -2px, one pixel lower than that. */
+html:not(#_) #lower .ul-grow::after,
+html:not(#_) #lower-footer .ul-grow::after {
+  bottom: -1px;
+  transform-origin: left center;
+  transition: transform 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+/* Cookie settings is a <button> on theirs: default cursor. */
+html:not(#_) .lw-cookie-btn {
+  cursor: default;
+}
+
+/* ---- newsletter form ---------------------------------------------------- */
+/* The input has no hover on theirs. Focused, by mouse or keyboard alike
+   (theirs is `focus:`, not `focus-visible:`), the border goes
+   rgb(212,212,221) -> rgb(117,92,254) and a 2px ring of the same purple at
+   30% appears. The transparent outline is the forced-colors fallback, as
+   above. */
+html:not(#_) .lw-input {
+  transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(#_) .lw-input:hover {
+  border-color: var(--lw-line, #d4d4dd);
+}
+html:not(#_) .lw-input:focus,
+html:not(#_) .lw-input:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(117, 92, 254, 0.3);
+}
+
+/* Get Weekly: hover opacity 1 -> .9 over 150ms cubic-bezier(.4,0,.2,1),
+   keyboard focus a 2px ring at 40%, default cursor. */
+html:not(#_) .lw-submit {
+  cursor: default;
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(#_) .lw-submit:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  box-shadow: 0 0 0 2px rgba(117, 92, 254, 0.4);
+}
+
+/* ---- the cookie card ---------------------------------------------------- */
+/* Their consent buttons: the background swaps with NO transition, only
+   opacity and transform animate, 80ms cubic-bezier(.4,0,.2,1). Reject and
+   Customize go to primary at 10% and lose their edge; Accept goes
+   rgb(29,25,86) -> rgb(50,44,138). Pressed, scale .97. Focused, a 2px
+   primary ring. */
+html:not(#_) body .cc .cc-btn {
+  transition:
+    opacity 80ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 80ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(#_) body .cc .cc-btn:hover,
+html:not(#_) body .cc .cc-btn[data-cc="choose"]:hover {
+  background: rgba(29, 25, 86, 0.1);
+  border-color: transparent;
+}
+html:not(#_) body .cc .cc-btn[data-cc="choose"]:hover {
+  color: var(--muted);
+}
+html:not(#_) body .cc .cc-btn-primary:hover {
+  background: var(--navy-lite);
+  border-color: var(--navy-lite);
+}
+html:not(#_) body .cc .cc-btn:active {
+  transform: scale(0.97);
+}
+html:not(#_) body .cc .cc-btn:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+/* ---- the pinned feature blocks ------------------------------------------- */
+/* Theirs has no control here at all: the four text blocks scroll past one
+   sticky panel. states.js makes each block a tab stop that brings its panel
+   in; the ring is the browser's, like every non-button on theirs, drawn just
+   inside the block because the block is a full viewport tall. */
+html:not(#_) .feat-block:focus-visible {
+  outline-offset: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(#_) .btn,
+  html:not(#_) .lw-btn,
+  html:not(#_) .btn-primary::before,
+  html:not(#_) .banner a,
+  html:not(#_) .bclose,
+  html:not(#_) .lw-copy,
+  html:not(#_) .lw-input,
+  html:not(#_) .lw-submit,
+  html:not(#_) body .cc .cc-btn,
+  html:not(#_) #lower .ul-grow::after,
+  html:not(#_) #lower-footer .ul-grow::after {
+    transition: none;
+  }
+  /* A press that shrinks the target is motion; the hover colour still
+     acknowledges the press. */
+  html:not(#_) .btn:active,
+  html:not(#_) .lw-btn:active {
+    scale: none;
+  }
+  html:not(#_) body .cc .cc-btn:active {
+    transform: none;
+  }
+}

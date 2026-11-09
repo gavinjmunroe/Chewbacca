@@ -1,6 +1,8 @@
 ---
 name: list-audit
-description: Check a purchased, scraped or inherited contact list before anyone builds a sequence on it. Use when a lead list, investor list, prospect file, CSV export or enriched dataset arrives, when someone says they bought a list or paid for data, before writing outbound copy or scoring rules against a file, and when a campaign is bouncing or the personalization is coming out wrong. Also use before quoting how many contacts a file contains.
+description: "Check a bought, scraped or inherited contact list before building a sequence on it. Use when a lead or investor list or CSV arrives, a campaign bounces, or before quoting how many contacts a file has."
+triggers: >-
+  Check a purchased, scraped or inherited contact list before anyone builds a sequence on it. Use when a lead list, investor list, prospect file, CSV export or enriched dataset arrives, when someone says they bought a list or paid for data, before writing outbound copy or scoring rules against a file, and when a campaign is bouncing or the personalization is coming out wrong. Also use before quoting how many contacts a file contains.
 license: MIT
 requires: [list-audit]
 ---

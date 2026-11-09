@@ -1,6 +1,8 @@
 ---
 name: startup-finance
-description: Startup and student-org finance with real arithmetic instead of guesses. Use for runway, burn, cash-out date, hiring scenarios, Delaware franchise tax (assumed par value vs authorized shares), 1099s and W-9s, tax deadlines, bookkeeping categories for a bank or card CSV, duplicate charges, unused SaaS seats, spend spikes, and a personal daily budget or savings-goal date. Also use when a founder pastes a bank export, asks "how long do we have", "what do we owe Delaware", or "should we hire".
+description: "Startup and student-org finance with real arithmetic: runway, burn, hiring, Delaware franchise tax, 1099s, tax deadlines, bank CSV categories, unused SaaS, budgets. Use for how long do we have."
+triggers: >-
+  Startup and student-org finance with real arithmetic instead of guesses. Use for runway, burn, cash-out date, hiring scenarios, Delaware franchise tax (assumed par value vs authorized shares), 1099s and W-9s, tax deadlines, bookkeeping categories for a bank or card CSV, duplicate charges, unused SaaS seats, spend spikes, and a personal daily budget or savings-goal date. Also use when a founder pastes a bank export, asks "how long do we have", "what do we owe Delaware", or "should we hire".
 ---
 
 # startup-finance
@@ -56,3 +58,7 @@ Lead with the answer in one sentence, then the numbers behind it. Report spend a
 ## For this user's orgs
 
 Amber, TTS and BMA are different entities with different obligations; ask which one and what its legal form is before using the calendar. Ask for the bank export before answering a categorization or leak question. Read the CSV they hand over and write nothing back.
+
+## Related
+
+- [venture-validation](../venture-validation/SKILL.md): whether the idea is worth funding at all, the VC screen, and the paid test math. Its course map points to the ACAD 185 cap table, valuation and liquidation preference lecture.

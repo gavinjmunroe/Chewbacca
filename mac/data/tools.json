@@ -27,8 +27,8 @@
     },
     {
       "name": "agent-desktop",
-      "repo": "lahfir/agent-desktop",
-      "url": "https://github.com/lahfir/agent-desktop",
+      "repo": "vercel-labs/agent-desktop",
+      "url": "https://github.com/vercel-labs/agent-desktop",
       "stars": 1034,
       "language": "Rust",
       "license": "Apache-2.0",

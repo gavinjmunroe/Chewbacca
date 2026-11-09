@@ -16,6 +16,10 @@ need ollama "— run: chewbacca setup"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO/.claude/hooks/skill-route.sh"
+# The meaning matcher is opt-in since 2026-10-17 (SKILL_ROUTE_MEANING=on; held-out
+# precision 10.9% on, 12.8% off, tests/live/skill-route-eval.sh). These cases test that
+# matcher, so they turn it on.
+export SKILL_ROUTE_MEANING=on
 
 # Prints the routed skill name, or "-" when the router stays silent.
 route() {
@@ -53,10 +57,12 @@ we gotta make chewbs a gtm monster
 get money in the door with a growth engine
 Q
 
-ok "control: a keynote still goes to speaking" routes_to speaking "help me prep a keynote talk for a conference"
+# speaking was an outside skill and is gone from this Mac (10/10); coursework is
+# in the kit, so this control cannot go stale the same way.
+ok "control: class deadlines still go to coursework" routes_to coursework "what is due this week for my classes"
 ok "control: the team board keeps its own"      routes_to team "what is gavin working on this week"
 ok "control: small talk routes nowhere"         routes_to - "whats the weather"
 
-mutant "a GTM prompt is not routed to speaking" routes_to speaking "book more meetings from cold email"
+mutant "a GTM prompt is not routed to coursework" routes_to coursework "book more meetings from cold email"
 
 finish

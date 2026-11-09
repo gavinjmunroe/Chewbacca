@@ -14,7 +14,7 @@ and gates every irreversible action in the grammar itself, does not compound.
     chewie plan run     plan.json        run it; confirm-gated actions need --yes
     chewie plan run     plan.json --yes  approve the confirm-gated actions
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 import time as _time
 from datetime import datetime
@@ -88,11 +88,55 @@ def _chewie(*args):
     return subprocess.run([BIN, *args], capture_output=True, text=True)
 
 
+def _send_refusal(channel, to, text, subject=""):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text, subject)
+
+
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+def _send_row(name, decision, a, reason=""):
+    v = _chewbacca_verdicts()
+    if v:
+        v.send_row("plan " + name, decision, a.get("to"), reason, values=(a.get("body"), a.get("subject")))
+
+
 def _applescript(script):
     return subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
 
 
-def run_query(q):
+def run_query(q, approved=False):
     name = q["name"]
     if name == "texts":
         args = ["texts", "--days", str(q.get("days", 7)), "--json"]
@@ -106,6 +150,15 @@ def run_query(q):
         a = ["web", "read"] + ([q["url"]] if q.get("url") else [])
         return _chewie(*a).stdout
     if name == "app_data":
+        # Arbitrary AppleScript can do anything an action can, a send included,
+        # and no word list proves a script only reads (security review of
+        # 41ac5668). So it is confirm-gated like the actions, and a script
+        # that says send is refused even then: sending has its own actions.
+        if not approved:
+            raise PlanError("an app_data query runs arbitrary AppleScript, so it is "
+                            "confirm-gated like an action. Re-run with --yes to approve.")
+        if re.search(r"\bsend\b", q["script"], re.I):
+            raise PlanError("an app_data query cannot send; use send_text or send_email")
         return _applescript(q["script"]).stdout
     if name == "file":
         return subprocess.run(["cat", q["path"]], capture_output=True, text=True).stdout
@@ -139,15 +192,30 @@ def run_action(a, approved):
             f'tell application "Calendar" to tell calendar "{cal}" to make new event '
             f'with properties {{summary:"{a["summary"]}", start date:date "{a["start"]}", '
             f'end date:date "{a["start"]}"}}')
+    if name in ("send_text", "send_email") and os.environ.get("CHEWBACCA_NO_SEND"):
+        _send_row(name, "held", a, "CHEWBACCA_NO_SEND")
+        raise PlanError("sending is disabled (CHEWBACCA_NO_SEND)")
+    # --yes approves the plan, never a send: an agent passes --yes itself. The
+    # send step stops here until a person's press approves this exact message.
+    if name in ("send_text", "send_email"):
+        refused = _send_refusal("imessage" if name == "send_text" else "email", a["to"], a["body"],
+                                 a.get("subject", "") if name == "send_email" else "")
+        if refused:
+            _send_row(name, "failed", a, "no press")
+            raise PlanError(refused)
     if name == "send_text":
-        return _applescript(
+        r = _applescript(
             f'tell application "Messages" to send "{a["body"]}" to buddy "{a["to"]}"')
+        _send_row(name, "sent" if r.returncode == 0 else "failed", a, (r.stderr or "").strip())
+        return r
     if name == "send_email":
-        return _applescript(
+        r = _applescript(
             f'tell application "Mail"\nset m to make new outgoing message with properties '
             f'{{subject:"{a["subject"]}", content:"{a["body"]}", visible:true}}\n'
             f'tell m to make new to recipient at end of to recipients '
             f'with properties {{address:"{a["to"]}"}}\ntell m to send\nend tell')
+        _send_row(name, "sent" if r.returncode == 0 else "failed", a, (r.stderr or "").strip())
+        return r
     if name == "run_shell":
         return subprocess.run(["bash", "-c", a["cmd"]], capture_output=True, text=True)
     raise PlanError(f"no runner for action {name}")
@@ -178,7 +246,7 @@ def main():
         t0 = _time.time()
         print(f"query: {q['name']} ...", file=sys.stderr)
         try:
-            out = run_query(q)
+            out = run_query(q, approved)
             ms = int((_time.time() - t0) * 1000)
             size = len(out or "")
             results[q["name"]] = out

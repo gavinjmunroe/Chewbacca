@@ -5,7 +5,7 @@ The keyword router behind skill-route.sh named `jev-browse` and
 `thinking-out-loud` for "how do further improve our entire stack with jev and
 system one models" on 2026-10-05, matched on "jev, speed, model". The Jev
 cascade in tools/hybrid_route.py was evaluated on synthetic prompts only
-(docs/HYBRID-ROUTE.md). This runs it on real prompts without showing anything,
+(docs/reference/HYBRID-ROUTE.md). This runs it on real prompts without showing anything,
 so the two can be compared on real traffic before either one is trusted more.
 
     echo '<UserPromptSubmit payload>' | skill_route_shadow.py
@@ -15,6 +15,7 @@ bin/lib/decision_log.py, with both picks in `answers`. Prints nothing. The hook
 runs it detached, so a slow or failed Jev call never delays a prompt. Outcomes
 (which skill the session actually loaded) are joined later from the transcript.
 """
+from __future__ import annotations
 import json
 import sys
 import time

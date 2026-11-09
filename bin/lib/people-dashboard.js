@@ -473,7 +473,12 @@ function serve({ db, port, host, onReady }) {
   });
   // Bound to loopback on purpose. This is 500k private messages; it does not
   // belong on the local network, let alone anywhere else.
-  server.listen(port, host, () => onReady(server));
+  // Under chewbacca-daemon the port is already bound (bin/lib/listen_exec.py
+  // hands it over as a file descriptor), so a kit move can start the new copy
+  // beside this one with no refused connection in between.
+  const fd = Number(process.env.CHEWBACCA_LISTEN_FD);
+  if (Number.isInteger(fd) && fd > 2) server.listen({ fd }, () => onReady(server));
+  else server.listen(port, host, () => onReady(server));
   return server;
 }
 

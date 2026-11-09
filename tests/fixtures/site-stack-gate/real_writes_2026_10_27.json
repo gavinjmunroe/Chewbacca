@@ -1,0 +1,145 @@
+{
+ "about": "Real HTML Writes replayed through .claude/hooks/site-stack-gate.sh with no ux-pick run and no house stack. Recorded 2026-10-27 from pages on disk: the line count and the structural tags the gate reads (nav, footer, section, the Tailwind CDN script), never the page copy.",
+ "cases": [
+  {
+   "name": "kyber landing, the 2026-10-27 incident (kyber-landing@25480bf)",
+   "file_path": "public/index.html",
+   "lines": 690,
+   "structure": [
+    "<script src=\"https://cdn.tailwindcss.com/3.4.16\"></script>",
+    "<nav>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<footer>"
+   ],
+   "expect": "deny"
+  },
+  {
+   "name": "kyber landing kept as v1.html",
+   "file_path": "public/v1.html",
+   "lines": 690,
+   "structure": [
+    "<script src=\"https://cdn.tailwindcss.com/3.4.16\"></script>",
+    "<nav>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<footer>"
+   ],
+   "expect": "deny"
+  },
+  {
+   "name": "kyber taste vote on the CDN",
+   "file_path": "public/taste.html",
+   "lines": 180,
+   "structure": [
+    "<script src=\"https://cdn.tailwindcss.com/3.4.16\"></script>",
+    "<section>",
+    "<section>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "kyber taste vote, Next rebuild",
+   "file_path": "public/taste.html",
+   "lines": 103,
+   "structure": [
+    "<nav>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "kl-vote taste page",
+   "file_path": "public/taste.html",
+   "lines": 107,
+   "structure": [
+    "<nav>",
+    "<section>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "lemma replica 404",
+   "file_path": "404.html",
+   "lines": 136,
+   "structure": [],
+   "expect": "allow"
+  },
+  {
+   "name": "mashup brief one-pager",
+   "file_path": "index.html",
+   "lines": 723,
+   "structure": [
+    "<section>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "guitar midterm study app",
+   "file_path": "index.html",
+   "lines": 4167,
+   "structure": [
+    "<section>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "kyber A9 deck",
+   "file_path": "index.html",
+   "lines": 471,
+   "structure": [
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>",
+    "<section>"
+   ],
+   "expect": "allow"
+  },
+  {
+   "name": "gavin munroe personal site in raw HTML",
+   "file_path": "index.html",
+   "lines": 174,
+   "structure": [
+    "<nav>",
+    "<nav>",
+    "<section>",
+    "<section>",
+    "<footer>"
+   ],
+   "expect": "deny"
+  }
+ ]
+}

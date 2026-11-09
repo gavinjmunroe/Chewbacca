@@ -22,16 +22,21 @@ type hook_init >/dev/null 2>&1 && hook_init ask-capture.sh 3
 #
 # Silent always. Never blocks, never prints, never fails a turn.
 
-ASK_PAYLOAD=$(cat)
+ASK_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export ASK_PAYLOAD
 
-exec python3 <<'PY'
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
+exec python3 -I <<'PY'
 import json, os, pathlib, time
 
+raw = os.environ.get("ASK_PAYLOAD") or "{}"
 try:
-    payload = json.loads(os.environ.get("ASK_PAYLOAD") or "{}")
+    payload = json.loads(raw)
 except Exception:
-    raise SystemExit(0)
+    # The env cap cut a huge paste mid-string. It is still a request, and the first
+    # lines say what was wanted. Stress test, 2026-11-05: a 1.2 MB prompt was lost.
+    head = raw.split('"prompt"', 1)[-1].lstrip(' :"')[:1200]
+    payload = {"prompt": head.encode().decode("unicode_escape", "replace") if "prompt" in raw else ""}
 
 prompt = (payload.get("prompt") or "").strip()
 if not prompt:
@@ -56,7 +61,18 @@ try:
         "cwd": payload.get("cwd") or "",
         "said": text,
     }
-    with store.open("a", encoding="utf-8") as fh:
+    # Every link, from the whole prompt, before the trim. Caleb, 2026-10-04:
+    # "There's a ton of links in everything I sent you that you never went
+    # through", and 2026-10-09: "There's a shit ton of links and repos I sent
+    # you ... DONT LOSE THEM" (feedback_catalogued_is_not_read). The 1200-char
+    # trim above dropped every link past it, so a long paste of repos kept only
+    # the first few. `backlog inbox` and any agent can read them from here.
+    import re
+    found = (u.rstrip(".,;:!?") for u in re.findall(r"https?://[^\s<>()\[\]\"'`]+", prompt))
+    links = list(dict.fromkeys(found))[:200]
+    if links:
+        row["links"] = links
+    with store.open("a", encoding="utf-8", errors="backslashreplace") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 except OSError:
     pass

@@ -77,7 +77,8 @@ result moves with a **still** hand and realistic jitter. On this machine:
 Predictable beats correct when a person is aiming. A constant offset is
 learned in a minute without noticing; noise cannot be learned at all.
 
-See `second-brain/memory/feedback_one_mapping_for_spatial_input.md`.
+The memory note this once pointed to was never saved, so the numbers above are
+the record (backlog 26 audit, 2026-10-16).
 
 ## While a gesture is being made, nothing is driven by the clock
 

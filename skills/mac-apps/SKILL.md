@@ -1,6 +1,8 @@
 ---
 name: mac-apps
-description: Drive specific Mac apps through AppleScript, JXA, Shortcuts, or their own data files - Mail, Messages, Notes, Safari, Calendar, Reminders, Finder, Music, Terminal. Use when the user asks to do something in a named Mac app, especially an Apple one.
+description: "Drive named Mac apps through AppleScript, JXA, Shortcuts or their data files: Mail, Messages, Notes, Safari, Calendar, Reminders, Finder, Music, Terminal. Use when asked to do something in one."
+triggers: >-
+  Drive specific Mac apps through AppleScript, JXA, Shortcuts, or their own data files - Mail, Messages, Notes, Safari, Calendar, Reminders, Finder, Music, Terminal. Use when the user asks to do something in a named Mac app, especially an Apple one.
 requires: [chewie]
 ---
 
@@ -8,6 +10,18 @@ requires: [chewie]
 
 Apple's own apps are well scripted. Reaching for the UI on one of these is doing it the
 hard way.
+
+## Apple Notes: `mac notes` first, and never fight for the formatting
+
+Read, search, list and trash through `mac notes`. It has no attachments and `add`/`edit` take plain text, so a note with dash lists or a picture can't go through them. Say that in the first update, before reaching for anything else. Caleb, 2026-11-04, mid-move: "Bro dont u hv maccli".
+
+Moving a note with a picture, in order:
+
+- Back up the HTML body with AppleScript and count `<img`.
+- `make new note` with that body. A data URI image becomes a dead File card, so strip the `<img>` first.
+- `make new attachment` only appends to the very bottom and attached twice on 2026-11-04, so count attachments and delete the extra.
+- Background paste is refused and the Attach File panel ignores background clicks. Don't spend turns on either. Tell him the picture is at the bottom.
+- Diff the lines of the new note against the backup before `mac notes delete` on the old one.
 
 ## Is it scriptable?
 
@@ -47,6 +61,20 @@ JXA when you want real data structures back:
 ```bash
 chewie run --js 'JSON.stringify(Application("Notes").notes().slice(0,5).map(n => n.name()))'
 ```
+
+## A whole collection is one event per field, never a loop
+
+Every property read is a round trip to the app. `repeat with p in people` that reads six
+fields costs cards x 6 events; on 2026-10-21 that was still running at 5 minutes. Ask for
+the column instead: `people.lastName()` in JXA or `get last name of every person` in
+AppleScript returns every card's value in one event (the same six fields: 3.7 s). Filter
+in memory, then write back only the matches by id. `bulk-loop-guard` refuses the loop
+shape. For Contacts, `contacts-bulk find <text>` and `contacts-bulk replace <old> <new>`
+already do this, with a snapshot and `contacts-bulk undo`.
+
+The same rule holds off the Mac: one query with `IN (...)` over N single-row queries, one
+batch API call over a loop of single calls, `git cat-file --batch` over a process per file.
+When unsure, time it on 20 items and multiply before starting the full run.
 
 ## Reading is usually faster from the file
 
@@ -95,9 +123,9 @@ Go to layer 3, and remember they need `chewie see --force-ax` first.
 
 ## Failure signatures
 
-| Error | Fix |
-|-------|-----|
-| -600 "Application isn't running" | `open -a "App"` first, then poll |
-| -1743 "Not authorized" | TCC denied. `tccutil reset AppleEvents`, retry in the foreground |
-| -1712 timeout | `with timeout of 300 seconds`. Also check for a modal blocking the app |
-| -1728 "Can't get..." | The object does not exist. Check the dictionary, not the permissions |
+| Error                            | Fix                                                                    |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| -600 "Application isn't running" | `open -a "App"` first, then poll                                       |
+| -1743 "Not authorized"           | TCC denied. `tccutil reset AppleEvents`, retry in the foreground       |
+| -1712 timeout                    | `with timeout of 300 seconds`. Also check for a modal blocking the app |
+| -1728 "Can't get..."             | The object does not exist. Check the dictionary, not the permissions   |

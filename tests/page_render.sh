@@ -16,8 +16,8 @@
 # origin 1 or 2 ms apart on identical runs (measured 2026-09-25, three runs).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-python3 -c "import playwright" 2>/dev/null || { echo "SKIP page_render: python playwright not installed"; exit 0; }
-command -v ffmpeg >/dev/null || { echo "SKIP page_render: ffmpeg not installed"; exit 0; }
+python3 -c "import playwright" 2>/dev/null || { echo "SKIP page_render: python playwright not installed"; exit 77; }
+command -v ffmpeg >/dev/null || { echo "SKIP page_render: ffmpeg not installed"; exit 77; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

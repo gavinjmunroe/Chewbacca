@@ -84,7 +84,7 @@ class BridgeTests(unittest.TestCase):
         denied = self.bridge('cursor', {'hook_event_name': 'preToolUse', 'tool_name': 'Shell',
                                         'tool_input': {'command': 'echo FORBIDDEN'}, 'cwd': cwd})
         self.assertEqual(denied['permission'], 'deny')
-        # skill-gate refuses everything; outside Claude it must never run.
+        # skill-gate nudges everything; outside Claude it must never run.
         allowed = self.bridge('cursor', {'hook_event_name': 'preToolUse', 'tool_name': 'Shell',
                                          'tool_input': {'command': 'ls'}, 'cwd': cwd})
         self.assertEqual(allowed['permission'], 'allow')

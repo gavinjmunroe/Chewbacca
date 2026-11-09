@@ -1,0 +1,66 @@
+// Types for config/send-policy.cedar. tools/send_policy.py fills a context
+// from what's true right now; the binary checks every rule against these
+// types first, so a misspelled field is an error, never a rule that quietly
+// stops firing.
+
+entity Agent;
+entity Message;
+
+// A recipient's quiet hours, already turned into their local clock. Times are
+// minutes past local midnight. cutoff_today is today's start of quiet hours,
+// cutoff_yesterday is yesterday's (quiet runs past midnight into the morning).
+type Quiet = {
+  minute: Long,
+  cutoff_today?: Long,
+  cutoff_yesterday?: Long,
+  until?: Long,
+};
+
+// A text, email, Slack or bridged-chat message to one person or room, from any
+// sink that calls send_approval.take() and from people send.
+action "text" appliesTo {
+  principal: Agent,
+  resource: Message,
+  context: {
+    channel: String,
+    no_send: Bool,
+    direct?: Bool,
+    quiet?: Quiet,
+    after_hours?: Bool,
+    address_owned?: Bool,
+    to_confirmed?: Bool,
+    unverified_sender?: Bool,
+  },
+};
+
+// One cold email from a client's own inbox (gtme send).
+action "cold_email" appliesTo {
+  principal: Agent,
+  resource: Message,
+  context: {
+    no_send: Bool,
+    dry_run: Bool,
+    utc_weekday: Long,
+    weekend_ok: Bool,
+    sent_today: Long,
+    days_since_first?: Long,
+    suppressed: Bool,
+    already_sent: Bool,
+  },
+};
+
+// A Clay write (chewbacca clay <op>).
+action "clay_write" appliesTo {
+  principal: Agent,
+  resource: Message,
+  context: {
+    op: String,
+    start: Bool,
+    no_send: Bool,
+    allow_writes: Bool,
+    person_ok: Bool,
+    reply_finished?: Bool,
+    campaign_status?: String,
+    grade_pass?: Bool,
+  },
+};

@@ -22,9 +22,9 @@ CAL_DB = os.path.expanduser(
 APPLE_EPOCH = 978307200
 
 
-def _run(cmd, timeout=25):
+def _run(cmd, timeout=25, env=None):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return None
 
@@ -65,12 +65,17 @@ def emails(limit=20):
 def calendar_today():
     if not os.path.exists(CAL_DB):
         return {"available": False, "reason": "no calendar db", "items": []}
-    q = ("SELECT ci.summary, "
-         "datetime(ci.start_date + 978307200,'unixepoch','localtime'), "
-         "datetime(ci.end_date + 978307200,'unixepoch','localtime'), ci.all_day "
-         "FROM CalendarItem ci "
-         "WHERE date(ci.start_date + 978307200,'unixepoch','localtime') = date('now','localtime') "
-         "ORDER BY ci.start_date")
+    # OccurrenceCache, because CalendarItem holds a repeating event once, on the day
+    # it first happened. On 2026-11-06 the old query found 0 rows on a day with 4
+    # events, and the brief said "nothing on the calendar".
+    start = "coalesce(oc.occurrence_start_date, oc.occurrence_date, ci.start_date)"
+    q = (f"SELECT ci.summary, "
+         f"datetime({start} + 978307200,'unixepoch','localtime'), "
+         f"datetime(coalesce(oc.occurrence_end_date, {start} + (ci.end_date - ci.start_date)) + 978307200,"
+         "'unixepoch','localtime'), ci.all_day "
+         "FROM OccurrenceCache oc JOIN CalendarItem ci ON ci.ROWID = oc.event_id "
+         "WHERE date(oc.day + 978307200,'unixepoch','localtime') = date('now','localtime') "
+         f"ORDER BY {start}")
     r = _run(["sqlite3", f"file:{CAL_DB}?mode=ro", q], timeout=10)
     if not r or r.returncode != 0:
         return {"available": False, "reason": (r.stderr.strip() if r else "timed out"), "items": []}
@@ -81,6 +86,62 @@ def calendar_today():
             items.append({"summary": p[0], "start": p[1], "end": p[2],
                           "all_day": p[3] == "1" if len(p) > 3 else False})
     return {"available": True, "items": items}
+
+
+def whoop_today():
+    """Today's WHOOP numbers, or why not. Exit 3 means it was never connected, which
+    is a choice and not an outage, so the brief says nothing about it."""
+    tool = Path(__file__).resolve().parents[2] / "bin" / "chewbacca-whoop"
+    if not tool.exists():
+        return {"available": False, "connected": False}
+    # The tool stops itself at 15s and this limit sits well past that, so this kill can't
+    # land between WHOOP rotating the refresh token and the tool saving the new one.
+    r = _run([sys.executable, str(tool), "today", "--json"], timeout=45,
+             env=dict(os.environ, CHEWBACCA_WHOOP_BUDGET="15"))
+    if r is None:
+        return {"available": False, "connected": True, "reason": "WHOOP timed out"}
+    if r.returncode == 3:
+        return {"available": False, "connected": False}
+    if r.returncode == 4:
+        return {"available": False, "connected": True, "reason": "signed out, run chewbacca whoop auth"}
+    if r.returncode != 0:
+        return {"available": False, "connected": True, "reason": r.stderr.strip()[:200]}
+    try:
+        return {"available": True, "connected": True, **json.loads(r.stdout)}
+    except ValueError:
+        return {"available": False, "connected": True, "reason": "unreadable answer from WHOOP"}
+
+
+def _clock(hours):
+    if hours is None:
+        return "?"
+    minutes = int(round(hours * 60))
+    return f"{minutes // 60}h {minutes % 60:02d}m"
+
+
+def render_whoop(w):
+    if not w.get("connected"):
+        return
+    if not w.get("available"):
+        print(f"WHOOP  (unavailable: {w.get('reason')})\n")
+        return
+    print("WHOOP")
+    rec, sleep, cycle = w.get("recovery"), w.get("sleep"), w.get("cycle") or {}
+    # Six hours is a guess at "the band hasn't synced", never measured. Past it, or with
+    # the newest cycle already over, these numbers aren't today's and it has to say so.
+    age = w.get("minutes_since_sync")
+    if cycle.get("end") or (age is not None and age > 360):
+        print(f"  old data: last updated {_clock((age or 0) / 60)} ago, cycle from {(cycle.get('start') or '?')[:10]}")
+    if rec and rec.get("recovery_pct") is not None:
+        print(f"  recovery {rec['recovery_pct']:.0f}%, HRV {rec.get('hrv_ms')} ms, resting HR {rec.get('resting_hr')}")
+    else:
+        print("  no recovery score yet for this cycle")
+    if sleep and sleep.get("asleep_hours") is not None:
+        print(f"  slept {_clock(sleep['asleep_hours'])} of {_clock(sleep.get('need_hours'))} needed, "
+              f"performance {sleep.get('performance_pct')}%")
+    else:
+        print("  no scored sleep yet for this cycle")
+    print()
 
 
 def gather(days=1):
@@ -101,6 +162,7 @@ def gather(days=1):
                       {"with": k, "last": v["text"][:200], "at": v["at"]}
                       for k, v in open_threads.items()]},
         "calendar": calendar_today(),
+        "whoop": whoop_today(),
     }
 
 
@@ -117,6 +179,7 @@ def render(b):
             when = "all day" if e["all_day"] else e["start"][11:16]
             print(f"  {when}  {e['summary']}")
     print()
+    render_whoop(b["whoop"])
     tx = b["texts"]
     print(f"TEXTS WAITING ON YOU ({len(tx['open_threads'])})")
     for t in tx["open_threads"][:12]:

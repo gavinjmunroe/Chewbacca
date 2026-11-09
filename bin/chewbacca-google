@@ -1,0 +1,452 @@
+#!/usr/bin/env python3
+"""
+chewbacca google: read Google Docs, Sheets and Slides as text, and find them.
+
+  chewbacca google find <words>        Docs, Sheets and Slides whose name or text matches
+  chewbacca google recent [N]          the N most recently edited (default 15)
+  chewbacca google read <id or url>    a Doc or Slides as plain text, a Sheet as CSV per tab
+  add --json to find/recent/read for data; `read --json --rows N` gives a
+  Sheet's first tab as rows (N, default 50) instead of every tab as CSV
+
+  chewbacca google access <id or url>  whether this sign-in can edit it, and who owns it
+  chewbacca google blocks <doc id> --json
+                    a Doc's paragraphs: index, text, the revision they came from,
+                    and can_edit
+  chewbacca google replace <doc id> --revision R --edits edits.json
+                    rewrite whole paragraphs, only if the Doc is still at
+                    revision R and each paragraph still reads what the edit
+                    says it was; prints the paragraphs read back as JSON
+  chewbacca google section <doc id> --under "<heading>" --md section.md
+                    rewrite everything under one heading, up to the next heading
+                    of the same level, from markdown (#, -, nested -, **bold**);
+                    one batch pinned to the revision it read, then a read-back
+                    that fails if any other heading changed (bin/lib/doc_section.py)
+
+Every command but `replace` and `section` is read-only. The engine is gws
+(googleworkspace-cli) with its own sign-in, the official Drive, Docs, Sheets
+and Slides APIs, so nothing here drives a browser. A Doc exports as text in one
+call; a Sheet reads every tab's values, since Drive's CSV export only returns
+the first tab; Slides export as text.
+
+`replace` is the one write, and it is narrow by construction: one Docs
+batchUpdate of deleteContentRange plus insertText per paragraph, sent with
+writeControl.requiredRevisionId so Google itself refuses it if anyone edited the
+Doc after the preview was drawn. It never shares, moves, renames, deletes a file
+or changes a permission. edits.json is [{"block": i, "was": "...", "text":
+"..."}], made by the Doc surface from a preview the person saw (bin/lib/
+docs_surface.py). A paragraph holding anything but text (an image, a footnote,
+a chip) is refused rather than rewritten.
+"""
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+
+GWS = os.environ.get("CHEWBACCA_GWS", "gws")
+KINDS = {
+    "application/vnd.google-apps.document": "doc",
+    "application/vnd.google-apps.spreadsheet": "sheet",
+    "application/vnd.google-apps.presentation": "slides",
+}
+TYPES_Q = " or ".join(f"mimeType='{m}'" for m in KINDS)
+
+
+def gws(*args, params=None, cwd=None):
+    cmd = [GWS, *args]
+    if params is not None:
+        cmd += ["--params", json.dumps(params)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=cwd)
+    out = r.stdout.strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except json.JSONDecodeError:
+        data = {}
+    if r.returncode != 0 or "error" in data:
+        msg = (data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else data.get("error")
+        msg = str(msg or r.stderr.strip() or "gws failed")
+        if revoked(msg) and heal():
+            return gws(*args, params=params, cwd=cwd)
+        sys.exit(f"chewbacca google: {msg}")
+    return data
+
+
+def revoked(msg):
+    return "invalid_grant" in msg or "expired or revoked" in msg
+
+
+# The sign-in app is in Google's "Testing" status, which expires every refresh
+# token after 7 days: the main login made Oct 11 died Oct 18 and every read
+# failed until someone noticed on Oct 21. A revoked login re-consents itself
+# once, in a background browser tab, then the call is retried.
+_HEALED = False
+
+
+def heal():
+    global _HEALED
+    if _HEALED or os.environ.get("CHEWBACCA_GOOGLE_NO_HEAL"):
+        return False
+    _HEALED = True
+    home = os.environ.get("CHEWBACCA_EMAIL_HOME", os.path.expanduser("~/.chewbacca/email"))
+    addr = ""
+    try:
+        addr = open(os.path.join(home, "main")).read().strip()
+    except OSError:
+        pass
+    if not addr:
+        dirs = sorted(d for d in os.listdir(home) if "@" in d) if os.path.isdir(home) else []
+        addr = dirs[0] if dirs else ""
+    if not addr:
+        return False
+    print(f"chewbacca google: sign-in expired, renewing {addr}...", file=sys.stderr)
+    r = subprocess.run([os.environ.get("CHEWBACCA_BIN", "chewbacca"), "email", "add", addr],
+                       capture_output=True, text=True, timeout=180)
+    return r.returncode == 0
+
+
+def file_id(ref):
+    m = re.search(r"/d/([A-Za-z0-9_-]{20,})", ref)
+    return m.group(1) if m else ref.strip()
+
+
+def listing(q, n):
+    data = gws("drive", "files", "list", params={
+        "q": f"({TYPES_Q}) and trashed=false" + (f" and {q}" if q else ""),
+        "pageSize": n, "orderBy": "modifiedTime desc",
+        "fields": "files(id,name,mimeType,modifiedTime,webViewLink,owners(displayName))",
+        "supportsAllDrives": True, "includeItemsFromAllDrives": True})
+    return [{"id": f["id"], "name": f["name"], "kind": KINDS.get(f["mimeType"], "?"),
+             "modified": f.get("modifiedTime", "")[:10], "url": f.get("webViewLink")}
+            for f in data.get("files", [])]
+
+
+def show(rows, as_json):
+    if as_json:
+        print(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        print("nothing found")
+    for r in rows:
+        print(f"{r['modified']}  {r['kind']:<6}  {r['name']}\n            {r['url']}")
+
+
+def export_text(fid):
+    # gws writes exports only inside its working directory, so run it in a
+    # private temp dir; a bare export dropped download.txt into ~ (2026-10-10).
+    with tempfile.TemporaryDirectory() as tmp:
+        gws("drive", "files", "export", "-o", "out.txt", params={"fileId": fid, "mimeType": "text/plain"}, cwd=tmp)
+        with open(os.path.join(tmp, "out.txt"), encoding="utf-8", errors="replace") as f:
+            return f.read()
+
+
+def read_sheet(fid):
+    meta = gws("sheets", "spreadsheets", "get", params={"spreadsheetId": fid, "fields": "sheets.properties.title"})
+    parts = []
+    for s in meta.get("sheets", []):
+        title = s["properties"]["title"]
+        vals = gws("sheets", "spreadsheets", "values", "get",
+                   params={"spreadsheetId": fid, "range": f"'{title}'"}).get("values", [])
+        lines = []
+        for row in vals:
+            lines.append(",".join('"' + str(c).replace('"', '""') + '"' if any(x in str(c) for x in ',"\n') else str(c) for c in row))
+        parts.append(f"## {title}\n" + "\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def first_tab(fid, rows):
+    """A Sheet's first tab, as its title and its first `rows` rows."""
+    meta = gws("sheets", "spreadsheets", "get", params={"spreadsheetId": fid, "fields": "sheets.properties.title"})
+    tabs = [s["properties"]["title"] for s in meta.get("sheets", [])]
+    if not tabs:
+        return {"tab": "", "rows": [], "tabs": 0}
+    vals = gws("sheets", "spreadsheets", "values", "get",
+               params={"spreadsheetId": fid, "range": f"'{tabs[0]}'!1:{rows}"}).get("values", [])
+    return {"tab": tabs[0], "rows": [[str(c) for c in row] for row in vals[:rows]], "tabs": len(tabs)}
+
+
+def read(ref, as_json=False, rows=50):
+    fid = file_id(ref)
+    meta = gws("drive", "files", "get", params={"fileId": fid, "fields": "name,mimeType,modifiedTime,webViewLink",
+                                                "supportsAllDrives": True})
+    kind = KINDS.get(meta.get("mimeType"))
+    if kind is None:
+        sys.exit(f"chewbacca google: {meta.get('name', fid)} is not a Doc, Sheet or Slides")
+    if as_json:
+        out = {"id": fid, "name": meta.get("name", ""), "kind": kind, "modified": meta.get("modifiedTime", ""),
+               "url": meta.get("webViewLink", "")}
+        if kind == "sheet":
+            out.update(first_tab(fid, rows))
+        else:
+            out["text"] = export_text(fid)
+        print(json.dumps(out))
+        return
+    body = read_sheet(fid) if kind == "sheet" else export_text(fid)
+    print(f"# {meta['name']}\n\n{body.strip()}")
+
+
+# ── one Doc's paragraphs, and the one write ────────────────────────────────
+
+# Paragraphs a single edit may touch. The surface proposes a handful; a plan
+# rewriting more than this is not "make the intro shorter". Guessed, never
+# measured.
+MOST_EDITS = 12
+MAX_TEXT = 4000
+
+
+def doc_blocks(fid):
+    """(revision, [{index, start, end, text, style, plain}]) for a Doc's body
+    paragraphs. `plain` is False when the paragraph holds anything but text
+    runs, which `replace` refuses to rewrite. Tables and section breaks are
+    not blocks."""
+    doc = gws("docs", "documents", "get", params={"documentId": fid})
+    blocks = []
+    for el in (doc.get("body") or {}).get("content", []):
+        para = el.get("paragraph")
+        if not para:
+            continue
+        parts, plain = [], True
+        for pe in para.get("elements", []):
+            run = pe.get("textRun")
+            if run is None:
+                plain = False
+                continue
+            parts.append(run.get("content", ""))
+        text = "".join(parts)
+        if text.endswith("\n"):
+            text = text[:-1]
+        blocks.append({"index": len(blocks), "start": el.get("startIndex", 0), "end": el.get("endIndex", 0),
+                       "text": text, "plain": plain,
+                       "style": (para.get("paragraphStyle") or {}).get("namedStyleType", "")})
+    return doc.get("revisionId", ""), blocks, doc.get("title", "")
+
+
+def clean_text(text):
+    # One paragraph stays one paragraph: a newline would split it in two and
+    # move every later index. Control characters are dropped.
+    text = str(text).replace("\r", " ").replace("\n", " ")
+    return "".join(ch for ch in text if ch == "\t" or ord(ch) >= 32).strip()
+
+
+def load_edits(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            edits = json.load(f)
+    except (OSError, ValueError) as err:
+        sys.exit(f"chewbacca google: can't read the edits: {err}")
+    if not isinstance(edits, list) or not edits or len(edits) > MOST_EDITS:
+        sys.exit(f"chewbacca google: edits must be a list of 1 to {MOST_EDITS} paragraph edits")
+    out, seen = [], set()
+    for e in edits:
+        if not isinstance(e, dict) or not isinstance(e.get("block"), int) or isinstance(e.get("block"), bool):
+            sys.exit("chewbacca google: each edit needs a block number")
+        text = clean_text(e.get("text", ""))
+        if not text or len(text) > MAX_TEXT:
+            sys.exit(f"chewbacca google: paragraph {e['block']}'s new text is empty or over {MAX_TEXT} characters")
+        if e["block"] in seen:
+            sys.exit(f"chewbacca google: paragraph {e['block']} is edited twice")
+        seen.add(e["block"])
+        out.append({"block": e["block"], "was": str(e.get("was", "")), "text": text})
+    return out
+
+
+def scope_hint(message):
+    m = (message or "").lower()
+    if "insufficient" in m and "scope" in m:
+        return ("Google refused the write: gws is signed in with read-only Drive access, so editing a Doc "
+                "needs a sign-in that adds the Docs scope (chewbacca email add <that address>), which only the "
+                "account owner can approve. "
+                "Nothing was changed.")
+    if "permission" in m:
+        return "Google says this account can't edit that Doc. Nothing was changed."
+    return ""
+
+
+def access(fid):
+    """Whether this sign-in may edit the file, from Drive's own capabilities.
+
+    The Docs API can't answer it before a write: on 2026-10-13 a no-op
+    batchUpdate pinned to a made-up revision came back 400 "does not match
+    the latest revision" on a Doc this account can only comment on, the same
+    answer an editable Doc gave, so Google checks the revision before the
+    permission. And Google's revisionId is no signal either: a comment-only
+    Doc carried one and a view-only Doc didn't. Drive's canEdit is the one
+    field that says it.
+
+    Missing capabilities count as editable on purpose: this is a courtesy
+    refusal, and Google still refuses the write itself when it isn't."""
+    d = gws("drive", "files", "get", params={
+        "fileId": fid, "supportsAllDrives": True,
+        "fields": "name,owners(emailAddress),capabilities(canEdit,canComment)"})
+    caps = d.get("capabilities") or {}
+    owners = [o.get("emailAddress") for o in d.get("owners") or [] if isinstance(o, dict) and o.get("emailAddress")]
+    return {"id": fid, "name": clean_text(d.get("name", ""))[:80], "can_edit": caps.get("canEdit", True) is not False,
+            "can_comment": caps.get("canComment", True) is not False,
+            "owner": clean_text(owners[0])[:80] if owners else ""}
+
+
+def access_or_unknown(fid):
+    """access(), or "can edit, owner unknown" when Drive won't say, so a
+    reader of the Doc never loses its paragraphs to a metadata error."""
+    try:
+        return access(fid)
+    except SystemExit:
+        return {"id": fid, "name": "", "can_edit": True, "can_comment": True, "owner": ""}
+
+
+def view_only(acc):
+    level = "comment on" if acc["can_comment"] else "view"
+    if not acc["owner"]:
+        return f"This Google sign-in can only {level} \"{acc['name']}\". Nothing was changed."
+    return (f"\"{acc['name']}\" is owned by {acc['owner']}, and this Google sign-in can only {level} it. "
+            f"Ask {acc['owner']} for edit access. Nothing was changed.")
+
+
+def replace(fid, revision, edits_path):
+    edits = load_edits(edits_path)
+    acc = access(fid)
+    if not acc["can_edit"]:
+        sys.exit("chewbacca google: " + view_only(acc))
+    rev, blocks, title = doc_blocks(fid)
+    if not revision or rev != revision:
+        sys.exit("chewbacca google: the Doc changed since the preview (its revision moved). Nothing was changed; "
+                 "ask for the edit again.")
+    by_index = {b["index"]: b for b in blocks}
+    requests = []
+    for e in sorted(edits, key=lambda x: by_index.get(x["block"], {}).get("start", -1), reverse=True):
+        b = by_index.get(e["block"])
+        if b is None:
+            sys.exit(f"chewbacca google: there is no paragraph {e['block']}. Nothing was changed.")
+        if not b["plain"]:
+            sys.exit(f"chewbacca google: paragraph {e['block']} holds more than text (an image, a chip or a "
+                     "footnote), so it is not rewritten from here. Nothing was changed.")
+        if b["text"] != e["was"]:
+            sys.exit(f"chewbacca google: paragraph {e['block']} no longer reads what the preview showed. "
+                     "Nothing was changed.")
+        # Delete the paragraph's text but keep its newline, so its style and
+        # the paragraph itself survive; then type the new text at its start.
+        if b["end"] - 1 > b["start"]:
+            requests.append({"deleteContentRange": {"range": {"startIndex": b["start"], "endIndex": b["end"] - 1}}})
+        requests.append({"insertText": {"location": {"index": b["start"]}, "text": e["text"]}})
+    body = {"requests": requests, "writeControl": {"requiredRevisionId": revision}}
+    cmd = [GWS, "docs", "documents", "batchUpdate", "--params", json.dumps({"documentId": fid}),
+           "--json", json.dumps(body)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    out = r.stdout.strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except json.JSONDecodeError:
+        data = {}
+    if r.returncode != 0 or "error" in data:
+        err = data.get("error")
+        msg = err.get("message") if isinstance(err, dict) else err
+        msg = str(msg or r.stderr.strip() or "gws failed")
+        sys.exit("chewbacca google: " + (scope_hint(msg) or f"the write failed: {msg[:200]}. Check the Doc."))
+    new_rev, after, _ = doc_blocks(fid)
+    print(json.dumps({"ok": True, "title": title, "revision": new_rev,
+                      "blocks": [{"index": b["index"], "text": b["text"]} for b in after]}))
+
+
+def section(fid, under, md_path):
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
+    import doc_section
+    try:
+        with open(md_path, encoding="utf-8") as f:
+            paras = doc_section.parse(f.read())
+    except OSError as err:
+        sys.exit(f"chewbacca google: can't read {md_path}: {err}")
+    if not paras:
+        sys.exit("chewbacca google: the markdown is empty. Nothing was changed.")
+    acc = access(fid)
+    if not acc["can_edit"]:
+        sys.exit("chewbacca google: " + view_only(acc))
+    rev, blocks, title = doc_blocks(fid)
+    try:
+        start, end = doc_section.find_section(blocks, under)
+    except ValueError as err:
+        sys.exit(f"chewbacca google: {err}. Nothing was changed.")
+    body = {"requests": doc_section.requests(start, end, paras), "writeControl": {"requiredRevisionId": rev}}
+    cmd = [GWS, "docs", "documents", "batchUpdate", "--params", json.dumps({"documentId": fid}),
+           "--json", json.dumps(body)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    out = r.stdout.strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except json.JSONDecodeError:
+        data = {}
+    if r.returncode != 0 or "error" in data:
+        err = data.get("error")
+        msg = str((err.get("message") if isinstance(err, dict) else err) or r.stderr.strip() or "gws failed")
+        sys.exit("chewbacca google: " + (scope_hint(msg) or f"the write failed: {msg[:200]}. Check the Doc."))
+    # Read it back: every new paragraph's text present, and no heading
+    # outside the section turned into a bullet or lost its style.
+    _, after, _ = doc_blocks(fid)
+    have = {b["text"] for b in after}
+    missing = [p["text"][:50] for p in paras if p["text"] not in have]
+    heads_before = [(b["text"], b["style"]) for b in blocks if heading_level_of(b) and not (start <= b["start"] < end)]
+    heads_after = [(b["text"], b["style"]) for b in after if heading_level_of(b)]
+    lost = [t for t, s in heads_before if (t, s) not in heads_after]
+    print(json.dumps({"ok": not missing and not lost, "title": title, "section": under,
+                      "paragraphs": len(paras), "missing": missing, "headings_changed": lost}))
+    if missing or lost:
+        sys.exit(1)
+
+
+def heading_level_of(block):
+    return block.get("style", "").startswith("HEADING")
+
+
+def main(argv):
+    as_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    cmd, rest = args[0], args[1:]
+    if cmd == "find" and rest:
+        words = " ".join(rest).replace("\\", "").replace("'", "\\'")
+        show(listing(f"(name contains '{words}' or fullText contains '{words}')", 25), as_json)
+    elif cmd == "recent":
+        show(listing("", int(rest[0]) if rest and rest[0].isdigit() else 15), as_json)
+    elif cmd == "read" and rest:
+        rows = 50
+        if "--rows" in rest:
+            i = rest.index("--rows")
+            rows = int(rest[i + 1]) if i + 1 < len(rest) and rest[i + 1].isdigit() else 50
+            rest = rest[:i] + rest[i + 2:]
+        read(rest[0], as_json=as_json, rows=max(1, min(rows, 500)))
+    elif cmd == "blocks" and rest:
+        fid = file_id(rest[0])
+        rev, blocks, title = doc_blocks(fid)
+        acc = access_or_unknown(fid)
+        print(json.dumps({"id": fid, "title": title, "revision": rev, "blocks": blocks,
+                          "can_edit": acc["can_edit"], "owner": acc["owner"],
+                          "why_not": "" if acc["can_edit"] else view_only(acc)}))
+    elif cmd == "access" and rest:
+        acc = access(file_id(rest[0]))
+        if as_json:
+            print(json.dumps(acc))
+        else:
+            print(f"{acc['name']}: can edit (owner {acc['owner'] or 'unknown'})" if acc["can_edit"] else view_only(acc))
+    elif cmd == "section" and rest and "--under" in rest and "--md" in rest:
+        i, j = rest.index("--under"), rest.index("--md")
+        if i + 1 >= len(rest) or j + 1 >= len(rest):
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+        section(file_id(rest[0]), rest[i + 1], rest[j + 1])
+    elif cmd == "replace" and rest and "--revision" in rest and "--edits" in rest:
+        i, j = rest.index("--revision"), rest.index("--edits")
+        if i + 1 >= len(rest) or j + 1 >= len(rest):
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+        replace(file_id(rest[0]), rest[i + 1], rest[j + 1])
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    sys.exit(main(sys.argv[1:]))

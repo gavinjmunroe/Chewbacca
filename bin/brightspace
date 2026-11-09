@@ -7,18 +7,56 @@ assignments the coursework ledger never heard of.
   brightspace due [--days 14]        every dropbox due in the window, with
                                      submitted/not, flagged NOT IN LEDGER when
                                      no ledger item matches it
-  brightspace get <api path>         raw JSON, e.g. /le/1.99/302780/news/
+  brightspace grades [--json]        every released grade, every current course
+  brightspace news [--days 7]        announcements from every current course
+  brightspace instructions <ou> <folder> [--json]
+                                     what one assignment actually asks: the
+                                     dropbox's instructions and attachment names
+  brightspace get <api path>         raw JSON, e.g. /le/1.99/900106/news/
+  brightspace submit <ou> <folder> <file>... [--dry-run]
+                                     upload to a dropbox, group or individual,
+                                     then prove it from the submission list
+  brightspace files <ou> <folder> [--out DIR]
+                                     download the dropbox's attachments and
+                                     every file submitted to it
+  brightspace content <ou> [--out DIR] [--dry-run]
+                                     every Content file, in module folders
+  brightspace feedback <ou> <folder> grade, comments and feedback files
+  brightspace classlist <ou>         everyone in the course, with emails
+  brightspace discuss <ou> [<forum> <topic>]
+                                     forums and topics, or one topic's posts
+  brightspace post <ou> <forum> <topic> --subject S --body-file F [--reply-to ID] [--dry-run]
+                                     posts, then reads the post back and prints it
+  brightspace map [--json]           refresh the name cache (courses, topics,
+                                     dropboxes) and write each course's
+                                     org_unit_id into its coursework ledger yml
+
+Every <ou> takes a course name instead (WRIT, writ-150, "BISC 101"), every
+<folder> a dropbox name, and <forum> <topic> a topic name:
+
+  brightspace post WRIT "Topic Ideas for WP3" --subject S --body-file F
+  brightspace submit ACAD "A22 Landing Page" site.pdf
+
+Names resolve from a cache (~/.chewbacca/brightspace/map.json, or
+BRIGHTSPACE_MAP), so a hit makes no network call. A miss rereads that course
+from Brightspace once and saves it. Two matches stop with both listed, never a
+guess. On 2026-11-03 a WRIT 150 post spent most of its time finding three ids
+(the ou wasn't in the ledger, the topic came from a separate `discuss`), while
+the API calls themselves took 412ms.
 
 The ledger is built from syllabi, and some assignments only ever exist as a
 Brightspace dropbox. "Presentation Topics" in the BISC lab (due 2026-10-02,
 topics first come first served) was in neither the syllabus schedule nor the
-ledger, and was found the day after it was due only because Caleb remembered
+ledger, and was found the day after it was due only because a student remembered
 it. `due` exists to make that a listed line instead of a memory.
 
-Auth is Caleb's own d2l cookies from Chrome Profile 1 ("Caleb (Work)"). They
-expire: on 2026-10-03 a cookie that decrypted fine returned 403 on every call.
-Opening Brightspace in that profile renews them, so on a 403 this opens it once
-and retries. It never writes to Brightspace and never submits anything.
+Auth is the student's own d2l cookies from Chrome: CHEWIE_CHROME_PROFILE if
+set, otherwise whichever profile touched Brightspace most recently, so any USC
+student's Mac works without naming one. Courses come from their own current
+enrollments, not a list written for one person. Sessions expire (on 2026-10-03
+a cookie that decrypted fine returned 403 on every call); a page they already
+have open renews it. Only `submit` and `post` write, and only what they're handed.
+Nothing here opens a window: group uploads run in headless Chromium.
 
 BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path": response}
 for tests.
@@ -37,22 +75,75 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from html import unescape
 from pathlib import Path
 
 HOST = "https://brightspace.usc.edu"
-PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "Profile 1")
-COOKIE_DB = Path.home() / "Library/Application Support/Google/Chrome" / PROFILE / "Cookies"
+CHROME_DIR = Path(os.environ.get("CHEWBACCA_CHROME_DIR")
+                  or Path.home() / "Library/Application Support/Google/Chrome")
+
+
+def pick_profile():
+    """The Chrome profile holding the Brightspace session.
+
+    Hardcoding one profile name was right for exactly one Mac. Any other student's
+    USC login lives in whatever profile they use for school, so take the one
+    whose brightspace.usc.edu cookies were used last.
+    """
+    if os.environ.get("CHEWIE_CHROME_PROFILE"):
+        return os.environ["CHEWIE_CHROME_PROFILE"]
+    best, best_at = "Default", -1
+    for db in CHROME_DIR.glob("*/Cookies"):
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                copy = Path(tmp) / "Cookies"
+                shutil.copy(db, copy)
+                at = sqlite3.connect(copy).execute(
+                    "select max(last_access_utc) from cookies"
+                    " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
+                ).fetchone()[0]
+        except (OSError, sqlite3.Error):
+            continue
+        if at and at > best_at:
+            best, best_at = db.parent.name, at
+    if best_at == -1:
+        return school_profile() or best
+    return best
+
+
+def school_profile():
+    """The profile signed into a school account, from Chrome's own Local State.
+
+    With every Brightspace cookie expired, the old fallback was Default, and on
+    2026-10-11 that opened the sign-in page in a student's personal Gmail profile:
+    USC single sign-on failed there, while the "Work" profile signed in to
+    Brightspace with no password the moment it was asked.
+    """
+    domain = os.environ.get("CHEWBACCA_SCHOOL_DOMAIN", "@usc.edu").lower()
+    try:
+        info = json.loads((CHROME_DIR / "Local State").read_text())["profile"]["info_cache"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    for directory, meta in info.items():
+        if str((meta or {}).get("user_name", "")).lower().endswith(domain):
+            return directory
+    return None
+
+
+PROFILE = pick_profile()
+COOKIE_DB = CHROME_DIR / PROFILE / "Cookies"
 LEDGER = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "courses"
 
-# Fall 2026 org units, from /lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3
-# on 2026-09-21. The lab is its own org unit, which is where Presentation
-# Topics lived; reading only the lecture would have missed it again.
-COURSES = {
-    "ACAD 185": [298850],
-    "ACAD 324g": [299120],
-    "WRIT 150": [302009],
-    "MPGU 120a": [302284],
-    "BISC 101Lxg": [302776, 302780],
+# Invented org units in the shape of a real Fall 2026 schedule. Only the test
+# fixture uses these; a live run reads the student's own enrollments (enrolled_courses).
+# The lab is its own org unit, which is where Presentation Topics lived, and
+# enrolled_courses keeps every unit of a code for the same reason.
+FIXTURE_COURSES = {
+    "ACAD 185": [900101],
+    "ACAD 324g": [900102],
+    "WRIT 150": [900103],
+    "MPGU 120a": [900104],
+    "BISC 101Lxg": [900105, 900106],
 }
 
 
@@ -64,9 +155,45 @@ class Forbidden(Exception):
     pass
 
 
-def chrome_cookies():
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+def aes_cbc_decrypt(key, data):
+    """Chrome's v10 cookie cipher, AES-128-CBC with an IV of 16 spaces.
 
+    The `cryptography` package is not on a fresh Mac: /usr/bin/python3 ships
+    without it, so on any student's machine but the one this was written on
+    every read died with ImportError before it reached Brightspace. macOS
+    ships /usr/bin/openssl (LibreSSL), which does the same decrypt, so that is
+    the fallback rather than asking a student to pip install anything.
+    """
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError:
+        # CommonCrypto in libSystem, in process. The first fallback ran
+        # /usr/bin/openssl with the key as -K <hex>, and argv is readable by
+        # every process on the Mac through ps, so the one key that opens all of
+        # Chrome's cookies sat in a process listing (security review, 2026-10-10).
+        import ctypes
+        import ctypes.util
+        lib = ctypes.CDLL(ctypes.util.find_library("System") or "/usr/lib/libSystem.dylib")
+        out = ctypes.create_string_buffer(len(data) + 16)
+        moved = ctypes.c_size_t(0)
+        # CCCrypt(decrypt, AES, no padding, key, iv, in, out): padding is
+        # stripped by the caller, the same as with the cryptography path.
+        status = lib.CCCrypt(1, 0, 0, bytes(key), len(key), b" " * 16, bytes(data), len(data),
+                             out, len(out), ctypes.byref(moved))
+        if status != 0:
+            raise RuntimeError(f"CCCrypt failed with status {status}")
+        return out.raw[:moved.value]
+    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+    return dec.update(data) + dec.finalize()
+
+
+class NoSession(Exception):
+    pass
+
+
+def chrome_cookies():
+    if not COOKIE_DB.is_file():
+        raise NoSession()
     with tempfile.TemporaryDirectory() as tmp:
         copy = Path(tmp) / "Cookies"
         shutil.copy(COOKIE_DB, copy)
@@ -74,14 +201,16 @@ def chrome_cookies():
             "select name, encrypted_value from cookies"
             " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
         ).fetchall()
-    secret = subprocess.check_output(
-        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]
-    ).strip()
+    # Before the Keychain read: no Brightspace cookies anywhere is a plain
+    # answer, never a Keychain prompt for cookies that aren't there.
+    if not rows:
+        raise NoSession()
+    secret = (os.environ.get("CHEWBACCA_CHROME_SAFE_KEY", "").encode() or subprocess.check_output(
+        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip())
     key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
     cookies = {}
     for name, blob in rows:
-        dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
-        raw = dec.update(blob[3:]) + dec.finalize()
+        raw = aes_cbc_decrypt(key, blob[3:])
         raw = raw[: -raw[-1]]
         # Newer Chrome prefixes a 32-byte SHA256 of the host. Every d2l cookie
         # seen on 2026-10-03 had it, but older rows may not.
@@ -91,6 +220,23 @@ def chrome_cookies():
         except UnicodeDecodeError:
             cookies[name] = raw[32:].decode()
     return cookies
+
+
+def has_session_cookies():
+    """True when the picked profile holds any Brightspace cookie at all."""
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "Cookies"
+            shutil.copy(COOKIE_DB, copy)
+            return bool(sqlite3.connect(copy).execute(
+                "select 1 from cookies where host_key in"
+                " ('brightspace.usc.edu', '.brightspace.usc.edu') limit 1").fetchone())
+    except (OSError, sqlite3.Error):
+        return False
+
+
+NO_SESSION = ("BLOCKED: no Chrome profile on this Mac has signed in to Brightspace yet. "
+              "Sign in once at https://brightspace.usc.edu in Chrome, then rerun.")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -132,7 +278,7 @@ class Client:
                 raise KeyError(f"fixture has no {path}")
             return self.fixture[path]
         if self.cookies is None:
-            self.cookies = chrome_cookies()
+            self.cookies = _cookies_or_signin()
         try:
             return fetch(path, self.cookies)
         except Expired:
@@ -146,24 +292,68 @@ class Client:
                 return fetch(path, self.cookies)
             raise Forbidden(path)
 
+    def raw(self, path):
+        if self.fixture is not None:
+            import base64
+            return base64.b64decode(self.fixture[path])
+        cookies = _session_cookies(self)
+        _, body = _send(urllib.request.Request(HOST + "/d2l/api" + path, headers={
+            "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())}), 120)
+        return body
+
     def refresh(self):
-        print("brightspace: session expired, reopening it in Chrome", file=sys.stderr)
-        subprocess.run(
-            ["open", "-na", "Google Chrome", "--args", f"--profile-directory={PROFILE}",
-             HOST + "/d2l/home"],
-            check=False,
-        )
-        # A fresh SSO redirect took under 5s on 2026-10-03; 30s covers a slow
-        # Okta hop without hanging forever on a signed-out profile.
-        for _ in range(6):
-            time.sleep(5)
+        # No tab is opened to renew. This used to open Brightspace in Chrome,
+        # first in front, then with `open -g -na`, and on 2026-10-10 Caleb saw
+        # the -g window anyway ("Bro it opened a tab and I saw it"). A page he
+        # has nothing to do on must never appear, so this only rereads the
+        # cookie file, which Chrome rewrites within seconds of any page he
+        # already has open renewing the session.
+        print("brightspace: session expired, rereading Chrome's cookies", file=sys.stderr)
+        for _ in range(3):
+            time.sleep(3)
             self.cookies = chrome_cookies()
             try:
                 fetch("/lp/1.63/users/whoami", self.cookies)
                 return
             except Expired:
                 continue
-        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once." % PROFILE)
+        if _signin():
+            self.cookies = chrome_cookies()
+            return
+        stale = stale_cookie_message()
+        if stale:
+            sys.exit(stale)
+        # Signed out for real. Still no window: this runs inside reads nobody
+        # is watching (the 15 minute keepalive, an MCP call, `api login`), and
+        # on 2026-10-11 the window this used to open landed mid-quiz with
+        # "STOP FLASH BANGING ME". The agent says BLOCKED and he signs in
+        # once, in his own Chrome, when he chooses to.
+        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once and every read works again." % PROFILE)
+
+
+def stale_cookie_message():
+    """Say so when the session is live in Chrome but never reached its disk.
+
+    Chrome keeps cookies in memory and writes them to the Cookies file every
+    few seconds. On 2026-10-10 a Chrome up for 5 days stopped answering
+    AppleEvents and had not written that file in 19 hours, so Caleb had 5
+    signed-in Brightspace tabs while every read here saw yesterday's expired
+    session and told him to sign in. Quitting Chrome flushes the file and its
+    tabs come back on relaunch.
+    """
+    try:
+        age_h = (time.time() - COOKIE_DB.stat().st_mtime) / 3600
+    except OSError:
+        return None
+    running = subprocess.run(["pgrep", "-xq", "Google Chrome"]).returncode == 0
+    # Guessed, never measured: an active profile writes its cookie file every
+    # few minutes, so an hour of silence while Chrome runs means it's wedged.
+    if running and age_h > 1:
+        return ("BLOCKED: Chrome hasn't saved its cookies in %.0f hours, so a "
+                "session that's live in your tabs never reached the file this "
+                "reads. Quit Chrome (Cmd+Q) and reopen it, your tabs come back, "
+                "then rerun." % age_h)
+    return None
 
 
 def tokens(text):
@@ -207,12 +397,111 @@ def in_ledger(dropbox_name, names):
     return False
 
 
+def enrolled_courses(client):
+    """{"BISC 101": [lecture ou, lab ou], ...} for the newest term enrolled."""
+    path = "/lp/1.43/enrollments/myenrollments/?orgUnitTypeId=3&pageSize=100"
+    if client.fixture is not None and path not in client.fixture:
+        return FIXTURE_COURSES
+    items, bookmark = [], None
+    while True:
+        page = client.get(path + (f"&bookmark={bookmark}" if bookmark else ""))
+        items += page.get("Items", [])
+        paging = page.get("PagingInfo") or {}
+        bookmark = paging.get("Bookmark")
+        if not paging.get("HasMoreItems"):
+            break
+
+    # USC names sections "20263_10212 ACAD-185: ...", term first. Old terms stay
+    # enrolled forever (a 20253 GESM course was still listed in Fall 2026).
+    def term(org):
+        m = re.match(r"(\d{5})_", org.get("Name", ""))
+        return m.group(1) if m else ""
+
+    # Code is the section ("20263_10212"), so the course comes from the Name.
+    # The first version keyed on Code and printed section numbers, caught only
+    # by running it against the live account (2026-10-10).
+    def course(org):
+        m = re.match(r"\d{5}_\S+\s+([A-Z]{2,5}-\d{2,3}[A-Za-z]*)", org.get("Name", ""))
+        return (m.group(1) if m else org.get("Code", "")).replace("-", " ")
+
+    newest = max((term(i["OrgUnit"]) for i in items), default="")
+    out = {}
+    for i in items:
+        org = i["OrgUnit"]
+        if term(org) == newest:
+            out.setdefault(course(org), []).append(org["Id"])
+    return out
+
+
+def norm_code(code):
+    return re.sub(r"[^a-z0-9]", "", code.lower())
+
+
+def ledger_items_for(course, names):
+    """Ledger codes carry suffixes ("BISC 101Lxg", "ACAD 324g") that the
+    enrollment code ("BISC 101") does not, so match on the shared prefix."""
+    want = norm_code(course)
+    for code, items in names.items():
+        have = norm_code(code)
+        if have.startswith(want) or want.startswith(have):
+            return items
+    return []
+
+
+def optional(client, path):
+    """A read a course may forbid (403), or a test fixture may not carry."""
+    try:
+        return client.get(path)
+    except (Forbidden, KeyError):
+        return None
+
+
+def quiz_rows(client, course, ou, lo, hi, names):
+    """Quizzes in the window, with the grade if one is released.
+
+    Dropboxes were the only thing `due` read, so BISC weekly Quiz #5 (closes
+    Mon 9am, no late attempts) was invisible here on 2026-10-11 and an agent
+    went hunting for it by hand. Students may list quizzes; the questions
+    themselves 403 until an attempt is open, so this lists, never answers.
+    """
+    page = optional(client, f"/le/1.75/{ou}/quizzes/")
+    if not page:
+        return []
+    quizzes = list(page.get("Objects", []))
+    while page.get("Next") and client.fixture is None:
+        page = optional(client, page["Next"].split("/d2l/api", 1)[-1]) or {}
+        quizzes += page.get("Objects", [])
+    grades = {g.get("GradeObjectIdentifier"): g for g in
+              (optional(client, f"/le/1.75/{ou}/grades/values/myGradeValues/") or [])}
+    rows = []
+    for q in quizzes:
+        due = q.get("DueDate") or q.get("EndDate")
+        if not due or not q.get("IsActive", True):
+            continue
+        when = dt.datetime.fromisoformat(due.replace("Z", "+00:00"))
+        if not lo <= when <= hi:
+            continue
+        g = grades.get(str(q.get("GradeItemId")))
+        limit = (q.get("SubmissionTimeLimit") or {})
+        attempts = (q.get("AttemptsAllowed") or {})
+        rows.append({
+            "course": course, "name": q["Name"].strip(), "due": due, "ou": ou,
+            "id": q["QuizId"], "kind": "quiz", "submitted": None,
+            "grade": g.get("DisplayedGrade") if g else None,
+            "minutes": limit.get("TimeLimitValue") if limit.get("IsEnforced") else None,
+            "attempts": None if attempts.get("IsUnlimited") else attempts.get("NumberOfAttemptsAllowed"),
+            "url": f"{HOST}/d2l/lms/quizzing/user/quiz_summary.d2l?ou={ou}&qi={q['QuizId']}",
+            "in_ledger": in_ledger(q["Name"], ledger_items_for(course, names)),
+        })
+    return rows
+
+
 def cmd_due(client, days, ledger_dir, as_json):
     now = dt.datetime.now(dt.timezone.utc)
     lo, hi = now - dt.timedelta(days=days), now + dt.timedelta(days=days)
     names = ledger_names(ledger_dir)
     rows = []
-    for course, units in COURSES.items():
+    for course, units in enrolled_courses(client).items():
         for ou in units:
             for folder in client.get(f"/le/1.99/{ou}/dropbox/folders/"):
                 due = folder.get("DueDate")
@@ -229,20 +518,805 @@ def cmd_due(client, days, ledger_dir, as_json):
                 rows.append({
                     "course": course, "name": folder["Name"], "due": due, "ou": ou,
                     "id": folder["Id"], "submitted": submitted,
-                    "in_ledger": in_ledger(folder["Name"], names.get(course, [])),
+                    "in_ledger": in_ledger(folder["Name"], ledger_items_for(course, names)),
+                    "instructions": instructions_of(folder),
+                    "attachments": [a.get("FileName") for a in folder.get("Attachments") or []],
                 })
+            rows += quiz_rows(client, course, ou, lo, hi, names)
     rows.sort(key=lambda r: r["due"])
     if as_json:
         print(json.dumps(rows, indent=1))
     else:
         for r in rows:
             local = dt.datetime.fromisoformat(r["due"].replace("Z", "+00:00")).astimezone()
-            flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403, check in browser)"}[r["submitted"]]
+            if r.get("kind") == "quiz":
+                flags = r["grade"] or "NO GRADE YET"
+            else:
+                flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403)"}[r["submitted"]]
             if not r["in_ledger"]:
                 flags += "  NOT IN LEDGER"
-            print(f"{r['course']:<12} {r['name'][:42]:<42} {local:%a %b %d %H:%M}  {flags}")
+            print(f"{r['course']:<12} {clean_text(r['name'])[:42]:<42} {local:%a %b %d %H:%M}  {flags}")
     missing = [r for r in rows if not r["in_ledger"]]
     return 1 if missing else 0
+
+
+def cmd_grades(client, as_json):
+    """Every released grade in every current course, from the Chrome session.
+
+    Friday's "how am I doing" used to be myCourses for the ids, then one api
+    call per course, each needing the api engine a fresh Mac doesn't have,
+    while `coursework grade` read the ledger lockin had seeded without scores
+    and answered "nothing graded yet" over a 71 on a midterm (USC week walk,
+    2026-10-13). The ledger stays the place weights live; this reads scores.
+    """
+    out = []
+    for course, units in enrolled_courses(client).items():
+        rows = []
+        for ou in units:
+            for g in optional(client, f"/le/1.99/{ou}/grades/values/myGradeValues/") or []:
+                num, den = g.get("PointsNumerator"), g.get("PointsDenominator")
+                rows.append({"name": clean_text(g.get("GradeObjectName")).strip(), "shown": clean_text(g.get("DisplayedGrade")),
+                             "points": num, "out_of": den,
+                             "percent": round(100 * num / den, 1) if num is not None and den else None})
+        out.append({"course": course, "grades": rows})
+    if as_json:
+        print(json.dumps(out, indent=1))
+        return 0
+    for c in out:
+        print(c["course"])
+        if not c["grades"]:
+            print("  nothing released yet")
+        for r in c["grades"]:
+            pct = f"{r['percent']:g}%" if r["percent"] is not None else ""
+            print(f"  {r['name'][:40]:<40} {str(r['shown'] or ''):<12} {pct}")
+        print()
+    return 0
+
+
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def clean_text(text):
+    """An instructor's text with terminal control bytes (escape sequences) removed."""
+    return CONTROL.sub("", text or "")
+
+
+def plain(html):
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html or "")).strip()
+
+
+def cmd_news(client, days, as_json):
+    """Announcements from every current course in the last `days`, newest first.
+
+    A missed class or a team assignment lives in an announcement, and there
+    was no way to read them across courses without the api engine and one
+    call per course (USC week walk, 2026-10-13).
+    """
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    rows = []
+    for course, units in enrolled_courses(client).items():
+        for ou in units:
+            for n in optional(client, f"/le/1.99/{ou}/news/") or []:
+                when = n.get("StartDate") or n.get("CreatedDate")
+                if not when or n.get("IsPublished") is False:
+                    continue
+                if dt.datetime.fromisoformat(when.replace("Z", "+00:00")) < since:
+                    continue
+                body = n.get("Body") or {}
+                rows.append({"course": course, "when": when, "title": clean_text(n.get("Title")).strip(),
+                             "text": clean_text((body.get("Text") or "").strip() or plain(body.get("Html"))), "ou": ou,
+                             "id": n.get("Id"),
+                             # A lab's presentation dates lived only in an image
+                             # attached here, and a 20-point talk two days out
+                             # was nearly missed (2026-11-04).
+                             "attachments": [{"name": a.get("FileName"), "file": a.get("FileId")}
+                                             for a in n.get("Attachments") or []]})
+    rows.sort(key=lambda r: r["when"], reverse=True)
+    if as_json:
+        print(json.dumps(rows, indent=1))
+        return 0
+    if not rows:
+        print(f"No announcements in the last {days} days.")
+    for r in rows:
+        local = dt.datetime.fromisoformat(r["when"].replace("Z", "+00:00")).astimezone()
+        print(f"{r['course']:<12} {local:%a %b %d}  {clean_text(r['title'])}")
+        if r["text"]:
+            print(f"  {clean_text(r['text'])[:400]}")
+        for a in r["attachments"]:
+            print(f"  attached: {clean_text(a['name'])} " + clean_text(f"(/le/1.99/{r['ou']}/news/{r['id']}/attachments/{a['file']})"))
+    return 0
+
+
+# Individual dropboxes take a Valence multipart POST to mysubmissions (A16,
+# 2026-10-21). Group dropboxes have no route a cookie session may call: le
+# 1.75 to 1.85 answer 404 for submissions/group/{id} and 1.88 and up answer
+# 403 "No scopes defined for specified requests" (probed 2026-10-22), since
+# that route wants an OAuth app scope. So a group upload drives Brightspace's
+# own submit page in headless Chromium holding the same cookies. It never
+# opens a window: on 2026-10-22 an `open -g` to that page still pulled Chrome
+# to the front mid-task ("WHY DID YOU FLASH BANG ME").
+
+GROUP_SUBMIT_JS = r"""
+async ([name, b64]) => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const c = UI.GetControl('FS_sFiles') || UI.GetControl('FU_sFiles');
+  if (!c) return 'no file control on the submit page';
+  c.OpenDialog();
+  let w, d, node = null;
+  // The dialog's My Computer pane loads late: on 2026-10-22 one pass found no
+  // drop zone 3 s after the click, and a polling pass found it.
+  for (let k = 0; k < 30 && !node; k++) {
+    await sleep(1000);
+    const f = [...document.querySelectorAll('iframe')].find(f => f.src.includes('blank.html'));
+    if (!f || !f.contentDocument) continue;
+    w = f.contentWindow; d = f.contentDocument;
+    // MFI_control in a signed-in Chrome, SFI_control in headless Chromium
+    // (2026-10-22): match the drop zone by class, not by id.
+    node = d.querySelector('.d2l-filedrop');
+    if (!node && k % 5 === 0) {
+      const mc = [...d.querySelectorAll('button,a')].find(x => (x.innerText || '').trim() === 'My Computer');
+      if (mc) mc.click();
+    }
+  }
+  if (!node) return 'the Add a File dialog never showed its drop zone';
+  const bin = atob(b64); const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const file = new w.File([u], name, {type: 'application/octet-stream'});
+  const dt = new w.DataTransfer(); dt.items.add(file);
+  // A drop runs D2L's own sliced upload into temp storage. The file input
+  // path needs a native picker; the drop path is the one that reached temp.
+  for (const t of ['dragenter', 'dragover', 'drop'])
+    node.dispatchEvent(new w.DragEvent(t, {bubbles: true, cancelable: true, dataTransfer: dt}));
+  for (let k = 0; k < 120 && !(node.d2l_fd_files && node.d2l_fd_files.length); k++) await sleep(1000);
+  if (!(node.d2l_fd_files && node.d2l_fd_files.length)) return 'upload to temp storage timed out';
+  const tf = node.d2l_fd_files[node.d2l_fd_files.length - 1];
+  if (String(tf.m_size) !== String(file.size)) return `temp copy is ${tf.m_size} bytes, file is ${file.size}`;
+  // The dialog's Add button never picked up a dropped file, so the temp file
+  // goes straight into the page's selector the way the dialog hands it over.
+  const info = {FileSystemType: tf.m_fileSystemType, FileId: tf.m_id, FileName: tf.m_name,
+                Size: parseInt(tf.m_size), LastModified: 0, Description: '', PreviewUrl: ''};
+  c.TryAppendFile('My Computer', {GetData: k => k === 'file' ? info : null});
+  const cancels = [...document.querySelectorAll('button')].filter(b => b.innerText.trim() === 'Cancel');
+  if (cancels.length > 1) cancels[cancels.length - 1].click();
+  await sleep(1500);
+  if (c.GetCount() !== 1) return `expected 1 file staged, page shows ${c.GetCount()}`;
+  return 'staged';
+}
+"""
+
+
+def _session_cookies(client):
+    if client.cookies is None:
+        client.cookies = _cookies_or_signin()
+    return client.cookies
+
+
+def _live_session():
+    try:
+        fetch("/lp/1.63/users/whoami", chrome_cookies())
+        return True
+    except (NoSession, Expired, OSError):
+        return False
+
+
+def _signin():
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    import usc_signin
+    if not usc_signin.allowed():
+        return False
+    print("brightspace: signing back in through USC in a background tab", file=sys.stderr)
+    return usc_signin.signin(_live_session)
+
+
+def _cookies_or_signin():
+    try:
+        return chrome_cookies()
+    except NoSession:
+        if _signin():
+            return chrome_cookies()
+        sys.exit(NO_SESSION)
+
+
+def _send(req, timeout):
+    with OPENER.open(req, timeout=timeout) as resp:
+        return resp.status, resp.read()
+
+
+def _post(client, url, data, content_type):
+    if client.fixture is not None:
+        # Tests answer writes from the fixture too: "POST <url>" -> response.
+        key = "POST " + url
+        if key not in client.fixture:
+            raise KeyError(f"fixture has no {key}")
+        return 200, json.dumps(client.fixture[key]).encode()
+    ck ="; ".join(f"{k}={v}" for k, v in _session_cookies(client).items())
+    _, body = _send(urllib.request.Request(HOST + "/d2l/lp/auth/xsrf-tokens", headers={"Cookie": ck}), 25)
+    xsrf = json.loads(body)["referrerToken"]
+    req = urllib.request.Request(HOST + url, data=data, method="POST", headers={
+        "Cookie": ck, "Content-Type": content_type, "X-Csrf-Token": xsrf})
+    return _send(req, 120)
+
+
+def my_group(client, ou, category):
+    me = int(client.get("/lp/1.63/users/whoami")["Identifier"])
+    for g in client.get(f"/lp/1.43/{ou}/groupcategories/{category}/groups/"):
+        if me in [int(x) for x in g.get("Enrollments", [])]:
+            return g["GroupId"], g["Name"]
+    sys.exit(f"brightspace: you're in no group of category {category} in course {ou}")
+
+
+def submitted_files(client, ou, folder):
+    out = []
+    for entity in client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}/submissions/"):
+        for sub in entity.get("Submissions", []):
+            for f in sub.get("Files", []):
+                out.append({"submission": sub["Id"], "date": sub.get("SubmissionDate"),
+                            "file": f["FileId"], "name": f["FileName"], "size": f["Size"]})
+    return out
+
+
+def submit_group_headless(ou, folder, group, path, cookies):
+    import base64
+    from playwright.sync_api import sync_playwright
+    url = (f"{HOST}/d2l/lms/dropbox/user/folder_submit_files.d2l"
+           f"?db={folder}&grpid={group}&isprv=0&bp=0&ou={ou}")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            ctx = browser.new_context()
+            ctx.add_cookies([{"name": k, "value": v, "domain": "brightspace.usc.edu", "path": "/",
+                              "secure": True} for k, v in cookies.items()])
+            page = ctx.new_page()
+            page.goto(url, wait_until="networkidle", timeout=60000)
+            if "folder_submit_files.d2l" not in page.url:
+                return f"the session didn't reach the submit page (landed on {page.url[:80]})"
+            staged = page.evaluate(GROUP_SUBMIT_JS, [path.name, base64.b64encode(path.read_bytes()).decode()])
+            if staged != "staged":
+                return staged
+            # Stops one click short of Submit, so a live run can prove the
+            # upload path without handing in anything.
+            if os.environ.get("BRIGHTSPACE_STAGE_ONLY") == "1":
+                return "ok-staged-only"
+            with page.expect_navigation(timeout=120000):
+                page.locator("button", has_text="Submit").first.click()
+            if "folder_submit_files_results" not in page.url:
+                return f"Submit landed on {page.url[:80]}"
+            return "ok"
+        finally:
+            browser.close()
+
+
+def cmd_submit(client, ou, folder, paths, dry_run):
+    files = [Path(p).expanduser() for p in paths]
+    for f in files:
+        if not f.is_file() or f.stat().st_size == 0:
+            sys.exit(f"brightspace: {f} is missing or empty")
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    category = meta.get("GroupTypeId")
+    target = "you"
+    if category:
+        gid, gname = my_group(client, ou, category)
+        target = f"group {gname} ({gid})"
+    print(f"{meta.get('Name')}: {len(files)} file(s) for {target}")
+    if dry_run:
+        for f in files:
+            print(f"  would submit {f.name} ({f.stat().st_size} bytes)")
+        return 0
+    before = {(x["name"], x["size"]) for x in submitted_files(client, ou, folder)}
+    for f in files:
+        if category:
+            result = submit_group_headless(ou, folder, gid, f, _session_cookies(client))
+            if result == "ok-staged-only":
+                print(f"  staged {f.name} headless, stopped before Submit")
+                return 0
+            if result != "ok":
+                sys.exit(f"brightspace: {f.name} not submitted: {result}")
+        else:
+            import uuid
+            b = uuid.uuid4().hex
+            head = (f"--{b}\r\nContent-Type: application/json\r\n\r\n"
+                    + json.dumps({"Text": "", "Html": None}) + "\r\n"
+                    + f"--{b}\r\nContent-Disposition: form-data; name=\"\"; filename=\"{f.name}\"\r\n"
+                    + "Content-Type: application/octet-stream\r\n\r\n").encode()
+            _post(client, f"/d2l/api/le/1.75/{ou}/dropbox/folders/{folder}/submissions/mysubmissions/",
+                  head + f.read_bytes() + f"\r\n--{b}--\r\n".encode(), f"multipart/mixed; boundary={b}")
+    # Proof is the folder's own submission list, never the page or the POST.
+    after = submitted_files(client, ou, folder)
+    for f in files:
+        hit = [x for x in after if x["name"] == f.name and x["size"] == f.stat().st_size]
+        if not hit:
+            sys.exit(f"brightspace: {f.name} isn't in the submission list after submitting")
+        again = " (an identical file was already there)" if (f.name, f.stat().st_size) in before else ""
+        print(f"  submitted {f.name}, {hit[-1]['size']} bytes, {hit[-1]['date']}{again}")
+    return 0
+
+
+def cmd_files(client, ou, folder, out_dir):
+    """Pull files down: the folder's own attachments and everything submitted to it."""
+    out = Path(out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    got = []
+    for a in meta.get("Attachments", []):
+        got.append(("attachment", a["FileName"],
+                    client.raw(f"/le/1.75/{ou}/dropbox/folders/{folder}/attachments/{a['FileId']}")))
+    for x in submitted_files(client, ou, folder):
+        got.append(("submitted", x["name"], client.raw(
+            f"/le/1.75/{ou}/dropbox/folders/{folder}/submissions/{x['submission']}/files/{x['file']}")))
+    for kind, name, data in got:
+        dest = _inside(out, out / _safe(name))
+        dest.write_bytes(data)
+        print(f"  {kind}: {dest} ({len(data)} bytes)")
+    if not got:
+        print(clean_text(f"{meta.get('Name')}: no attachments and nothing submitted"))
+    return 0
+
+
+def _safe(name):
+    # Names come from instructors and teammates. "..", or a slash, would
+    # write outside the download folder.
+    name = re.sub(r'[\\/:*?"<>|]+', "_", str(name)).strip()
+    return "_" if name in ("", ".", "..") else name
+
+
+def _inside(root, dest):
+    root, dest = Path(root).resolve(), Path(dest).resolve()
+    if root != dest and root not in dest.parents:
+        sys.exit(f"brightspace: refusing to write {dest}, outside {root}")
+    return dest
+
+
+def cmd_content(client, ou, out_dir, dry_run):
+    """Download every file topic in a course, in its module folders."""
+    toc = client.get(f"/le/1.75/{ou}/content/toc")
+    out = Path(out_dir).expanduser()
+    count, links = 0, []
+
+    def walk(modules, here):
+        nonlocal count
+        for m in modules:
+            folder = here / _safe(m.get("Title", "module"))
+            for t in m.get("Topics", []):
+                kind = t.get("TypeIdentifier")
+                if kind == "File":
+                    name = _safe(Path(t.get("Url") or t["Title"]).name or t["Title"])
+                    dest = _inside(out, folder / name)
+                    count += 1
+                    if dry_run or (dest.exists() and dest.stat().st_size):
+                        print(f"  {'would get' if dry_run else 'have'} {dest}")
+                        continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        dest.write_bytes(client.raw(f"/le/1.75/{ou}/content/topics/{t['TopicId']}/file"))
+                        print(f"  got {dest}")
+                    except Exception as err:  # one locked topic shouldn't stop the rest
+                        print(f"  skipped {t['Title']}: {err}", file=sys.stderr)
+                else:
+                    links.append(f"{t.get('Title')}\t{kind}\t{t.get('Url')}")
+            walk(m.get("Modules", []), folder)
+
+    walk(toc.get("Modules", []), out)
+    if links and not dry_run:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "links.tsv").write_text("title\ttype\turl\n" + "\n".join(links) + "\n")
+    print(f"{count} file(s), {len(links)} link or page topic(s) listed in {out / 'links.tsv'}")
+    return 0
+
+
+def cmd_feedback(client, ou, folder, out_dir):
+    """Grade, written feedback and feedback files for one dropbox."""
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    if meta.get("GroupTypeId"):
+        entity, eid = "group", my_group(client, ou, meta["GroupTypeId"])[0]
+    else:
+        entity, eid = "user", client.get("/lp/1.63/users/whoami")["Identifier"]
+    try:
+        fb = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}/feedback/{entity}/{eid}")
+    except (KeyError, Forbidden):
+        fb = None
+    if not fb:
+        print(f"{meta.get('Name')}: no feedback released")
+        return 0
+    score = fb.get("Score")
+    print(f"{meta.get('Name')}: {score if score is not None else '-'} / {meta.get('Assessment', {}).get('ScoreDenominator') or meta.get('OutOf') or '?'}")
+    text = (fb.get("Feedback") or {}).get("Text") or plain((fb.get("Feedback") or {}).get("Html") or "")
+    if text:
+        print(clean_text(text).strip())
+    out = Path(out_dir).expanduser()
+    for f in fb.get("Files", []):
+        out.mkdir(parents=True, exist_ok=True)
+        dest = _inside(out, out / _safe(f["FileName"]))
+        dest.write_bytes(client.raw(
+            f"/le/1.75/{ou}/dropbox/folders/{folder}/feedback/{entity}/{eid}/attachments/{f['FileId']}"))
+        print(f"  feedback file: {dest}")
+    return 0
+
+
+def instructions_of(folder):
+    """A dropbox's instructions as plain text. The folder list already carries
+    them, and no command showed them, so "what does the assignment actually
+    ask" meant opening Brightspace (USC week walk, 2026-10-13, item 7)."""
+    ci = folder.get("CustomInstructions") or {}
+    return clean_text(ci.get("Text") or plain(ci.get("Html") or "")).strip()
+
+
+LINK_HTML_MAX = 2_000_000
+
+
+def links_of(html):
+    """Every link in a body of HTML as (label, url). Stripping the tags to text
+    dropped the targets: A22's instructions said "following this spec", the
+    spec was a linked Google Doc that refused a single email field, and the
+    page was nearly handed in on one (2026-11-04)."""
+    # A parser, not a regex: [^>]* around a lazy .*? backtracks badly on a hostile
+    # body, and a regex misses single-quoted hrefs. Entities decode here, so the
+    # control bytes come off after that: &#27; is an escape byte once decoded.
+    from html.parser import HTMLParser
+
+    class Links(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.found, self.url, self.label = [], None, []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "a":
+                self.url, self.label = dict(attrs).get("href"), []
+
+        def handle_data(self, data):
+            if self.url is not None:
+                self.label.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "a" and self.url:
+                url = clean_text(self.url)
+                label = re.sub(r"\s+", " ", clean_text("".join(self.label))).strip()
+                self.found.append((label or url, url))
+            if tag == "a":
+                self.url = None
+
+    links = Links()
+    # Guessed, never measured: a course page this size isn't instructions.
+    links.feed((html or "")[:LINK_HTML_MAX])
+    return links.found
+
+
+def cmd_instructions(client, ou, folder, as_json):
+    """One dropbox's instructions and attachment names. Reads only."""
+    meta = client.get(f"/le/1.75/{ou}/dropbox/folders/{folder}")
+    row = {"name": meta.get("Name"), "due": meta.get("DueDate"), "instructions": instructions_of(meta),
+           "attachments": [a.get("FileName") for a in meta.get("Attachments") or []],
+           "links": [{"label": label, "url": url} for label, url in
+                     links_of((meta.get("CustomInstructions") or {}).get("Html"))]}
+    if as_json:
+        print(json.dumps(row, indent=1))
+        return 0
+    when = ""
+    if row["due"]:
+        when = "  due " + f"{dt.datetime.fromisoformat(row['due'].replace('Z', '+00:00')).astimezone():%a %b %d %H:%M}"
+    print(clean_text(row["name"] or "") + when)
+    print()
+    print(row["instructions"] or "No written instructions on this dropbox.")
+    if row["links"]:
+        print()
+        for link in row["links"]:
+            print(f"  linked: {clean_text(link['label'])}: {link['url']}")
+    if row["attachments"]:
+        print()
+        for name in row["attachments"]:
+            print(f"  attached: {clean_text(name)}")
+        print(f"  brightspace files {ou} {folder} downloads them")
+    return 0
+
+
+def cmd_classlist(client, ou, as_json):
+    try:
+        rows = client.get(f"/le/1.75/{ou}/classlist/")
+    except Forbidden:
+        # ACAD 185 returns 403 here for a student and its classlist page 303s
+        # away (2026-10-22): the instructor hid it, so say that plainly.
+        print(f"course {ou} hides its classlist from students")
+        return 0
+    people = [{"name": r.get("DisplayName"), "email": r.get("Email"), "role": r.get("ClasslistRoleDisplayName"),
+               "id": r.get("Identifier")} for r in rows]
+    if as_json:
+        print(json.dumps(people, indent=1))
+    else:
+        for p in people:
+            print(f"{clean_text(p['name']):<32} {clean_text(p['role']):<12} {clean_text(p['email'])}")
+    return 0
+
+
+def cmd_discuss(client, ou, forum, topic, as_json):
+    if forum is None:
+        for f in client.get(f"/le/1.75/{ou}/discussions/forums/"):
+            print(f"forum {f['ForumId']}  {clean_text(f['Name'])}")
+            for t in client.get(f"/le/1.75/{ou}/discussions/forums/{f['ForumId']}/topics/"):
+                print(f"  topic {t['TopicId']}  {clean_text(t['Name'])}  due {t.get('EndDate') or '-'}")
+        return 0
+    posts = client.get(f"/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/")
+    rows = [{"id": p["PostId"], "parent": p.get("ParentPostId"), "by": p.get("PostingUserDisplayName"),
+             "date": p.get("DatePosted"), "subject": p.get("Subject"),
+             "text": (p.get("Message") or {}).get("Text") or plain((p.get("Message") or {}).get("Html") or "")}
+            for p in posts]
+    if as_json:
+        print(json.dumps(rows, indent=1))
+    else:
+        for r in rows:
+            print(f"[{r['id']}] {clean_text(r['by'])} {r['date']}{'  reply to ' + str(r['parent']) if r['parent'] else ''}")
+            print(f"  {clean_text(r['subject'])}\n  {clean_text(r['text']).strip()[:600]}\n")
+    return 0
+
+
+
+# Beside brightspace-sync's state, so Hall's launcher (BRIGHTSPACE_STATE=~/.hall/
+# brightspace) keeps a student's cache in ~/.hall and never makes a ~/.chewbacca.
+MAP_PATH = Path(os.environ.get("BRIGHTSPACE_MAP")
+                or Path(os.environ.get("BRIGHTSPACE_STATE") or Path.home() / ".chewbacca/brightspace") / "map.json")
+
+
+def load_map():
+    try:
+        m = json.loads(MAP_PATH.read_text())
+        return m if isinstance(m, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_map(m):
+    MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MAP_PATH.with_name(MAP_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(m, indent=1))
+    tmp.replace(MAP_PATH)
+
+
+def ledger_units(ledger_dir):
+    """course code -> [org unit ids], from each ledger yml's org_unit_id line."""
+    out = {}
+    for path in sorted(Path(ledger_dir).glob("*.yml")):
+        text = path.read_text()
+        code = re.search(r'^code:\s*"?([^"\n]+)"?', text, re.M)
+        ou = re.search(r"^org_unit_id:\s*(.+)$", text, re.M)
+        if code and ou:
+            out[code.group(1).strip()] = [int(x) for x in re.findall(r"\d+", ou.group(1))]
+    return out
+
+
+def write_ledger_units(ledger_dir, courses):
+    """Put each enrolled course's org unit ids into its ledger yml. Returns lines changed."""
+    changed = []
+    for path in sorted(Path(ledger_dir).glob("*.yml")):
+        text = path.read_text()
+        code = re.search(r'^code:\s*"?([^"\n]+)"?.*$', text, re.M)
+        if not code:
+            continue
+        have = norm_code(code.group(1).strip())
+        ous = sorted({ou for c, units in courses.items() for ou in units
+                      if norm_code(c) and (have.startswith(norm_code(c)) or norm_code(c).startswith(have))})
+        if not ous:
+            continue
+        line = f"org_unit_id: {ous[0]}" if len(ous) == 1 else f"org_unit_id: [{', '.join(map(str, ous))}]"
+        old = re.search(r"^org_unit_id:.*$", text, re.M)
+        if old and old.group(0) == line:
+            continue
+        text = (text[:old.start()] + line + text[old.end():]) if old else \
+            (text[:code.end()] + "\n" + line + text[code.end():])
+        path.write_text(text)
+        changed.append(f"{path.name}: {line}")
+    return changed
+
+
+def words(text):
+    return re.findall(r"[a-z0-9]+", clean_text(str(text)).lower())
+
+
+def name_matches(query, items):
+    """Items whose name is the query, else whose name holds every query word.
+
+    An exact name wins over a longer one holding the same words, so a topic
+    called "WP2 Rough Draft" is still reachable next to "WP2 Revised Draft
+    (and Peer Response)"; word order and punctuation don't matter.
+    """
+    q = words(query)
+    if not q:
+        return []
+    exact = [i for i in items if words(i["name"]) == q]
+    if exact:
+        return exact
+    return [i for i in items if all(w in words(i["name"]) for w in q)]
+
+
+def course_label(m, ou):
+    for code, units in (m.get("courses") or {}).items():
+        if ou in units:
+            return code
+    return str(ou)
+
+
+def resolve_course(client, said, ledger_dir=None):
+    """"WRIT", "writ-150", "BISC 101" or a bare id -> [org unit ids].
+
+    Cache first, then the ledger's org_unit_id, and the network only when
+    neither knows the name.
+    """
+    said = str(said).strip()
+    if said.isdigit():
+        return [int(said)]
+    q = norm_code(said)
+    if not q:
+        sys.exit("brightspace: empty course name")
+
+    def match(courses):
+        hits = {}
+        for code, units in courses.items():
+            have = norm_code(code)
+            if have and (have.startswith(q) or q.startswith(have)):
+                hits.setdefault(tuple(sorted(units)), code)
+        return hits
+
+    m = load_map()
+    # The cache comes from enrollments, so it beats a ledger line for the same
+    # course ("BISC 101" there, "BISC 101Lxg" in the ledger); the ledger only
+    # fills courses the cache hasn't seen.
+    cached = m.get("courses") or {}
+    known = {c: u for c, u in ledger_units(ledger_dir or LEDGER).items()
+             if not any(norm_code(c).startswith(norm_code(k)) or norm_code(k).startswith(norm_code(c))
+                        for k in cached if norm_code(k))}
+    known.update(cached)
+    hits = match(known)
+    if not hits:
+        courses = enrolled_courses(client)
+        m["courses"] = courses
+        save_map(m)
+        hits = match(courses)
+    if not hits:
+        sys.exit(f"brightspace: no current course matches {said!r}. Courses: "
+                 + ", ".join(sorted(known or m.get("courses") or {})))
+    # The ledger says "BISC 101Lxg" where enrollments say "BISC 101": the same
+    # ids under two names are one course, not two.
+    if len(hits) > 1:
+        sys.exit(f"brightspace: {said!r} matches more than one course: "
+                 + ", ".join(f"{c} ({', '.join(map(str, u))})" for u, c in sorted(hits.items(), key=lambda x: x[1]))
+                 + ". Say which.")
+    return list(next(iter(hits)))
+
+
+def one_unit(units, said):
+    if len(units) == 1:
+        return units[0]
+    sys.exit(f"brightspace: {said!r} has {len(units)} org units ({', '.join(map(str, units))}), "
+             "name the item too or pass the id")
+
+
+def fetch_topics(client, ou):
+    rows = []
+    for f in client.get(f"/le/1.75/{ou}/discussions/forums/"):
+        for t in client.get(f"/le/1.75/{ou}/discussions/forums/{f['ForumId']}/topics/"):
+            rows.append({"ou": ou, "forum": f["ForumId"], "forum_name": clean_text(f.get("Name")),
+                         "topic": t["TopicId"], "name": clean_text(t.get("Name")), "due": t.get("EndDate")})
+    return rows
+
+
+def fetch_folders(client, ou):
+    return [{"ou": ou, "id": f["Id"], "name": clean_text(f.get("Name"))}
+            for f in client.get(f"/le/1.75/{ou}/dropbox/folders/")]
+
+
+FETCHERS = {"topics": fetch_topics, "folders": fetch_folders}
+
+
+def resolve_item(client, units, said, kind, course_said):
+    """A topic or dropbox name inside the course -> its cached row.
+
+    A cache hit makes no call. A miss rereads only this course's units once,
+    so a topic posted today is found without a full refresh.
+    """
+    m = load_map()
+    store = m.setdefault(kind, {})
+
+    def hits():
+        pool = [row for ou in units for row in store.get(str(ou), [])]
+        return name_matches(said, pool)
+
+    found = hits()
+    if not found:
+        for ou in units:
+            store[str(ou)] = FETCHERS[kind](client, ou)
+        save_map(m)
+        found = hits()
+    label = course_label(m, units[0]) if units else course_said
+    noun = "topic" if kind == "topics" else "dropbox"
+    if not found:
+        names = sorted({row["name"] for ou in units for row in store.get(str(ou), [])})
+        sys.exit(f"brightspace: no {noun} in {label} matches {said!r}. {noun.title()}s: " + "; ".join(names))
+    if len(found) > 1:
+        sys.exit(f"brightspace: {said!r} matches {len(found)} {noun}s in {label}: "
+                 + "; ".join(f"{r['name']} ({r.get('topic', r.get('id'))})" for r in found)
+                 + ". Use more of the name.")
+    return found[0]
+
+
+def where_topic(client, where):
+    """[ou forum topic] ids, or [course, topic words...] -> (ou, forum, topic, row)."""
+    if len(where) == 3 and all(w.isdigit() for w in where):
+        return int(where[0]), int(where[1]), int(where[2]), None
+    if len(where) < 2:
+        sys.exit("brightspace: say the course and the topic, e.g. WRIT \"Topic Ideas for WP3\"")
+    units = resolve_course(client, where[0])
+    row = resolve_item(client, units, " ".join(where[1:]), "topics", where[0])
+    return row["ou"], row["forum"], row["topic"], row
+
+
+def where_folder(client, course, folder):
+    units = resolve_course(client, course)
+    if str(folder).isdigit():
+        return one_unit(units, course), int(folder)
+    row = resolve_item(client, units, folder, "folders", course)
+    return row["ou"], row["id"]
+
+
+def cmd_map(client, ledger_dir, as_json):
+    courses = enrolled_courses(client)
+    m = {"courses": courses, "topics": {}, "folders": {}, "updated": dt.datetime.now(dt.timezone.utc).isoformat()}
+    for units in courses.values():
+        for ou in units:
+            m["topics"][str(ou)] = optional_list(client, fetch_topics, ou)
+            m["folders"][str(ou)] = optional_list(client, fetch_folders, ou)
+    save_map(m)
+    changed = write_ledger_units(ledger_dir, courses)
+    if as_json:
+        print(json.dumps(m, indent=1))
+        return 0
+    for code, units in sorted(courses.items()):
+        n_t = sum(len(m["topics"][str(u)]) for u in units)
+        n_f = sum(len(m["folders"][str(u)]) for u in units)
+        print(f"{code:<12} {', '.join(map(str, units)):<16} {n_t} topics, {n_f} dropboxes")
+    for line in changed:
+        print(f"  ledger {line}")
+    print(f"saved {MAP_PATH}")
+    return 0
+
+
+def optional_list(client, fetcher, ou):
+    try:
+        return fetcher(client, ou)
+    except (Forbidden, KeyError):
+        return []
+
+
+def cmd_post(client, where, subject, body_file, parent, dry_run):
+    text = Path(body_file).expanduser().read_text()
+    if not text.strip():
+        sys.exit(f"brightspace: {body_file} is empty")
+    ou, forum, topic, row = where_topic(client, where)
+    m = load_map()
+    name = f"{course_label(m, ou)} / {row['forum_name']} / {row['name']}" if row else f"topic {topic}"
+    print(f"{name}  ({ou}/{forum}/{topic})")
+    if dry_run:
+        print(f"would post {subject!r}, {len(text)} chars{', reply to ' + str(parent) if parent else ''}")
+        return 0
+    payload = {"ParentPostId": int(parent) if parent else None, "Subject": subject,
+               "Message": {"Content": text, "Type": "Text"}, "IsAnonymous": False}
+    base = f"/le/1.75/{ou}/discussions/forums/{forum}/topics/{topic}/posts/"
+    _, body = _post(client, "/d2l/api" + base, json.dumps(payload).encode(), "application/json")
+    pid = json.loads(body).get("PostId")
+    if not pid:
+        sys.exit(f"brightspace: Brightspace answered without a PostId: {body[:200]!r}")
+    # Proof is the post as Brightspace now serves it, never the POST's answer.
+    back = client.get(f"{base}{pid}")
+    msg = back.get("Message") or {}
+    # USC serves a Text post back with Text empty and the words in Html
+    # (post 1267122, 2026-11-03), so the Html is what gets compared.
+    import html as _html
+    got = (msg.get("Text") or _html.unescape(plain(msg.get("Html") or ""))).strip()
+    print(f"posted {pid} by {clean_text(back.get('PostingUserDisplayName'))} at {back.get('DatePosted')}")
+    print(f"  {clean_text(back.get('Subject'))}")
+    print("  " + clean_text(got).replace("\n", "\n  "))
+    if " ".join(got.split()) != " ".join(text.split()):
+        # It IS posted. Say so loudly, so a retry never makes a second post.
+        print(f"brightspace: post {pid} is up but reads back different from {body_file}. "
+              "Do NOT post again; compare the text above and edit it in Brightspace.", file=sys.stderr)
+        return 3
+    return 0
 
 
 def main():
@@ -252,8 +1326,36 @@ def main():
     d = sub.add_parser("due")
     d.add_argument("--days", type=int, default=14)
     d.add_argument("--json", action="store_true")
+    gr = sub.add_parser("grades", help="every released grade in every current course")
+    gr.add_argument("--json", action="store_true")
+    nw = sub.add_parser("news", help="announcements from every current course")
+    nw.add_argument("--days", type=int, default=7)
+    nw.add_argument("--json", action="store_true")
     g = sub.add_parser("get")
     g.add_argument("path")
+    mp = sub.add_parser("map", help="refresh the course/topic/dropbox name cache and the ledger's org_unit_id")
+    mp.add_argument("--json", action="store_true")
+    sm = sub.add_parser("submit", help="upload files to a dropbox, group or individual, headless")
+    sm.add_argument("course"); sm.add_argument("folder"); sm.add_argument("files", nargs="+")
+    sm.add_argument("--dry-run", action="store_true")
+    fl = sub.add_parser("files", help="download a dropbox's attachments and submitted files")
+    fl.add_argument("course"); fl.add_argument("folder")
+    fl.add_argument("--out", default="~/Downloads/brightspace")
+    ct = sub.add_parser("content", help="download every file in a course's Content, by module")
+    ct.add_argument("course"); ct.add_argument("--out", default=None); ct.add_argument("--dry-run", action="store_true")
+    fb = sub.add_parser("feedback", help="grade, written feedback and feedback files for a dropbox")
+    fb.add_argument("course"); fb.add_argument("folder"); fb.add_argument("--out", default="~/Downloads/brightspace")
+    ins = sub.add_parser("instructions", help="what one assignment asks: its instructions and attachments")
+    ins.add_argument("course"); ins.add_argument("folder"); ins.add_argument("--json", action="store_true")
+    cl = sub.add_parser("classlist", help="everyone in a course, with emails")
+    cl.add_argument("course"); cl.add_argument("--json", action="store_true")
+    ds = sub.add_parser("discuss", help="list forums and topics, or read one topic's posts")
+    ds.add_argument("where", nargs="+", help="course [topic name], or ou forum topic")
+    ds.add_argument("--json", action="store_true")
+    ps = sub.add_parser("post", help="post to a discussion topic, text from a file, then read it back")
+    ps.add_argument("where", nargs="+", help="course topic name, or ou forum topic")
+    ps.add_argument("--subject", required=True); ps.add_argument("--body-file", required=True)
+    ps.add_argument("--reply-to", default=None); ps.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     client = Client()
     if args.cmd == "whoami":
@@ -261,6 +1363,38 @@ def main():
         print(me.get("FirstName"), me.get("LastName"))
     elif args.cmd == "get":
         print(json.dumps(client.get(args.path), indent=1))
+    elif args.cmd == "map":
+        sys.exit(cmd_map(client, LEDGER, args.json))
+    elif args.cmd == "submit":
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_submit(client, ou, folder, args.files, args.dry_run))
+    elif args.cmd == "files":
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_files(client, ou, folder, args.out))
+    elif args.cmd == "content":
+        ou = one_unit(resolve_course(client, args.course), args.course)
+        sys.exit(cmd_content(client, ou, args.out or f"~/Downloads/brightspace/{ou}", args.dry_run))
+    elif args.cmd == "feedback":
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_feedback(client, ou, folder, args.out))
+    elif args.cmd == "instructions":
+        ou, folder = where_folder(client, args.course, args.folder)
+        sys.exit(cmd_instructions(client, ou, folder, args.json))
+    elif args.cmd == "classlist":
+        sys.exit(cmd_classlist(client, one_unit(resolve_course(client, args.course), args.course), args.json))
+    elif args.cmd == "discuss":
+        if len(args.where) == 1:
+            for ou in resolve_course(client, args.where[0]):
+                cmd_discuss(client, ou, None, None, args.json)
+            sys.exit(0)
+        ou, forum, topic, _ = where_topic(client, args.where)
+        sys.exit(cmd_discuss(client, ou, forum, topic, args.json))
+    elif args.cmd == "post":
+        sys.exit(cmd_post(client, args.where, args.subject, args.body_file, args.reply_to, args.dry_run))
+    elif args.cmd == "grades":
+        sys.exit(cmd_grades(client, args.json))
+    elif args.cmd == "news":
+        sys.exit(cmd_news(client, args.days, args.json))
     else:
         sys.exit(cmd_due(client, args.days, LEDGER, args.json))
 

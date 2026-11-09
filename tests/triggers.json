@@ -11,6 +11,16 @@
   },
   {
     "group": "covered half (school, mac, life)",
+    "prompt": "I need to lock in on school",
+    "expect_any": [
+      "coursework"
+    ],
+    "expect_tool": [
+      "chewbacca usc lockin"
+    ]
+  },
+  {
+    "group": "covered half (school, mac, life)",
     "prompt": "quiz me on cache coherence",
     "expect_any": [
       "study-system",

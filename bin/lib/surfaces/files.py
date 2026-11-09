@@ -50,6 +50,21 @@ def passive(path: Path, folder: Path) -> bool:
     return real.parent == root and real.is_file() and real.suffix.lower() in PASSIVE
 
 
+OFFICE = {".docx", ".xlsx", ".pptx"}
+
+
+def office(path: Path, folder: Path) -> bool:
+    """The same checks as passive(), for the documents the doc surface reads."""
+    try:
+        if path.is_symlink():
+            return False
+        real = path.resolve(strict=True)
+        root = folder.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return real.parent == root and real.is_file() and real.suffix.lower() in OFFICE
+
+
 class Files(Provider):
     name = "files"
     title = "DOWNLOADS"
@@ -79,7 +94,7 @@ class Files(Provider):
                 continue
             rows.append({"path": str(p), "name": p.name, "mtime": st.st_mtime,
                          "size": 0 if p.is_dir() else st.st_size, "dir": p.is_dir(),
-                         "passive": passive(p, root)})
+                         "passive": passive(p, root), "office": office(p, root)})
         rows.sort(key=lambda r: r["mtime"], reverse=True)
         rows = rows[:MOST_FILES]
         for i, r in enumerate(rows):
@@ -137,7 +152,7 @@ class Files(Provider):
             # Only a passive file reaches the File component; anything else
             # draws nothing rather than handing Kyber a path to interpret.
             self.p("path"): shown["path"] if shown and shown["passive"] else "",
-            self.p("go"): "Open" if shown and shown["passive"] else "Reveal in Finder",
+            self.p("go"): "Open" if shown and (shown["passive"] or shown.get("office")) else "Reveal in Finder",
         }
         if not values.get(self.p("pick")) and shown:
             out[self.p("pick")] = shown["label"]
@@ -151,6 +166,11 @@ class Files(Provider):
         path = Path(row["path"])
         if path.parent != folder or path.name in ("", ".", ".."):
             return Result(False, "That file isn't in Downloads any more.")
+        # A Word, Excel or PowerPoint file opens on the glass, in the doc
+        # surface (bin/lib/docs_surface.py), read by genoffice: never in an app.
+        if office(path, folder):
+            return Result(True, f"{row['label']} is on the glass.", opens="doc",
+                          preset={"/doc/want": f"f:{path.resolve()}"})
         # Re-checked at press time: the file may have been swapped for a link
         # or an app since the list was drawn.
         if passive(path, folder):

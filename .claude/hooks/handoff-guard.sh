@@ -23,6 +23,13 @@ type hook_init >/dev/null 2>&1 && hook_init handoff-guard.sh 10
 #
 # Fires at most once per turn: a second refusal on the rewrite is a judgment
 # call for the human, not grounds for a loop.
+#
+# 2026-10-11 it also refuses work handed back in other words and asking leave
+# to do the work, the repeats ranked in docs/plans/REPEAT-MISTAKES.md:
+# feedback_never_hand_him_a_command, feedback_dont_report_what_you_can_fix,
+# feedback_no_confirmation_prompts. Measured on 2,479 final replies from the
+# 14 days before: the old patterns fired on 2, the new set on 48, and reading
+# them, nearly all were a "want me to ...?", "say the word" or "it's on you".
 set -uo pipefail
 
 INPUT=$(cat)

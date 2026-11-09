@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""Every length on the page, and whether it can be DERIVED.
+
+Caleb, 2026-09-23, on a screenshot with 400px of dead vertical space:
+"there's literally nothing to the ui ux here, nothing intentional. Every
+single decision on a site should be intentional, nothing based on vibes."
+
+That has an exact form. A decision is intentional if and only if it is
+DERIVABLE from the system's own generators. Type sizes should lie in a
+geometric sequence base*r^n. Vertical spacing should lie in a lattice
+k*baseline. A value in neither set was chosen by feel, and that is what a
+vibe IS, stated precisely enough to detect.
+
+So the test is set membership, run over what the page ACTUALLY USES rather
+than over what the stylesheet declares. Those differ: a token file can be
+perfectly disciplined while half the rules bypass it, and the rendered value
+is the one a reader sees.
+
+WHAT IT DOES NOT CLAIM. Deriving every number does not make a page good, it
+makes it consistent. A page can be perfectly on-scale and still boring, and
+this says nothing about that. It catches the specific failure of a value
+nobody decided.
+
+THE GENERATORS. Inferred from the page rather than assumed, because a page
+built to a 4px baseline and one built to 8px are both disciplined and a
+hardcoded guess would call one of them broken. The baseline is the largest
+unit dividing most observed vertical values; the type ratio is the median
+ratio between consecutive distinct font sizes.
+"""
+
+import argparse, json, math, sys
+from collections import Counter
+
+COLLECT_JS = """() => {
+  const fs = [], vert = [], gaps = [];
+  const seen = new Set();
+  for (const el of document.querySelectorAll("body *")) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    const st = getComputedStyle(el);
+    const f = parseFloat(st.fontSize);
+    if (f && el.textContent.trim() && el.children.length === 0) fs.push(+f.toFixed(2));
+    for (const p of ["marginTop","marginBottom","paddingTop","paddingBottom","rowGap","gap"]) {
+      const v = parseFloat(st[p]);
+      if (v && v > 0.5) vert.push(+v.toFixed(2));
+    }
+  }
+  // Vertical VOIDS: the distance between the bottom of one block-level box
+  // and the top of the next, measured in document space. A void nobody put
+  // there is the dead zone this tool was written for.
+  const blocks = [...document.querySelectorAll("body section, body main > *, body header, body footer")]
+    .map(e => { const r = e.getBoundingClientRect();
+                return { t: r.top + scrollY, b: r.bottom + scrollY, tag: e.tagName.toLowerCase(),
+                         cls: (e.getAttribute("class")||"").slice(0,24) }; })
+    .filter(b => b.b > b.t)
+    .sort((a, b) => a.t - b.t);
+  for (let i = 0; i + 1 < blocks.length; i++) {
+    const g = blocks[i+1].t - blocks[i].b;
+    if (g > 1) gaps.push({ px: +g.toFixed(1), after: blocks[i].tag + "." + blocks[i].cls });
+  }
+  return { fs, vert, gaps, h: document.documentElement.scrollHeight };
+}"""
+
+
+def infer_baseline(vals, lo=4, hi=16):
+    """The unit that best explains the spacing without being trivial.
+
+    The first version took whatever divided the most values and returned 2px
+    at 98%, which is the trivial divisor: 2 divides nearly every even number,
+    so it explains everything and claims nothing. Any unit u also makes every
+    multiple of u fit, so raw coverage always rewards the smallest candidate.
+
+    Two corrections. The floor is 4px, since no real system has a 2px
+    baseline. And coverage is weighted by how STRONG the claim is: a unit
+    whose quotients are small integers (2, 3, 4 baselines) is describing a
+    scale, while one needing quotients of 40 is just arithmetic. Penalising
+    by median quotient is what stops the smallest unit from always winning.
+    """
+    best, score, cov = lo, -1.0, 0
+    for u in range(lo, hi + 1):
+        fit = [v for v in vals if abs(v / u - round(v / u)) < 0.06]
+        if not fit:
+            continue
+        frac = len(fit) / len(vals)
+        q = sorted(round(v / u) for v in fit)
+        medq = max(q[len(q) // 2], 1)
+        # Coverage, discounted when the unit needs large multipliers.
+        sc = frac / (1 + math.log(medq))
+        if sc > score:
+            best, score, cov = u, sc, len(fit)
+    return best, cov
+
+
+def infer_ratio(sizes):
+    """Ratio and base of the type scale.
+
+    The first version anchored on the SMALLEST size and returned 1.077 off a
+    9px base. 9px was the mono label, and a 1.077 ratio is below every real
+    modular scale (they run 1.125 to 1.5), so it was a curve fitted through
+    noise rather than a scale.
+
+    Body text is the anchor a scale is actually built from, and body text is
+    whatever size the most text nodes use. Steps below it are as legitimate
+    as steps above, so n is allowed to go negative.
+    """
+    if len(sizes) < 6:
+        return None, None
+    base = Counter(sizes).most_common(1)[0][0]
+    uniq = sorted(set(sizes))
+    if len(uniq) < 3:
+        return None, base
+    rs = [b / a for a, b in zip(uniq, uniq[1:]) if a > 0 and 1.08 < b / a < 2.2]
+    if not rs:
+        return None, base
+    rs.sort()
+    return rs[len(rs) // 2], base
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    ap.add_argument("--void-factor", type=float, default=3.0,
+                    help="a gap this many times the median gap is a dead zone")
+    a = ap.parse_args()
+
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": a.width, "height": a.height})
+        pg.goto(a.url, wait_until="networkidle")
+        pg.wait_for_timeout(1200)
+        D = pg.evaluate(COLLECT_JS)
+        b.close()
+
+    fs, vert, gaps = D["fs"], D["vert"], D["gaps"]
+    base, hits = infer_baseline(vert)
+    ratio, tbase = infer_ratio(fs)
+
+    print(f"page {a.url}   height {D['h']}px")
+    print(f"\nbaseline unit inferred: {base}px "
+          f"({hits}/{len(vert)} = {100*hits/max(len(vert),1):.0f}% of vertical "
+          f"values are multiples)")
+
+    off = Counter(v for v in vert if abs(v / base - round(v / base)) >= 0.06)
+    if off:
+        print(f"  OFF-LATTICE vertical values ({sum(off.values())} uses, "
+              f"{len(off)} distinct):")
+        for v, n in off.most_common(8):
+            print(f"    {v:>8}px  x{n}   nearest multiple "
+                  f"{round(v/base)*base:.0f}px")
+    else:
+        print("  every vertical value is on the lattice")
+
+    if ratio:
+        uniq = sorted(set(fs))
+        smallest = tbase
+        print(f"\ntype ratio inferred: {ratio:.3f} from body base {smallest}px")
+        bad = []
+        for s in uniq:
+            n = math.log(s / smallest, ratio) if ratio > 1 else 0
+            if abs(n - round(n)) > 0.14:
+                bad.append((s, smallest * ratio ** round(n)))
+        if bad:
+            print(f"  OFF-SCALE sizes ({len(bad)} of {len(uniq)} distinct):")
+            for s, want in bad:
+                print(f"    {s:>8}px   nearest step {want:.1f}px")
+        else:
+            print(f"  all {len(uniq)} distinct sizes are on the scale")
+    else:
+        print("\ntype ratio: too few distinct sizes to infer one")
+
+    # ---- DEAD ZONES, BY INK RATHER THAN BY DOM --------------------------
+    # The DOM version of this found two block-level siblings on a page built
+    # from sticky scenes and reported a median gap of 10,177px, which is
+    # noise, and it missed the 400px void that prompted the tool. Structure
+    # does not predict emptiness: a scene can be a single tall div holding a
+    # void, and two adjacent sections can abut with no gap at all.
+    #
+    # Ink does predict it. Sample painted fraction down the page and a dead
+    # zone is a RUN of viewport-height windows with almost nothing in them.
+    # ux-eye already found this one that way, so this is that check made
+    # continuous.
+    # ---- DEAD ZONES (legacy DOM view, kept for the gap distribution) ------------------------------------------------------
+    print()
+    if gaps:
+        px = sorted(g["px"] for g in gaps)
+        med = px[len(px) // 2]
+        limit = max(med * a.void_factor, base * 12)
+        dead = [g for g in gaps if g["px"] > limit]
+        print(f"vertical gaps: median {med:.0f}px, largest {px[-1]:.0f}px, "
+              f"dead-zone limit {limit:.0f}px")
+        if dead:
+            print(f"  DEAD ZONES ({len(dead)}): space nothing asked for")
+            for g in sorted(dead, key=lambda d: -d["px"])[:6]:
+                print(f"    {g['px']:>8.0f}px after {g['after']}  "
+                      f"= {g['px']/base:.1f} baselines")
+        else:
+            print("  no gap runs past the limit")
+    else:
+        print("vertical gaps: no block-level siblings found to measure")
+
+    print("\nDerivable is not the same as good. This finds values nobody "
+          "decided,\nnot pages nobody enjoyed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

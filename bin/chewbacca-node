@@ -67,6 +67,21 @@ if [[ "$want" != "$have" ]] || ! codesign -v "$APP" 2>/dev/null; then
   rm -rf "$stage"
   mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
   cp -p "$src" "$stage/Contents/MacOS/Chewbacca"
+  # Homebrew's node is a stub linked to @rpath/libnode.<abi>.dylib, found
+  # through @loader_path/../lib. Copied alone it died at launch with "Library
+  # not loaded: @rpath/libnode.147.dylib" (node 26.11.1, 10/13), so every
+  # @rpath library rides along into Contents/lib, the same relative spot.
+  for dep in $(otool -L "$src" 2>/dev/null | awk '$1 ~ /^@rpath\// {sub("@rpath/", "", $1); print $1}'); do
+    found=""
+    for dir in "$(dirname "$src")" "$(dirname "$src")/../lib"; do
+      [[ -f "$dir/$dep" ]] && { found="$dir/$dep"; break; }
+    done
+    [[ -n "$found" ]] || { echo "chewbacca-node: $src needs @rpath/$dep and it is not beside it" >&2; exit 1; }
+    mkdir -p "$stage/Contents/lib"
+    cp -pL "$found" "$stage/Contents/lib/$dep"
+    codesign --force --sign - "$stage/Contents/lib/$dep" >/dev/null 2>&1 \
+      || { echo "chewbacca-node: could not sign $dep" >&2; exit 1; }
+  done
   [[ -f "$ICON" ]] && cp "$ICON" "$stage/Contents/Resources/Chewbacca.icns"
   cat > "$stage/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

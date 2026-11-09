@@ -1,0 +1,1024 @@
+#!/usr/bin/env python3
+"""agent-history: one search across every coding agent's past sessions, redacted.
+
+    agent-history search "<words>"               newest matches first, all runtimes
+    agent-history search "<words>" --runtime codex --since 7d --repo chewbacca
+    agent-history search "<words>" --role user --limit 20 --json
+    agent-history search "<exact text>" --phrase
+    agent-history search "<words>" --raw-snippets   denylist only, no allowlist (warns)
+    agent-history redact < text                  the redaction alone, for a pipe
+
+Snippets are allowlisted by default: after the denylist, only plain words,
+numbers of up to 6 digits and punctuation print; every other chunk is [·].
+
+Reads Claude Code transcripts (~/.claude/projects/*/*.jsonl, plus ~/.claude-2
+when it exists) and Codex rollouts (~/.codex/sessions/**/*.jsonl) in one pass.
+Each hit prints its session id, time, repo, role (user, assistant, tool_use,
+tool) and a snippet around the match.
+
+Every snippet goes through redact() before it is printed: API keys (sk-,
+ghp_, github_pat_, AKIA, xox, AIza), bearer and Authorization values, JWTs,
+private key blocks, key=value secrets, emails, phone numbers and long hex or
+base64 blobs. A secret the window would cut in half is trimmed off the edge
+rather than printed in part.
+
+Reasoning, thinking blocks and system or developer prompts are skipped: they
+are not what anyone said and they are where the long private context lives.
+
+Read-only. It opens files for reading and writes nothing, not even a cache.
+A ripgrep prefilter (when rg is installed) picks the files that contain the
+words at all, and inside a file a raw substring check on the bytes runs before
+any line is parsed as JSON, so a 3.8 GB transcript store is searched without
+parsing the lines that cannot match.
+
+Environment, for tests: AGENT_HISTORY_CLAUDE_DIRS (os.pathsep separated) and
+AGENT_HISTORY_CODEX_DIR replace the default roots.
+"""
+
+from __future__ import annotations  # tools/review_cross.py loads this under Python 3.9 too
+
+import argparse
+import base64
+import binascii
+import json
+import math
+from collections import Counter
+from functools import lru_cache
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import unquote
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
+
+HOME = Path.home()
+
+# ---------------------------------------------------------------- redaction
+
+# Every pattern here runs on text anyone could have planted in a transcript,
+# so each one is linear. The rule that keeps them so: a pattern whose leading
+# run can fail after scanning gets a lookbehind that lets it start only at the
+# beginning of that run, every other repeat is bounded, and nothing nests.
+# A plain run with nothing required after it ([..]{16,}) is left unbounded:
+# it cannot fail once it has scanned, and bounding it would print the tail of
+# a long key. On 2026-10-10 "a." * 500_000 made the old email rule run for
+# minutes and "a-" * 500_000 did the same to the key=value rule; the timing
+# tests in tests/test_agent_history.py hold every pattern to under 1 s on 1 MB.
+#
+# Order matters: a whole private key block or a bearer header is claimed before
+# the generic blob rules see its pieces, and the specific vendor prefixes go
+# before the hex and base64 catch-alls so the label says what leaked.
+_SECRET_RULES = [
+    ("PRIVATE_KEY", re.compile(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
+    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s{1,10})[^\s,;&]{8,}")),
+    ("AUTH", re.compile(r"(?i)\b(authorization\s{0,10}[:=]\s{0,10})[^\s,;&]{6,}")),
+    ("API_KEY", re.compile(r"\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}")),
+    ("GITHUB_TOKEN", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
+    ("AWS_KEY", re.compile(r"(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])")),
+    ("SLACK_TOKEN", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("GOOGLE_KEY", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}")),
+    ("STRIPE_KEY", re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}")),
+    # A secret-ish key in any syntax: name=value, name: value, "name": "value",
+    # 'name': 'value', <name>value, a header line, --name value, --name=value,
+    # -p value, and name value when the name is itself a key. Only the name
+    # and separator are matched; the value is replaced by a marker pass, so a
+    # name with no keyword never swallows the text after it.
+    ("SECRET", re.compile(
+        r"(?<![\w.-])(--?)?([A-Za-z][\w.-]*)"
+        r"([\"']?\s{0,8}[:=]\s{0,8}[\"']?|[\"']?>|\s{1,8})(?=[^\s,;&])")),
+    ("HEX", re.compile(r"(?<![0-9A-Za-z_])[0-9a-fA-F]{32,}(?![0-9A-Za-z_])")),
+    ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
+]
+_BLOB = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{40,}={0,2}")
+
+# Emails are found from their one fixed character, the "@", and finished in
+# Python, because a regex that has to scan back over a run to find where the
+# address starts is the quadratic shape.
+# The userinfo repeat cannot backtrack into itself: each round ends on an '@'
+# its class excludes, so the rounds are unambiguous, and there are at most 16.
+_URL_CRED = re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]{0,30}://)((?:[^\s/'\"<>@]*@)+)")
+_EMAIL_DOMAIN = re.compile(r"@[\w-]+(?:\.[\w-]+)+(?![\w-])")
+_EMAIL_LOCAL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-")
+_TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
+MAX_REDACT = 1 << 20  # characters; past this the rest is cut, never scanned
+_JWT = re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_JWT_SEG = re.compile(r"eyJ[A-Za-z0-9_-]*")
+
+
+def _jwts(text: str) -> str:
+    """A JWT may follow a dash ("token-eyJ..."), so it cannot be anchored to
+    the start of a run, and "eyJ-" * N would then rescan the run from every
+    eyJ. A start that fails fails for every later eyJ in the same first
+    segment too, since that segment ends at the same place, so the search
+    skips to the segment's end."""
+    out, last = [], 0
+    pos = text.find("eyJ")
+    while pos != -1:
+        prev = text[pos - 1] if pos else ""
+        if not (prev.isalnum() or prev == "_"):
+            m = _JWT.match(text, pos)
+            if m:
+                out.append(text[last:pos])
+                out.append("[JWT]")
+                last = m.end()
+                pos = text.find("eyJ", last)
+                continue
+            pos = _JWT_SEG.match(text, pos).end()
+        else:
+            pos += 3
+        pos = text.find("eyJ", pos)
+    if not out:
+        return text
+    out.append(text[last:])
+    return "".join(out)
+
+
+def _url_cred_sub(m: re.Match) -> str:
+    user = m.group(2)[:-1]
+    colon = user.find(":")
+    if colon > 0 or (colon < 0 and "@" not in user and len(user) >= 16):
+        return m.group(1) + "[REDACTED]@"
+    return m.group(0)
+
+
+def _url_userinfo(text: str) -> str:
+    """scheme://user:password@host and scheme://longtoken@host become
+    scheme://[REDACTED]@host. A password may hold '@'; the last '@' before the
+    host wins."""
+    return _URL_CRED.sub(_url_cred_sub, text)
+
+
+def _emails(text: str) -> str:
+    out, last = [], 0
+    for m in _EMAIL_DOMAIN.finditer(text):
+        at = m.start()
+        lo = at
+        # Unbounded but linear: the walk never crosses the previous match.
+        while lo > last and text[lo - 1] in _EMAIL_LOCAL:
+            lo -= 1
+        if lo == at:
+            continue
+        out.append(text[last:lo])
+        out.append("[EMAIL]")
+        last = m.end()
+    if not out:
+        return text
+    out.append(text[last:])
+    return "".join(out)
+
+
+def _blob_sub(m: re.Match) -> str:
+    s = m.group(0)
+    # A file path is a long run too (codex/sessions/2026/09/23/rollout-...).
+    # Random base64 almost never has three slashes with most segments plain
+    # lowercase words or numbers; a path almost always does.
+    segs = [x for x in s.split("/") if x]
+    if len(segs) >= 4 and \
+            sum(bool(re.fullmatch(r"[a-z0-9._-]+", x)) for x in segs) * 2 >= len(segs):
+        return s
+    # A long run with upper, lower and a digit is a key or an encoded blob; a
+    # long all-lowercase kebab identifier or a path segment is left alone.
+    if re.search(r"[A-Z]", s) and re.search(r"[a-z]", s) and re.search(r"\d", s):
+        return "[BLOB]"
+    return s
+
+
+# The value is not consumed by the name match (a name with no keyword would
+# then swallow "jane&password=..." whole and skip the real key). A keyword
+# match leaves a marker, and one more pass replaces marker plus value. NUL is
+# stripped from the text before any rule runs, so it cannot occur naturally.
+# NUL is stripped from the text before any rule runs, so these markers cannot
+# occur naturally. One per quoting style: a quoted value runs to its quote.
+_VALUE_MARK, _MARK_DQ, _MARK_SQ = "\x00V\x00", "\x00D\x00", "\x00S\x00"
+# A value runs to its real end: an unquoted one to the next whitespace, ',',
+# ';', '&' or line end, whatever is inside it (/ + = [ ] ) } < > and quotes
+# included); a quoted one to the quote that closes it, which is a quote
+# followed by a delimiter or the end, so a quote inside the value (left bare
+# once the JSON escapes are decoded) does not end it. Each step consumes one
+# character, so neither can backtrack.
+_MARKED_VALUES = [
+    (re.compile("\x00D\x00(?:[^\"\n]|\"(?![\\s,;&}\\])]|$))*"), "[REDACTED]"),
+    (re.compile("\x00S\x00(?:[^'\n]|'(?![\\s,;&}\\])]|$))*"), "[REDACTED]"),
+    (re.compile("\x00V\x00[^\\s,;&]*"), "[REDACTED]"),
+]
+def _marked_value_sub(m: re.Match) -> str:
+    """A value that is already exactly one of this tool's labels keeps it
+    ("key [AWS_KEY]" stays saying what leaked); anything else, including a
+    label with more glued on ("[API_KEY]|rest"), becomes [REDACTED]."""
+    value = m.group(0)[3:]
+    return value if _PLACEHOLDER.fullmatch(value) else "[REDACTED]"
+
+
+_KEYWORDS = (r"key|token|secret|passwd|password|pwd|auth|credentials?|session|cookie|bearer|api|private"
+             r"|signature|sig|access|refresh|client_secret")
+_SECRET_NAME = re.compile(r"(?i)" + _KEYWORDS.replace("|sig|", "|sig|"))
+# With only whitespace between them, "token abc" is a key and its value but
+# "tokenizer output" is prose: the name must be a keyword, or end in one after
+# a separator (API_KEY, db-password), plural allowed.
+_KEY_WORD = re.compile(r"(?i)(?:[\w.-]*[_.-])?(?:" + _KEYWORDS + r")s?")
+
+
+@lru_cache(maxsize=4096)
+def _is_key(prefix: str, name: str, spaced: bool) -> bool:
+    if prefix == "-" and name == "p":
+        return True  # mysql -p X, the one single-letter flag that means password
+    if not _SECRET_NAME.search(name):
+        return False
+    return not spaced or bool(prefix) or bool(_KEY_WORD.fullmatch(name))
+
+
+def _secret_sub(m: re.Match) -> str:
+    """The name run is matched whole and checked here, so a keyword anywhere
+    in a name of any length counts, without a regex scanning back for it.
+    Names repeat, so the decision is cached; a megabyte of "token token"
+    costs one decision, not 140,000."""
+    prefix, name, sep = m.group(1, 2, 3)
+    prefix = prefix or ""
+    last = sep[-1]
+    if not _is_key(prefix, name, last.isspace() and not sep.strip()):
+        return m.group(0)
+    if last == '"':
+        return m.group(0) + _MARK_DQ
+    if last == "'":
+        return m.group(0) + _MARK_SQ
+    return m.group(0) + _VALUE_MARK
+
+
+# The catch-all, last: any maximal run of token characters 20+ long that has
+# three of the four character classes, or 3.5+ bits of entropy per character,
+# is a secret whatever its shape. Only shapes that can be named as safe are
+# exempt: UUIDs, file paths made of word-like segments, and plain words.
+# The run regex cannot backtrack: it starts only where a run starts (the
+# lookbehind) and nothing follows the greedy repeat that could fail.
+_RUN = re.compile(r"(?<![A-Za-z0-9+/=_.~-])[A-Za-z0-9+/=_.~-]{20,}")
+_UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.[a-z]{1,6})?")
+_WORD_PIECE = re.compile(
+    r"[a-z]{1,20}\d{0,3}|[A-Z][a-z]{2,20}\d{0,3}|[A-Z]{1,12}\d{0,3}|\d{1,8}"
+    r"|[a-z]{1,20}(?:[A-Z][a-z]{1,20}){1,4}|(?:[A-Z][a-z]{1,20}){2,5}|\d{1,4}[A-Z]\d{1,4}|[a-z]\d{1,4}")
+_HEX_PIECE_PATH = re.compile(r"[0-9a-f]{1,20}")
+_PIECE_SPLIT = re.compile(r"[._~-]")
+
+
+def _entropy(run: str) -> float:
+    n = len(run)
+    return -sum(k / n * math.log2(k / n) for k in Counter(run).values())
+
+
+def _safe_run(run: str) -> bool:
+    """A named safe shape: a UUID, a path of word-like segments, or plain
+    words. Outside a path, hex pieces are not words, and two or more pieces
+    that mix letters and digits (Kx4_AK4_Tb6) read as a key cut into pieces,
+    not as an identifier."""
+    if _UUID.fullmatch(run):
+        return True
+    if "+" in run or "=" in run:
+        return False
+    is_path = run.count("/") >= 2
+    mixed = 0
+    for seg in run.split("/"):
+        for piece in _PIECE_SPLIT.split(seg):
+            if not piece:
+                continue
+            if is_path and _HEX_PIECE_PATH.fullmatch(piece):
+                continue
+            if not _WORD_PIECE.fullmatch(piece):
+                return False
+            if not is_path and any(c.isdigit() for c in piece) and any(c.isalpha() for c in piece):
+                mixed += 1
+                if mixed >= 2:
+                    return False
+    return True
+
+
+def _entropy_sub(m: re.Match) -> str:
+    run = m.group(0)
+    if _safe_run(run):
+        return run
+    classes = (any(c.isupper() for c in run) + any(c.islower() for c in run)
+               + any(c.isdigit() for c in run) + any(not c.isalnum() for c in run))
+    if classes >= 3 or _entropy(run) >= 3.5:
+        return "[SECRET]"
+    # Letters and digits mixed in a run that is not a named safe shape: short
+    # hex, uppercase-and-digit codes and the like sit under 3.5 bits but are
+    # still keys more often than anything else this long.
+    if any(c.isalpha() for c in run) and any(c.isdigit() for c in run):
+        return "[SECRET]"
+    return run
+
+
+def _apply_rules(text: str) -> str:
+    text = _url_userinfo(text)
+    text = _jwts(text)
+    for label, rx in _SECRET_RULES:
+        if label == "BEARER":
+            text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
+        elif label == "AUTH":
+            text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
+        elif label == "SECRET":
+            # Skipped outright when no keyword and no -p flag is present, so
+            # text full of name=value pairs with no key pays nothing for it.
+            if _SECRET_NAME.search(text) or "-p" in text:
+                text = rx.sub(_secret_sub, text)
+            for marked, _ in _MARKED_VALUES:
+                text = marked.sub(_marked_value_sub, text)
+        else:
+            text = rx.sub(f"[{label}]", text)
+        if label == "SECRET":
+            # Emails after the key=value rule, as before: an address in a
+            # password= value is claimed whole by SECRET first.
+            text = _emails(text)
+    text = _BLOB.sub(_blob_sub, text)
+    return _RUN.sub(_entropy_sub, text)
+
+
+# One JSON escape at a time, left to right, as a JSON parser reads them: a
+# backslash pairs with the character after it, so "\\n" is a backslash and an
+# n, not a newline, and a run of backslashes halves per level instead of
+# being read as one escape. Non-overlapping matches, nothing to backtrack.
+_ESC = re.compile(r"\\(u[0-9a-fA-F]{4}|[\\\"'/nrtbf])")
+_ESC_CHARS = {"n": "\n", "r": "", "t": " ", "b": "", "f": "", "\\": "\\", '"': '"', "'": "'", "/": "/"}
+
+
+def _unescape(m: re.Match) -> str:
+    e = m.group(1)
+    return chr(int(e[1:], 16)) if e[0] == "u" else _ESC_CHARS[e]
+
+
+def _unescape_deep(m: re.Match) -> str:
+    """Past the first level a \\n may be a literal backslash-n the level
+    before produced, inside a secret; dropping it rejoins the secret where a
+    newline would split it past every rule."""
+    e = m.group(1)
+    return "" if e == "n" else _unescape(m)
+
+
+_PCT = re.compile(r"%[0-9A-Fa-f]{2}")
+_B64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
+
+
+def _normalize(text: str) -> str:
+    """Undo the encodings a secret hides behind in a transcript: JSON escapes
+    nested inside tool output (a backslash-quote, or \\u0073k- for sk-) and
+    percent-encoding in URLs and form bodies. The snippet is for reading, so
+    showing the decoded form costs nothing, and the rules then see one
+    spelling of each secret."""
+    for level in range(3):  # escapes nest: a JSON string inside a JSON string
+        before = text
+        text = _ESC.sub(_unescape if level == 0 else _unescape_deep, text)
+        # Controls out after every level: a terminal string terminator that a
+        # level just decoded (ESC then backslash) must not survive to be read
+        # as the start of an escape by the next level.
+        text = strip_controls(text)
+        if _PCT.search(text):
+            text = strip_controls(unquote(text))
+        if text == before:
+            break
+    return text
+
+
+def _b64_sub(m: re.Match) -> str:
+    """A base64 run that decodes to text holding a secret is that secret."""
+    tok = m.group(0)
+    if len(tok) > 4096:
+        # Decoding a megabyte only to run every rule on it again doubles the
+        # cost; a run that long is mixed-class or high-entropy, so the
+        # catch-all at the end redacts it whole without the decode.
+        return tok
+    raw = tok.replace("-", "+").replace("_", "/")
+    raw += "=" * (-len(raw) % 4)
+    try:
+        dec = base64.b64decode(raw, validate=True).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return tok
+    if dec.isprintable() and _apply_rules(_normalize(dec)) != _normalize(dec):
+        return "[BLOB]"
+    return tok
+
+
+def _cap(text: str) -> str:
+    """Cut text past MAX_REDACT, dropping a token the cut would split so no
+    secret is printed in part."""
+    if len(text) <= MAX_REDACT:
+        return text
+    head = text[:MAX_REDACT]
+    j = len(head)
+    while j > 0 and _TOKEN_CH.match(head[j - 1]):
+        j -= 1
+    return head[:j] + f" [TRUNCATED {len(text) - j} chars]"
+
+
+# A terminal sequence inside a secret splits it so no rule sees it whole,
+# and then the escaping in emit() prints the second half. They come out
+# entirely, introducer and parameters, before any rule runs.
+_ANSI = re.compile(
+    "\x1b\\[[0-?]*[ -/]*[@-~]"                                  # CSI: ESC [ params final
+    "|\x9b[0-?]*[ -/]*[@-~]"                                    # C1 CSI
+    "|(?:\x1b\\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\\\|\x9c)"   # OSC ... BEL or ST
+    "|(?:\x1b[PX^_]|[\x90\x98\x9e\x9f])[^\x1b\x9c]*(?:\x1b\\\\|\x9c)"  # DCS, SOS, PM, APC strings
+    "|\x1b[ -/]+[0-~]"                                          # ESC with intermediates: ESC ( B, ESC # 8
+    "|\x1b[0-~]"                                                # every other two-byte escape
+)
+# Everything a terminal acts on or a reader cannot see, which is also
+# everything that can sit inside a secret and split it past the rules: C0 but
+# tab and newline, DEL, C1, the Unicode format characters (zero-width
+# space and joiners, word joiner, BOM, soft hyphen, the bidi marks and
+# overrides, the Arabic letter mark, the tag characters) and the line and
+# paragraph separators.
+_INVISIBLE = ("\x00-\x08\x0b-\x1f\x7f-\x9f­؀-؅؜۝܏᠎"
+              "​-‏ -‮⁠-⁤⁦-⁯﻿￹-￻"
+              "\U000e0001\U000e0020-\U000e007f")
+_STRIP = re.compile("[" + _INVISIBLE + "]")
+
+
+def strip_controls(text: str) -> str:
+    return _STRIP.sub("", _ANSI.sub("", text))
+
+
+def redact(text: str) -> str:
+    """Replace secrets and personal identifiers with [LABEL] placeholders.
+
+    Order: cap, strip terminal controls so a split secret rejoins, decode the
+    escapes a secret hides behind, strip again (decoding can make new
+    controls), then the rules. The cap truncates: what is past it is dropped,
+    never printed."""
+    if not text:
+        return text
+    text = strip_controls(_cap(text))
+    text = strip_controls(_normalize(text))
+    text = _B64.sub(_b64_sub, _cap(text))
+    return _apply_rules(text)
+
+
+def _redact_obj(obj):
+    if isinstance(obj, str):
+        return redact(obj)
+    if isinstance(obj, dict):
+        return {redact(str(k)): _redact_obj(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact_obj(v) for v in obj]
+    return obj
+
+
+# C0 controls but tab and newline, DEL, C1 (0x9b is a one-byte CSI on some
+# terminals) and the bidi overrides that reorder what a line appears to say.
+_CONTROL = re.compile("[" + _INVISIBLE + "]")
+_CONTROL_JSON = re.compile("[" + _INVISIBLE.replace("\x00-\x08\x0b-\x1f", "") + "]")
+
+
+def _visible(m: re.Match) -> str:
+    c = ord(m.group(0))
+    return f"\\x{c:02x}" if c <= 0xFF else f"\\u{c:04x}"
+
+
+def emit(line, stream=None) -> None:
+    """The one door to stdout and stderr. Every byte this tool prints passes
+    here and is redacted as the final string: a dict is redacted key by key and
+    value by value and then serialized, so the JSON stays valid; anything else
+    is redacted whole, after every f-string, truncation and join is done.
+
+    Then no terminal control sequence survives. Text output shows each control
+    character as a visible \\xNN; JSON output relies on json.dumps for C0 and
+    escapes DEL, C1 and bidi overrides itself, which json.dumps with
+    ensure_ascii=False would otherwise print raw."""
+    stream = stream if stream is not None else sys.stdout
+    if isinstance(line, (dict, list)):
+        out = json.dumps(_redact_obj(line), ensure_ascii=False)
+        out = _CONTROL_JSON.sub(lambda m: f"\\u{ord(m.group(0)):04x}", out)
+    else:
+        out = _CONTROL.sub(_visible, redact(str(line)))
+    stream.write(out + "\n")
+
+
+class UsageError(Exception):
+    pass
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse echoes a bad argument back; that echo goes through emit too."""
+
+    def error(self, message):
+        emit(f"{self.prog}: error: {message}", sys.stderr)
+        raise SystemExit(2)
+
+    def print_help(self, file=None):
+        emit(self.format_help().rstrip("\n"), file)
+
+
+# ---------------------------------------------------------------- sources
+
+def claude_roots() -> list[Path]:
+    env = os.environ.get("AGENT_HISTORY_CLAUDE_DIRS")
+    if env is not None:
+        return [Path(p) for p in env.split(os.pathsep) if p]
+    roots = [HOME / ".claude" / "projects"]
+    if (HOME / ".claude-2" / "projects").is_dir():
+        roots.append(HOME / ".claude-2" / "projects")
+    return roots
+
+
+def codex_root() -> Path:
+    return Path(os.environ.get("AGENT_HISTORY_CODEX_DIR", str(HOME / ".codex" / "sessions")))
+
+
+def project_of(cwd: str) -> str:
+    """The repo a folder belongs to; a worktree under <repo>/.claude/worktrees/ is that repo."""
+    parts = Path(cwd).parts
+    if ".claude" in parts and "worktrees" in parts:
+        i = parts.index(".claude")
+        if i > 0:
+            return parts[i - 1]
+    return Path(cwd).name or cwd
+
+
+def discover(runtime: str, cutoff: float | None, repo: str | None) -> list[tuple[str, Path, float]]:
+    """(runtime, path, mtime), newest first. A file last written before the
+    cutoff cannot hold an entry after it, so it is skipped without opening."""
+    files: list[tuple[str, Path, float]] = []
+    repo_key = re.sub(r"[^A-Za-z0-9]", "-", repo).lower() if repo else None
+
+    def add(kind: str, p: Path) -> None:
+        try:
+            m = p.stat().st_mtime
+        except OSError:
+            return
+        if cutoff is None or m >= cutoff:
+            files.append((kind, p, m))
+
+    if runtime in ("all", "claude-code"):
+        for root in claude_roots():
+            if not root.is_dir():
+                continue
+            for proj in root.iterdir():
+                # Claude names a project folder after its cwd with / and . as -,
+                # so a repo filter can drop whole folders before reading one.
+                if repo_key and repo_key not in proj.name.lower():
+                    continue
+                if proj.is_dir():
+                    for p in proj.glob("*.jsonl"):
+                        add("claude-code", p)
+    if runtime in ("all", "codex"):
+        root = codex_root()
+        if root.is_dir():
+            for p in root.rglob("*.jsonl"):
+                add("codex", p)
+    files.sort(key=lambda t: t[2], reverse=True)
+    return files
+
+
+def find_rg() -> tuple[str, str] | None:
+    """(executable, argv0) for a ripgrep: one on PATH, else the one Claude Code
+    ships inside its own binary, which answers to argv0 "rg". This Mac has no
+    rg on PATH, and on 2026-10-10 a full search of 5,068 transcripts (4.2 GB)
+    took 9.7 s in pure Python and 1.2 s through Claude Code's embedded rg."""
+    if os.environ.get("AGENT_HISTORY_NO_RG"):
+        return None
+    rg = shutil.which("rg")
+    if rg:
+        return rg, "rg"
+    for exe in (os.environ.get("CLAUDE_CODE_EXECPATH"), str(HOME / ".local" / "bin" / "claude")):
+        if not exe or not os.access(exe, os.X_OK):
+            continue
+        try:
+            p = subprocess.run(["rg", "--version"], executable=exe, capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if p.returncode == 0 and p.stdout.startswith(b"ripgrep"):
+            return exe, "rg"
+    return None
+
+
+def rg_prefilter(paths: list[Path], needles: list[bytes]) -> set[Path] | None:
+    """Files containing every needle, by ripgrep; None when no rg is found."""
+    found_rg = find_rg() if paths else None
+    if not found_rg:
+        return None
+    exe, argv0 = found_rg
+    keep = {str(p) for p in paths}
+    for needle in needles:
+        found: set[str] = set()
+        todo = sorted(keep)
+        for i in range(0, len(todo), 400):
+            chunk = todo[i:i + 400]
+            try:
+                out = subprocess.run(
+                    [argv0, "--files-with-matches", "--ignore-case", "--fixed-strings", "--no-messages",
+                     "--no-ignore", "--hidden", "-e", needle.decode("utf-8", "replace"), "--", *chunk],
+                    executable=exe, capture_output=True, timeout=600)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+            if out.returncode not in (0, 1):
+                return None
+            found.update(l for l in out.stdout.decode("utf-8", "replace").splitlines() if l)
+        keep = found
+        if not keep:
+            break
+    return {Path(p) for p in keep}
+
+
+# ---------------------------------------------------------------- parsing
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        out = []
+        for c in content:
+            if isinstance(c, str):
+                out.append(c)
+            elif isinstance(c, dict) and isinstance(c.get("text"), str):
+                out.append(c["text"])
+        return "\n".join(out)
+    return ""
+
+
+def claude_items(e: dict):
+    """(role, text) pieces of one Claude Code entry worth searching."""
+    e = transcript_rows.as_user_row(e)
+    kind = e.get("type")
+    if kind not in ("user", "assistant"):
+        return
+    msg = e.get("message")
+    if not isinstance(msg, dict):
+        return
+    content = msg.get("content")
+    if isinstance(content, str):
+        yield kind, content
+        return
+    if not isinstance(content, list):
+        return
+    for c in content:
+        if not isinstance(c, dict):
+            continue
+        t = c.get("type")
+        if t == "text":
+            yield kind, str(c.get("text") or "")
+        elif t == "tool_use":
+            yield "tool_use", f"{c.get('name', '')} {json.dumps(c.get('input'), ensure_ascii=False)}"
+        elif t == "tool_result":
+            yield "tool", _text_of(c.get("content"))
+
+
+def codex_items(e: dict):
+    if e.get("type") != "response_item":
+        return
+    p = e.get("payload")
+    if not isinstance(p, dict):
+        return
+    t = p.get("type")
+    if t == "message":
+        role = p.get("role")
+        if role in ("user", "assistant"):
+            yield role, _text_of(p.get("content"))
+    elif t == "agent_message":
+        yield "assistant", _text_of(p.get("content"))
+    elif t in ("function_call", "custom_tool_call"):
+        yield "tool_use", f"{p.get('name', '')} {p.get('arguments') or p.get('input') or ''}"
+    elif t in ("function_call_output", "custom_tool_call_output"):
+        out = p.get("output")
+        yield "tool", out if isinstance(out, str) else _text_of(out) or json.dumps(out, ensure_ascii=False)
+
+
+def parse_ts(s) -> float | None:
+    if not isinstance(s, str) or not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+
+
+def snippet(text: str, pos: int, width: int, term: str = "") -> str:
+    """A redacted window around pos.
+
+    Redaction runs on a whole region first, never on a piece cut to the
+    window: a region boundary snaps to a line break, a token cut by a boundary
+    is dropped, and the region reaches far past what is shown. Only after
+    that is the window cut, from the redacted text, so a secret is never split
+    before the regexes see it. Nothing is inserted into the text before
+    redaction either: a marker inside a key would break the match. The match
+    is found again in the redacted text, and when it fell inside a secret the
+    window sits where it was, proportionally."""
+    reach = max(20_000, 10 * width)
+    lo, hi = max(0, pos - reach), min(len(text), pos + reach)
+    if lo > 0:
+        nl = text.find("\n", lo, pos)
+        lo = nl + 1 if nl >= 0 else lo
+    if hi < len(text):
+        nl = text.rfind("\n", pos, hi)
+        hi = nl if nl > pos else hi
+    piece = text[lo:hi]
+    rel = pos - lo
+    if lo > 0 and text[lo - 1] != "\n":
+        i = 0
+        while i < len(piece) and _TOKEN_CH.match(piece[i]):
+            i += 1
+        piece, rel = piece[i:], rel - i
+    if hi < len(text) and text[hi] != "\n":
+        j = len(piece)
+        while j > 0 and _TOKEN_CH.match(piece[j - 1]):
+            j -= 1
+        piece = piece[:j]
+    rel = max(0, min(rel, len(piece)))
+    red = redact(piece)
+    at = red.lower().find(term.lower()) if term else -1
+    if at < 0:
+        at = int(rel * len(red) / len(piece)) if piece else 0
+    a, b = max(0, at - width), min(len(red), at + width)
+    # Snap to word edges so the view does not start or end mid-word.
+    while a > 0 and not red[a - 1].isspace() and at - a < width + 30:
+        a -= 1
+    while b < len(red) and not red[b].isspace() and b - at < width + 30:
+        b += 1
+    view = " ".join(red[a:b].split())
+    return ("..." if a > 0 or lo > 0 else "") + view + ("..." if b < len(red) or hi < len(text) else "")
+
+
+# ---------------------------------------------------------------- allowlist
+#
+# Six review rounds each found a secret shape the denylist above missed, so
+# the default output stops depending on it being complete. After the
+# denylist, every snippet goes through an allowlist: split on whitespace, peel
+# ordinary punctuation off each chunk, and keep the core only if it is a plain
+# word (letters, at most one internal apostrophe or hyphen, 24 at most), a
+# number of 6 digits at most, or nothing (punctuation alone). Anything else,
+# letters mixed with digits, a longer run, or anything holding / + = _ % @ :
+# and the like, becomes MARK. A secret has to be one of those to survive, and
+# no key or token format is a plain dictionary-shaped word.
+
+MARK = "[·]"
+_EDGE_PUNCT = ".,;:!?()[]{}<>\"'`*…"
+_EDGE_PUNCT_NO_BRACKETS = ".,;:!?(){}<>\"'`*…"
+_ALLOWED_WORD = re.compile(r"(?=.{1,24}$)[A-Za-z]+(?:['’-][A-Za-z]+)?")
+_ALLOWED_NUM = re.compile(r"\d{1,6}")
+# Only this tool's own labels: an arbitrary "[ALLCAPS]" in a transcript could
+# be a secret in brackets.
+_PLACEHOLDER = re.compile(r"\[(?:REDACTED|SECRET|API_KEY|GITHUB_TOKEN|AWS_KEY|SLACK_TOKEN|GOOGLE_KEY"
+                          r"|STRIPE_KEY|JWT|EMAIL|HEX|PHONE|BLOB|PRIVATE_KEY|·)\]")
+_PATH_CHUNK = re.compile(r"[A-Za-z0-9._~/-]+")
+_SESSION_ID = re.compile(r"[0-9A-Za-z-]{1,64}")
+_WS_SPLIT = re.compile(r"(\s+)")
+_OWN_FIELDS = {
+    "runtime": re.compile(r"claude-code|codex"),
+    "role": re.compile(r"user|assistant|tool_use|tool"),
+    "time": re.compile(r"(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z)?"),
+}
+
+
+def _allow_chunk(chunk: str, path_ok: bool) -> str:
+    if not chunk or chunk.isspace() or _PLACEHOLDER.fullmatch(chunk):
+        return chunk
+    if path_ok and _PATH_CHUNK.fullmatch(chunk):
+        return chunk
+    # A placeholder already in the text ("[API_KEY]", or a MARK from the last
+    # round) stays as it is inside its quotes and commas; marking it again
+    # would nest brackets on every round of the joining guard.
+    if _PLACEHOLDER.fullmatch(chunk.strip(_EDGE_PUNCT_NO_BRACKETS)):
+        return chunk
+    core = chunk.strip(_EDGE_PUNCT)
+    if not core:
+        return chunk
+    if _ALLOWED_WORD.fullmatch(core) or _ALLOWED_NUM.fullmatch(core) or _PLACEHOLDER.fullmatch(core):
+        return chunk
+    lead = chunk[: len(chunk) - len(chunk.lstrip(_EDGE_PUNCT))]
+    trail = chunk[len(chunk.rstrip(_EDGE_PUNCT)):]
+    return f"{lead}{MARK}{trail}"
+
+
+def allowlist(text: str, path_ok: bool = False) -> str:
+    return "".join(_allow_chunk(c, path_ok) for c in _WS_SPLIT.split(text))
+
+
+def safe_text(text: str, path_ok: bool = False) -> str:
+    """Denylist, then allowlist, then the joining guard: the kept fragments
+    put back together go through the full denylist again, in case two of them
+    side by side spell a secret, and the pair repeats until nothing changes
+    (three rounds at most)."""
+    out = allowlist(redact(text), path_ok)
+    for _ in range(3):
+        again = allowlist(redact(out), path_ok)
+        if again == out:
+            break
+        out = again
+    return out
+
+
+def render(hit: dict, raw_snippets: bool = False) -> dict:
+    """The one place a hit becomes output, for text and JSON alike, so the
+    two cannot disagree. Every field is redacted; the snippet is also
+    allowlisted unless --raw-snippets; repo and file may keep path segments;
+    session must be an id shape; runtime, role and time are this tool's own."""
+    out = {}
+    for k, v in hit.items():
+        if not isinstance(v, str):
+            out[k] = v
+        elif k == "snippet":
+            out[k] = redact(v) if raw_snippets else safe_text(v)
+        elif k in ("repo", "file"):
+            out[k] = safe_text(v, path_ok=True)
+        elif k == "session":
+            red = redact(v)
+            out[k] = red if _SESSION_ID.fullmatch(red) else MARK
+        elif k in _OWN_FIELDS:
+            # Written by this tool, not copied from a transcript: checked
+            # against their own closed shapes instead of allowlisted as prose.
+            out[k] = v if _OWN_FIELDS[k].fullmatch(v) else MARK
+        else:
+            out[k] = safe_text(v)
+    return out
+
+
+def search_file(kind: str, path: Path, terms: list[str], phrase: bool, needles: list[bytes],
+                cutoff: float | None, repo: str | None, role: str | None, width: int):
+    """Stream one transcript; yield hit dicts. Never loads the file whole."""
+    meta_cwd = ""
+    session = path.stem
+    if kind == "codex":
+        m = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", path.stem)
+        session = m.group(1) if m else path.stem
+    try:
+        fh = open(path, "rb")
+    except OSError:
+        return
+    with fh:
+        first = True
+        for raw in fh:
+            if kind == "codex" and first:
+                first = False
+                # The session_meta line names the folder; read it whatever it says.
+                try:
+                    e0 = json.loads(raw)
+                    p0 = e0.get("payload") if isinstance(e0, dict) else None
+                    if isinstance(p0, dict) and e0.get("type") == "session_meta":
+                        meta_cwd = str(p0.get("cwd") or "")
+                        continue
+                except ValueError:
+                    pass
+            low = raw.lower()
+            if not all(n in low for n in needles):
+                continue
+            try:
+                e = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(e, dict):
+                continue
+            ts = parse_ts(e.get("timestamp"))
+            if cutoff is not None and ts is not None and ts < cutoff:
+                continue
+            cwd = str(e.get("cwd") or meta_cwd or "")
+            if kind == "claude-code" and not cwd:
+                cwd = path.parent.name
+            proj = project_of(cwd) if cwd else ""
+            if repo and repo.lower() not in proj.lower():
+                continue
+            items = claude_items(e) if kind == "claude-code" else codex_items(e)
+            for r, text in items:
+                if role and r != role:
+                    continue
+                if not text:
+                    continue
+                tl = text.lower()
+                if phrase:
+                    pos = tl.find(terms[0])
+                    if pos < 0:
+                        continue
+                else:
+                    if not all(t in tl for t in terms):
+                        continue
+                    pos = tl.find(terms[0])
+                yield {
+                    "runtime": kind,
+                    "session": str(e.get("sessionId") or session) if kind == "claude-code" else session,
+                    "time": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z") if ts else "",
+                    "repo": proj,
+                    "role": r,
+                    "snippet": snippet(text, pos, width, terms[0]),
+                    "file": str(path),
+                }
+
+
+# ---------------------------------------------------------------- cli
+
+def parse_since(s: str | None) -> float | None:
+    if not s:
+        return None
+    m = re.fullmatch(r"(\d+)\s*([mhdw])", s.strip())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        secs = {"m": 60, "h": 3600, "d": 86400, "w": 604800}[unit]
+        return time.time() - n * secs
+    try:
+        d = datetime.fromisoformat(s)
+    except ValueError:
+        raise UsageError(f"agent-history: --since takes 30m, 12h, 7d, 2w or a date like 2026-10-01, not {s!r}")
+    if d.tzinfo is None:
+        d = d.astimezone()
+    return d.timestamp()
+
+
+def local_time(iso: str) -> str:
+    if not iso:
+        return "?"
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso
+
+
+def cmd_search(a: argparse.Namespace) -> int:
+    started = time.monotonic()
+    query = " ".join(a.query).strip()
+    if not query:
+        emit("agent-history: give it something to search for", sys.stderr)
+        return 2
+    terms = [query.lower()] if a.phrase else [t.lower() for t in query.split()]
+    # The raw line is JSON, so a quote or backslash in the words appears escaped
+    # there; the prefilter looks for the escaped form.
+    needles = [json.dumps(t, ensure_ascii=False)[1:-1].encode("utf-8") for t in terms]
+    cutoff = parse_since(a.since)
+    files = discover(a.runtime, cutoff, a.repo)
+    candidates = rg_prefilter([p for _, p, _ in files], needles)
+    scanned = 0
+    hits: list[dict] = []
+    for kind, path, _ in files:
+        if candidates is not None and path not in candidates:
+            continue
+        scanned += 1
+        for h in search_file(kind, path, terms, a.phrase, needles, cutoff, a.repo, a.role, a.context):
+            hits.append(h)
+            if len(hits) >= a.limit:
+                break
+        if len(hits) >= a.limit:
+            break
+    hits.sort(key=lambda h: h["time"], reverse=True)
+    if a.raw_snippets:
+        emit("agent-history: --raw-snippets is on: snippets are denylist-redacted only, so a secret "
+             "shape the patterns miss prints as it is. Keep this output on this machine.", sys.stderr)
+    hits = [render(h, a.raw_snippets) for h in hits]
+    elapsed = time.monotonic() - started
+    if a.json:
+        for h in hits:
+            emit(h)
+    else:
+        for h in hits:
+            emit(f"{local_time(h['time'])}  {h['runtime']:<11}  {h['repo'] or '-':<18}  "
+                 f"{h['session'][:8]}  {h['role']}")
+            emit(f"    {h['snippet']}")
+    more = " (limit reached, --limit raises it)" if len(hits) >= a.limit else ""
+    emit(f"{len(hits)} match{'es' if len(hits) != 1 else ''} in {scanned} of {len(files)} "
+         f"transcripts, {elapsed:.2f}s{more}", sys.stderr)
+    return 0 if hits else 1
+
+
+def main(argv: list[str]) -> int:
+    ap = _Parser(prog="agent-history", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", parser_class=_Parser)
+    s = sub.add_parser("search", help="search every agent transcript, redacted")
+    s.add_argument("query", nargs="+")
+    s.add_argument("--runtime", choices=["all", "claude-code", "codex"], default="all")
+    s.add_argument("--since", help="30m, 12h, 7d, 2w, or a date")
+    s.add_argument("--repo", help="only sessions whose repo name contains this")
+    s.add_argument("--role", choices=["user", "assistant", "tool_use", "tool"])
+    s.add_argument("--limit", type=int, default=30)
+    s.add_argument("--context", type=int, default=90, help="characters each side of the match")
+    s.add_argument("--phrase", action="store_true", help="match the words as one exact phrase")
+    s.add_argument("--json", action="store_true", help="one JSON object per line")
+    s.add_argument("--raw-snippets", action="store_true",
+                   help="denylist redaction only, no allowlist (warns on stderr)")
+    r = sub.add_parser("redact", help="redact stdin to stdout, allowlisted like a snippet")
+    r.add_argument("--raw", action="store_true", help="denylist redaction only (warns on stderr)")
+    a = ap.parse_args(argv)
+    if a.cmd == "search":
+        return cmd_search(a)
+    if a.cmd == "redact":
+        if a.raw:
+            emit("agent-history: --raw is on: denylist redaction only. Keep this output on this machine.",
+                 sys.stderr)
+        for text_line in sys.stdin:
+            line = text_line.rstrip("\n")
+            emit(line if a.raw else safe_text(line))
+        return 0
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)
+    except UsageError as err:
+        emit(str(err), sys.stderr)
+        sys.exit(2)
+    except Exception as err:  # a crash message can quote transcript text
+        emit(f"agent-history: {type(err).__name__}: {err}", sys.stderr)
+        sys.exit(1)

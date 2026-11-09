@@ -1,0 +1,23 @@
+---
+name: project_ff_outbound_eye_review_2026_11_03
+description: Firm Foundation's 11/3 outbound list, 104 churches checked by eye from 1,297 audited, and the rules it set
+metadata:
+  type: project
+---
+
+Firm Foundation's 11/3 outbound list came from re-auditing all 1,297 in-band churches (688 SoCal, 609 DFW) with phone screenshots, then having reviewer agents check every claim by eye and live. 685 had a reachable email. 104 scored 4 or 5 (48 SoCal, 56 DFW, 21 fives). The pipeline is in the FF repo at ops/review (632b0e8), and the working files are in ~/code/ff-reaudit-1103.
+
+Rules that came out of it:
+
+- The audit script can't judge a site. On 11/3 it told Legacy Church of Downey their 10:30 time was 8 screens down when it sat on screen 2 in a flyer image. Caleb: "Bro I hva. feeling ur being rlly stupid with how you go abt grading a church's site". Every line gets checked on the screenshot and live before it goes out, and the line leads with what a guest notices first.
+- No LDS, no LGBT-affirming churches, no cults or heresy (Oneness, Unity, Christian Science, UBF, Celestial and other Aladura churches and the like). Caleb, 11/3: "No LDS or woke ahh LGBT churches!!!!!", "Or other heresy", "Wack theology and whatnot". exclude.py keeps the church's own phrase as proof. The USC campus groups Caleb meant ("the ones that go in the USC village - Harvest") are on the USC ORSL caution list, read 11/3: City of Angels ICC, D.R.E.A.M. Campus Ministry and Restored Church Worldwide (both formerly The Harvest at USC, an ICC offshoot), Shincheonji and World Mission Society Church of God. All five are blocked by name. restoredla.com ("Restored Church", LA) is a different church and wasn't on the list.
+- Every email gets reviewed with Caleb one at a time (feedback_ff_outbound_one_email_at_a_time).
+- The email's "one of N fixes" comes from that church's fix list, never typed by hand. 8 of the first 61 lists confirmed fewer items than the line promised.
+
+Open as of 11/3: whether HFF DFW (Saturday Sabbath, feast pages) stays, three progressive-denomination churches with no explicit affirming statement, and Spanish or Portuguese emails for Iglesia CAFE, IBFH and ADMES.
+
+Final state, 11/3 2:25pm: 101 keepers (46 SoCal, 55 DFW, 21 fives), each with an email 1 draft and a fix list, and 51 churches excluded with proof. Drafts are in ~/Downloads/FF email drafts 11-3.md. Nothing sent.
+
+Two pipeline traps from the last hour, both fixed in FF 0fdfb99. exclude.py used to overwrite excluded.jsonl, so a rescan of only the keepers dropped 36 exclusions and four excluded churches came back into the drafts; it merges now. And a fixed list of about pages missed Interwoven's LGBTQIA+ statement at /statement-of, so the scan now follows the church's own about, beliefs and inclusion links.
+
+First wave is English only (Caleb, 11/3: "Let's do just english for now"). Iglesia CAFE, IBFH, Iglesia El Buen Pastor, ADMES and Vietnamese Evangelical Long Beach wait for emails in their own language. Held until Caleb decides: Vallejo Drive Seventh-day Adventist, HFF DFW (Hebrew Roots style) and Triumph Worship Center (pastor titled Prophet, no beliefs page). The skips live in ops/review/load.py (NOT_ENGLISH, HELD), and the send queue was 43 SoCal and 49 DFW after them (FF 9f55dfd).

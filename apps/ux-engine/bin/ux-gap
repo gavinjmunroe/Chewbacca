@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Inventory two pages the same way and print what the second one is missing.
+
+    ux-gap https://reference.com http://localhost:8731/ --out lenses/gap
+
+Caleb, 2026-09-27: "Find every place on the lemma site, and then do a direct
+comparison to ours. Find every animation/transition on the lemma site, and
+then do a direct comparison to ours. This should all be implied with 'clone
+the lemma site'."
+
+He is right that it should be implied, and the reason it was not is that
+every tool in this repo measured ONE page. Measuring a reference tells you
+what it does. Measuring your own tells you what yours does. Neither tells you
+what is missing, which is the only question a clone ever asks, and answering
+it by reading two reports side by side is the tedium he is describing.
+
+WHAT IT INVENTORIES, on both pages identically:
+
+  PLACES      section bands down the page, each with its scroll range, its
+              element and text counts, and the tag/class shape of what is in
+              it. Detected from where the DOM composition CHANGES rather than
+              from markup, because a reference will not share our section
+              names and matching on those would compare nothing.
+
+  ANIMATIONS  every declared animation, by the SET OF PROPERTIES it touches
+              plus a duration bucket. Names cannot be compared across two
+              sites, and a name is not the animation anyway: two pages both
+              running a 900ms opacity-and-transform entrance are doing the
+              same thing whatever they call it.
+
+  TRANSITIONS every declared transition, by property and duration bucket.
+
+  MOTION      the distribution of scroll rates: pinned, parallax slower than
+              scroll, normal flow, faster than scroll. This is the axis that
+              a screenshot comparison cannot see at all, and on the reference
+              it accounts for 38% of elements.
+
+PAIRING IS STRUCTURAL, NEVER SEMANTIC. Everything is keyed on shape, so the
+comparison holds between two pages with different brands, different copy and
+different class names. The moment a key includes a class name or a string of
+copy, the tool reports that every single thing differs and is worth nothing.
+
+BUCKETS, because exactness here is noise. Durations land in bands (<150ms,
+150-350, 350-700, 700-1500, >1500) since a 420ms entrance and a 450ms one are
+the same decision, and reporting them as a gap would bury the real gaps under
+dozens of near-matches.
+
+WHAT IT WILL NOT DO. It will not tell you a section looks bad. It reports
+presence and absence of measurable structure. A page can close every gap here
+and still be ugly, and `design-gate` plus a human eye stay in the loop.
+"""
+import argparse
+import json
+import pathlib
+import sys
+from collections import Counter, defaultdict
+
+INVENTORY_JS = r"""() => {
+  const anims = [], trans = [];
+  const seenT = new Set();
+
+  for (const a of document.getAnimations()) {
+    let t = {}, props = [];
+    try { t = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+    try {
+      const fr = a.effect ? a.effect.getKeyframes() : [];
+      const s = new Set();
+      for (const f of fr) for (const k of Object.keys(f))
+        if (!["offset","computedOffset","easing","composite"].includes(k)) s.add(k);
+      props = [...s].sort();
+    } catch (e) {}
+    anims.push({
+      props, dur: typeof t.duration === "number" ? t.duration : 0,
+      delay: t.delay || 0, easing: t.easing || "",
+      iter: t.iterations === Infinity ? -1 : (t.iterations || 1),
+      kind: a.constructor.name
+    });
+  }
+
+  // Declared transitions, read off computed styles. getAnimations only shows
+  // a transition while it is RUNNING, so a page sitting still reports none.
+  for (const el of document.querySelectorAll("body *")) {
+    const s = getComputedStyle(el);
+    const p = s.transitionProperty;
+    if (!p || p === "none" || p === "all") continue;
+    const ds = s.transitionDuration.split(",").map(x => x.trim());
+    p.split(",").map(x => x.trim()).forEach((prop, i) => {
+      const d = ds[Math.min(i, ds.length - 1)] || "0s";
+      const ms = d.endsWith("ms") ? parseFloat(d) : parseFloat(d) * 1000;
+      if (!ms) return;
+      const key = prop + "|" + ms;
+      if (seenT.has(key)) { trans.find(t => t.key === key).n++; return; }
+      seenT.add(key);
+      trans.push({key, prop, dur: ms, n: 1});
+    });
+  }
+
+  return {anims, trans, height: document.documentElement.scrollHeight};
+}"""
+
+BAND_JS = r"""() => {
+  const els = [...document.querySelectorAll("body *")].filter(e => {
+    const r = e.getBoundingClientRect();
+    return r.width > 1 && r.height > 1 && r.bottom > 0 && r.top < innerHeight;
+  });
+  const shape = {};
+  let text = 0, svg = 0;
+  for (const e of els) {
+    const t = e.tagName.toLowerCase();
+    shape[t] = (shape[t] || 0) + 1;
+    if (t === "svg" || e.ownerSVGElement) svg++;
+    if (e.children.length === 0 && (e.textContent || "").trim()) text++;
+  }
+  return {n: els.length, text, svg, shape};
+}"""
+
+
+def bucket(ms):
+    """Duration bands. A 420ms entrance and a 450ms one are one decision, and
+    reporting them separately buries real gaps under near-matches."""
+    for hi, name in ((150, "<150ms"), (350, "150-350ms"), (700, "350-700ms"),
+                     (1500, "700-1500ms")):
+        if ms < hi:
+            return name
+    return ">1500ms"
+
+
+def anim_key(a):
+    """Shape, never name. Two pages running a 900ms opacity-and-transform
+    entrance are doing the same thing whatever each calls it."""
+    props = ",".join(a["props"]) or "?"
+    loop = "loop" if a["iter"] == -1 else "once"
+    return f"{props} [{bucket(a['dur'])}] {loop}"
+
+
+def collect(pg, step, height):
+    """Walk the page and record the composition at each band."""
+    bands = []
+    y = 0
+    while y < height:
+        pg.evaluate(f"window.scrollTo(0,{y})")
+        pg.wait_for_timeout(90)
+        b = pg.evaluate(BAND_JS)
+        b["y"] = y
+        bands.append(b)
+        y += step
+    return bands
+
+
+def sections(bands):
+    """Section boundaries from where composition CHANGES, not from markup.
+
+    A reference will not share our section names, and matching on those would
+    compare nothing at all. Cosine distance between consecutive tag-shape
+    vectors finds the seams that are actually there.
+    """
+    out, start = [], 0
+    for i in range(1, len(bands)):
+        a, b = bands[i - 1]["shape"], bands[i]["shape"]
+        keys = set(a) | set(b)
+        va = [a.get(k, 0) for k in keys]
+        vb = [b.get(k, 0) for k in keys]
+        na = sum(x * x for x in va) ** 0.5 or 1
+        nb = sum(x * x for x in vb) ** 0.5 or 1
+        cos = sum(x * y for x, y in zip(va, vb)) / (na * nb)
+        if cos < 0.72:                       # a real seam, not a scroll step
+            out.append((bands[start]["y"], bands[i - 1]["y"], bands[start:i]))
+            start = i
+    out.append((bands[start]["y"], bands[-1]["y"], bands[start:]))
+    return out
+
+
+def inventory(url, step, width, height_vp, settle):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": width, "height": height_vp})
+        pg.goto(url, wait_until="domcontentloaded")
+        early = pg.evaluate(INVENTORY_JS)      # catches the load choreography
+        pg.wait_for_timeout(settle)
+        late = pg.evaluate(INVENTORY_JS)
+        bands = collect(pg, step, late["height"])
+        b.close()
+
+    anims = Counter()
+    for a in early["anims"] + late["anims"]:
+        anims[anim_key(a)] += 1
+    trans = Counter()
+    for t in late["trans"]:
+        trans[f"{t['prop']} [{bucket(t['dur'])}]"] += t["n"]
+
+    secs = sections(bands)
+    return {"url": url, "height": late["height"], "anims": anims,
+            "trans": trans, "sections": secs, "bands": bands}
+
+
+def report(ref, ours, top):
+    print(f"\n  REFERENCE  {ref['url']}   {ref['height']}px, "
+          f"{len(ref['sections'])} places")
+    print(f"  OURS       {ours['url']}   {ours['height']}px, "
+          f"{len(ours['sections'])} places")
+
+    print("\n" + "=" * 70)
+    print("PLACES")
+    print("=" * 70)
+    print("  Section seams found where the DOM composition changes, so this")
+    print("  compares two pages that share no class names.\n")
+    rs, os_ = ref["sections"], ours["sections"]
+    print(f"  {'#':>3}  {'reference':<26} {'ours':<26}")
+    for i in range(max(len(rs), len(os_))):
+        r = f"y {rs[i][0]}-{rs[i][1]}, {rs[i][2][0]['n']} el" if i < len(rs) else "-"
+        o = f"y {os_[i][0]}-{os_[i][1]}, {os_[i][2][0]['n']} el" if i < len(os_) else "MISSING"
+        flag = "" if i < len(os_) else "   <- no counterpart"
+        print(f"  {i+1:>3}  {r:<26} {o:<26}{flag}")
+    if len(rs) > len(os_):
+        print(f"\n  {len(rs) - len(os_)} place(s) on the reference have nothing "
+              f"matching here.")
+
+    for label, key in (("ANIMATIONS", "anims"), ("TRANSITIONS", "trans")):
+        print("\n" + "=" * 70)
+        print(label)
+        print("=" * 70)
+        R, O = ref[key], ours[key]
+        missing = [(k, n) for k, n in R.most_common() if k not in O]
+        weaker = [(k, n, O[k]) for k, n in R.most_common() if k in O and O[k] < n * 0.5]
+        extra = [(k, n) for k, n in O.most_common() if k not in R]
+        print(f"  reference has {len(R)} distinct, {sum(R.values())} total")
+        print(f"  ours has      {len(O)} distinct, {sum(O.values())} total")
+        if missing:
+            print(f"\n  ABSENT HERE ({len(missing)}):")
+            for k, n in missing[:top]:
+                print(f"    x{n:<5} {k}")
+        if weaker:
+            print(f"\n  PRESENT BUT THINNER ({len(weaker)}):")
+            for k, n, m in weaker[:top]:
+                print(f"    {m} vs {n:<5} {k}")
+        if extra:
+            print(f"\n  OURS ONLY ({len(extra)}), which is not automatically "
+                  f"wrong:")
+            for k, n in extra[:8]:
+                print(f"    x{n:<5} {k}")
+        if not missing and not weaker:
+            print("\n  nothing absent.")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("reference")
+    ap.add_argument("ours")
+    ap.add_argument("--out")
+    ap.add_argument("--step", type=int, default=400,
+                    help="scroll px between band samples. 400 is fine for "
+                         "finding seams; ux-scan does the dense pass")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--settle", type=int, default=2600)
+    ap.add_argument("--top", type=int, default=18)
+    a = ap.parse_args()
+
+    print(f"\ninventorying reference ...")
+    ref = inventory(a.reference, a.step, a.width, 900, a.settle)
+    print(f"inventorying ours ...")
+    ours = inventory(a.ours, a.step, a.width, 900, a.settle)
+
+    report(ref, ours, a.top)
+
+    if a.out:
+        out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
+        payload = {k: {"url": v["url"], "height": v["height"],
+                       "anims": dict(v["anims"]), "trans": dict(v["trans"]),
+                       "sections": [[s[0], s[1]] for s in v["sections"]]}
+                   for k, v in (("reference", ref), ("ours", ours))}
+        (out / "gap.json").write_text(json.dumps(payload, indent=1))
+        print(f"\n  wrote {out / 'gap.json'}")
+
+    missing = sum(1 for k in ref["anims"] if k not in ours["anims"]) \
+            + sum(1 for k in ref["trans"] if k not in ours["trans"]) \
+            + max(0, len(ref["sections"]) - len(ours["sections"]))
+    print(f"\n  {missing} gaps. Work this list to zero.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

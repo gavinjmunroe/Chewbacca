@@ -35,7 +35,8 @@ STATE="$HOME/.chewbacca"
 # name|one-line help. Help output, shell completion, and the unknown-command
 # error all read this, so they cannot disagree with each other.
 COMMANDS=(
-  "open|the whole kit on one screen"
+  "open|the whole kit on one screen; add --week for your week in its own window"
+  "apps|list, run or test anything the team built (apps/)"
   "doctor|check the install and say what is broken"
   "status|what is installed, what is on, what is stale"
   "version|version installed here and in the repo"
@@ -48,28 +49,74 @@ COMMANDS=(
   "ux-policy|learn offline action rewards and plan evidence-backed graph routes"
   "clay-review|verify at most five held Clay draft records without model calls"
   "task-graph|manage durable agent jobs and verification dependencies"
+  "recipe|run a task file with typed parameters, exit-code checks and a press no file can turn off"
   "work-ledger|preserve workspace commitments across messages and runtimes"
   "tabs|see what every other live agent tab is doing, in any runtime"
+  "land|put your files or commits on origin/main without anyone else's"
+  "claude-jobs|scheduled Claude jobs on your own plan, no API key, laptop shut or not"
+  "cloud|your own always-on CRM and Claude connector on Railway, one command"
+  "launch|open a new named, briefed session in the Claude desktop app"
   "graph-fuse|inspect possible entity matches without merging records"
   "review-gate|run independent code review and check its current receipt"
+  "lockdown|automatically pause ARD during LockDown Browser and restore it afterward"
+  "break-it|attack the current change before calling it done, and write a receipt"
   "update|pull the latest, show what changed, re-run setup"
   "changelog|what changed between versions"
+  "agents|the agents page in your browser tab (builds it on first run, no Kyber needed)"
+  "trust|what stays on this Mac and what leaves it, in plain words"
+  "week|your week in one line from the git repos here: shipped, uncommitted, unpushed, with a receipt"
+  "stranger|time a new dev's install in a scratch HOME: prompts, errors, clone to first agent answer"
   "skills|list, search, or show a skill"
   "commands|list, search, or show a slash command"
-  "why|which rule or skill governs a behavior"
+  "why|which rule or skill governs a behavior; --refused says what refused and why"
   "log|what the kit has done recently"
+  "usage|what got used in 30 days: every skill, verb, tool, slash command and hook, and what nobody touched"
   "bench|time the things that run on every session"
   "context|measure what the kit costs you before you type"
   "evals|run the skill evals"
   "gtme-math|compute offline cost, funnel, and heldout metrics"
+  "discovery|score AI readiness on evidence, baseline workflows, ROI ranges and build order"
+  "case-study|build a client case study where every number has a source and the change is computed"
+  "llms-txt|write llms.txt and a markdown twin of every page so AI agents read a site right"
+  "rfp-extract|turn an RFP into a verbatim compliance matrix with page and line per requirement"
   "gtme-graph|track GTM dependencies, budgets, and evidence"
   "gtme-learning|compare paired workflow experiments offline"
   "gtme-library|index and search a local source corpus"
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
+  "gtme-investors|a client's seed investor list from the Prometheus file, deduped and audited"
+  "gtme-grade|run the five pre-send gates on one campaign; launch-guard needs its pass"
+  "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
+  "rea|how another app does one thing: REA status, a scoped Electron trace, a native overview (optional)"
+  "mcp|add Figma, Notion, GitHub and 50 more MCP servers, sign in, check what's connected"
+  "people-check|contacts that aren't people, the same person filed twice, and who a sentence names (Amber's rules plus Jev)"
+  "resolve|answer a fact question (an address, a phone, a site) from every source before asking a person"
+  "name-check|before pitching a product name: who holds the .com, free prefix .coms, the USPTO step"
+  "platforms|every outside platform (Cloudflare, Railway, Google...): connected or not, the fix, and sending-domain DNS"
+  "gtme-rules|which client rulings run as code, and check text a client will read"
+  "gtme-dnc|may we email this address: one check across the graph, DNC lists and the Clay blocklist"
+  "gtme-score|Togari's lead, affiliation, primary-contact, tier and quality rubrics, offline"
+  "gtme-lookup|ZoomInfo's free company and person search, Fireflies meetings, keys from the keychain"
+  "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
+  "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report, lessons"
+  "gtm-memory|accounts, contacts, jobs, commitments, Clay columns and credits per client"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
+  "ig|read every Instagram post of an account with his signed-in session"
+  "x|read an X account's own posts with his signed-in session"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
+  "linkedin|LinkedIn reads inside your own signed-in Chrome tab (me, profile, people, inbox)"
+  "groupme|GroupMe group chats and DMs, read inside your own signed-in GroupMe web tab"
+  "chat|one inbox for every chat network: local Matrix bridges (up, down, status, link)"
+  "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
+  "whoop|sleep, recovery, strain and workouts from WHOOP's official API, after one sign-in"
+  "brief|the morning brief: email, texts, calendar; --speak reads it aloud, off by default"
+  "usc|a USC student's day; lockin pulls your courses, lecture files and what's due first"
+  "browser|ChatGPT or Claude in Chrome as Chewbacca: install the Mac half, status, tools, log"
+  "google|find and read Google Docs, Sheets and Slides as text"
+  "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
+  "call-doc|a call or pitch script as a spaced Google Doc: say lines black, actions blue"
+  "photo|people photos for a site: flag black-and-white ones, paste a copied image to a file"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
@@ -115,10 +162,21 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtm|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|break-it|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|discovery|case-study|llms-txt|rfp-extract|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-investors|gtme-grade|gtme-reply|gtme-rules|gtme-dnc|gtme-score|gtme-interview|resolve|name-check|platforms|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
+  ;;
+recipe)
+  # Typed task files. -I so nothing in the current directory can stand in for
+  # a module the press depends on. See tools/recipe.py.
+  shift
+  exec python3 -I "$ROOT/tools/recipe.py" "$@"
+  ;;
+gtme-lookup)
+  # Node: ZoomInfo's auth signs an RS256 JWT, which stdlib python can't.
+  shift
+  exec node "$ROOT/bin/gtme-lookup" "$@"
   ;;
 gtme-dedupe)
   # Bash, not python: it picks the venv that has splink.
@@ -128,6 +186,53 @@ gtme-dedupe)
 agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
+  ;;
+lockdown)
+  shift
+  exec bash "$ROOT/bin/chewbacca-lockdown" "$@"
+  ;;
+present|presentation|talk)
+  # One script file becomes the talk to share, the presenter window, the
+  # trainer and the morning sheet. See skills/presenting/SKILL.md for which
+  # aid level to build at, which is decided by rehearsal and not by taste.
+  shift
+  exec bash "$ROOT/bin/chewbacca-present" "$@"
+  ;;
+people-check)
+  # Amber's people rules (bin/lib/people-amber) over the people store; Jev settles the unsure ones.
+  shift
+  exec python3 "$ROOT/tools/people_amber.py" "$@"
+  ;;
+mcp)
+  # The MCP catalog (config/mcp/catalog.json), added through each agent's own CLI.
+  shift
+  exec python3 "$ROOT/tools/mcp_setup.py" "$@"
+  ;;
+agents)
+  # Realm's agents page in a normal browser tab. On a Mac with Kyber the same
+  # page is on the glass (`realm-ui show`); this needs neither Kyber nor PATH.
+  shift
+  exec python3 "$ROOT/bin/realm-ui" open --build "$@"
+  ;;
+trust)
+  # What stays on this Mac and what leaves it, in plain words (config/trust.json).
+  shift
+  exec python3 "$ROOT/tools/trust.py" "$@"
+  ;;
+week)
+  # Your week in one line from the git repos on this machine, with a receipt.
+  shift
+  exec python3 "$ROOT/tools/first_win.py" "$@"
+  ;;
+stranger)
+  shift
+  exec python3 "$ROOT/tools/stranger_run.py" "$@"
+  ;;
+rea)
+  # REA (rea-agents) behind a deadline, thinned binaries and a scoped input.
+  # Not a bin/ tool, so the kit never shadows REA's own `rea` on PATH.
+  shift
+  exec python3 "$ROOT/tools/rea_kit.py" "$@"
   ;;
 clay)
   # Clay through the CLI, its own frontend API (api-anything), or the UI
@@ -152,18 +257,152 @@ whatsapp)
   shift
   exec bash "$ROOT/bin/chewbacca-whatsapp" "$@"
   ;;
-permissions|permission|perms)
-  # Every macOS grant Chewbacca needs, walked one card at a time over System
-  # Settings, each closing itself once detected. No args = the guide, because
-  # "make it SUPER EZ" (Caleb, 2026-10-10) means one command, not a menu.
+welcome|onboard|hello)
+  # The first conversation after install: six tappable questions whose
+  # answers personalize every later reply. See skills/welcome/SKILL.md.
   shift
-  [ $# -eq 0 ] && set -- guide
+  exec python3 "$ROOT/bin/chewbacca-welcome" "$@"
+  ;;
+permissions|permission|perms)
+  # Every macOS grant Chewbacca needs, walked one at a time over System
+  # Settings, each step moving on once detected. No args = the walk (a ring on
+  # each switch, on Kyber's glass), because "make it SUPER EZ" (Caleb,
+  # 2026-10-10) means one command, not a menu; without Kyber running the walk
+  # falls back to the cards (`guide`) by itself.
+  shift
+  [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+cloud)
+  # A per-person deploy of the joel-os template: CRM, Claude connector, and
+  # the bridge that syncs this Mac's people store to it. See bin/chewbacca-cloud.
+  shift
+  exec bash "$ROOT/bin/chewbacca-cloud" "$@"
+  ;;
+claude-jobs)
+  # Scheduled Claude jobs on the user's own plan via claude setup-token, run
+  # on Railway so they keep going with the laptop shut. See apps/claude-jobs.
+  shift
+  exec node "$ROOT/bin/chewbacca-claude-jobs" "$@"
+  ;;
+land)
+  # The one way a tab pushes: builds on a fresh worktree of origin/main,
+  # regenerates the manifest, retries lost races. See bin/chewbacca-land.
+  shift
+  exec python3 -I "$ROOT/bin/chewbacca-land" "$@"
+  ;;
+launch)
+  # Opens a new named, briefed session in the Claude desktop app. See bin/chewbacca-launch.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-launch" "$@"
+  ;;
+usage)
+  # Every skill, verb, bin tool, slash command and hook with its 30-day use,
+  # load and refusal counts. See tools/usage_report.py.
+  shift
+  exec python3 "$ROOT/tools/usage_report.py" "$@"
+  ;;
+machine)
+  # What this Mac can take right now: cores by kind, memory, power, whether
+  # anyone is at it, and every load limit the kit uses. See bin/lib/machine_profile.py.
+  shift
+  exec python3 -I "$ROOT/bin/lib/machine_profile.py" "$@"
   ;;
 jobs)
   # The machine queue. See bin/chewbacca-jobs.
   shift
   exec python3 "$ROOT/bin/chewbacca-jobs" "$@"
+  ;;
+apps)
+  # Everything the team builds lives in apps/, runnable by name.
+  shift
+  exec bash "$ROOT/bin/chewbacca-apps" "$@"
+  ;;
+ig)
+  # Instagram posts past the logged-out 12. See bin/chewbacca-ig.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-ig" "$@"
+  ;;
+x)
+  # X posts, signed in. See bin/chewbacca-x.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-x" "$@"
+  ;;
+google)
+  # Docs, Sheets and Slides through the official APIs (gws). Read-only but
+  # for `replace`, one revision-checked Docs edit the Doc surface previews.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-google" "$@"
+  ;;
+pdf)
+  # Markdown or text to PDF in about 2 s a file. See bin/chewbacca-pdf.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-pdf" "$@"
+  ;;
+call-doc)
+  # A call script as a readable Google Doc. See bin/chewbacca-call-doc.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-call-doc" "$@"
+  ;;
+photo)
+  # Colour checks and clipboard paste for people photos. See bin/chewbacca-photo.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-photo" "$@"
+  ;;
+docs)
+  # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-docs" "$@"
+  ;;
+linkedin)
+  # LinkedIn reads run inside the user's own Chrome tab. Read-only.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-linkedin" "$@"
+  ;;
+chat)
+  # Signal, Telegram, Discord, Instagram, Messenger, X, Google Messages and the
+  # rest through mautrix bridges on a homeserver bound to 127.0.0.1.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-chat" "$@"
+  ;;
+groupme)
+  # GroupMe reads run inside the user's own web.groupme.com tab. Read-only.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-groupme" "$@"
+  ;;
+office)
+  # Microsoft 365 reads through Graph, signed in with Microsoft's own
+  # device-code flow (MSAL); the token cache lives in the login keychain. Read-only.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-office" "$@"
+  ;;
+whoop)
+  # WHOOP's official OAuth API; the app's secret and the tokens live in the login keychain.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-whoop" "$@"
+  ;;
+brief)
+  # The instructions named this for months while only `chewie brief` existed.
+  shift
+  exec "$ROOT/mac/bin/chewie" brief "$@"
+  ;;
+browser)
+  # The native host a chat tab reaches through apps/extensions/chewbacca.
+  # Reads run; writes need a press on the Mac. docs/reference/BROWSER-CHEWB.md
+  shift
+  exec python3 "$ROOT/bin/chewbacca-browser" "$@"
+  ;;
+products)
+  # The products built out of Chewbacca (anchored, usc-os): which shared files
+  # are behind, and a pull that tests each product before pushing its main.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-products" "$@"
+  ;;
+usc)
+  # Any USC student's day from Brightspace, dining and the campus calendar,
+  # through chewbacca api. Read-only.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-usc" "$@"
   ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off
@@ -205,6 +444,26 @@ uninstall)
   ;;
 update)
   shift
+  # Stress test, 2026-11-06: `chewbacca update --help` swapped the runtime before setup printed help.
+  case "${1:-}" in -h|--help) echo "usage: chewbacca update [setup.sh options]: new snapshot of origin/main, then setup"; exit 0 ;; esac
+  # From PATH this runs inside the kit runtime, a detached snapshot that has
+  # no branch to pull. Updating it means a new snapshot of origin/main.
+  if [ -f "$ROOT.kit-runtime.json" ]; then
+    python3 -I "$ROOT/tools/kit_runtime.py" update --fetch --link-bin "$HOME/.local/bin" || exit 1
+    # ROOT still names the snapshot this process started in, which the update
+    # just replaced. Its setup.sh syncs the source checkout to its own, older
+    # sha before handing over, so on 2026-10-11 an update installed the
+    # previous version's setup and essay-gate only registered on a second run.
+    NEW_ROOT="$(cd -P "$(python3 -I "$ROOT/tools/kit_runtime.py" path)" 2>/dev/null && pwd)"
+    [ -n "$NEW_ROOT" ] && [ -f "$NEW_ROOT/setup.sh" ] && ROOT="$NEW_ROOT"
+    run setup.sh "$@"
+    exit $?
+  fi
+  # A start.sh install is a tarball with no .git: start.sh is its updater,
+  # the same thing the stub this CLI replaced used to run.
+  if [ ! -e "$ROOT/.git" ] && [ -f "$ROOT/start.sh" ]; then
+    exec bash "$ROOT/start.sh" "$@"
+  fi
   BEFORE="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo none)"
   git -C "$ROOT" pull --ff-only || {
     echo "chewbacca: could not fast-forward. Fix the working tree first:" >&2
@@ -271,6 +530,14 @@ context)
   shift
   python3 "$ROOT/tools/context_cost.py" "$@"
   ;;
+send-policy)
+  shift
+  exec python3 "$ROOT/tools/send_policy.py" "$@"
+  ;;
+lessons)
+  shift
+  python3 "$ROOT/tools/lessons_audit.py" "$@"
+  ;;
 evals)
   shift
   python3 "$ROOT/tools/evals.py" "$@"
@@ -295,8 +562,11 @@ import)
   shift
   # scan, apply and undo bring in what Claude Code, Codex, Cursor or a chat
   # export already know. Anything else is a bundle path for the restore.
+  # -B from the first import: Apple python caches stdlib bytecode under
+  # $HOME/Library before the tool can set dont_write_bytecode, and a scan
+  # must write nothing (test_context_import, 10/13).
   case "${1:-}" in
-  scan|apply|undo) exec python3 "$ROOT/tools/context_import.py" "$@" ;;
+  scan|apply|undo) exec python3 -B "$ROOT/tools/context_import.py" "$@" ;;
   esac
   run bin/lib/import.sh "$@"
   ;;

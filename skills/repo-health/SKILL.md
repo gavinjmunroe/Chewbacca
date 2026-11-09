@@ -1,6 +1,8 @@
 ---
 name: repo-health
-description: "Find what has rotted in a project. Use when the user asks to clean this up, find dead code, remove unused imports, check my dependencies, whether anything is out of date or vulnerable, what is safe to delete, or asks for an audit of a project or repo. Also use when a repo feels messy, before handing a project to someone else, or when env vars have drifted."
+description: "Find what has rotted in a project: dead code, unused imports, stale or vulnerable deps, env drift, what's safe to delete. Also for an audit, a messy repo, or which stalled projects to pick back up."
+triggers: >-
+  Find what has rotted in a project. Use when the user asks to clean this up, find dead code, remove unused imports, check my dependencies, whether anything is out of date or vulnerable, what is safe to delete, or asks for an audit of a project or repo. Also use when a repo feels messy, before handing a project to someone else, or when env vars have drifted. Also use when asked which old or unfinished projects to pick back up, or to scan all repos for stalled work.
 requires: [git]
 ---
 
@@ -61,3 +63,52 @@ Group by what it costs, not by what tool found it. Something that breaks a new
 contributor's first run outranks a stale TODO, however many TODOs there are. Say
 which findings you confirmed by reading the code and which are a tool's raw
 output that still needs a human look.
+
+## Scanning every repo for stalled work
+
+Asked "what else is unfinished, scan all my repos" on 2026-10-10, the scan
+listed 15 stalled repos as equal candidates. He picked "all of them", then said
+two things that should have been in the first list:
+
+- "We used to be so slop at desing lmao." Old repos were built before the
+  current design bar. Finishing one means committing the stray work, getting the
+  build green, AND a design pass to today's bar (design-system rule, interface
+  skill), with desktop and 375px screenshots as the proof.
+- "Some of them are slop lol." Six of the fifteen had no product behind them:
+  three identical 3/15 "initial MVP" mission landing pages with a waitlist
+  (Zero Hunger, The Vote, Reprogram), the same pattern in Newton Foundation, a
+  generic planner Chewbacca already beats (Kairos), and a briefing site in an
+  Expo shell (Vigil).
+
+So the scan itself sorts before it lists:
+
+1. Real: built for a named person or a live product (a grandpa's school, a
+   co-founder's app, a client), with working code past a landing page.
+2. Slop: a mission statement plus a waitlist, a batch of same-day "initial MVP"
+   commits, or a thing the kit already does better. Name the reason in one line.
+
+Lead with the real ones, list the slop ones under their own line with the
+reason, and let him decide whether to drop them. Never finish a slop one
+without his yes. Check the remote owner too: a co-founder's or an org's repo
+gets a branch and a PR, never a push to their main.
+
+## Parking a finish-the-old-repos run
+
+On 2026-10-10 Caleb trimmed the list himself: "Maia/echo I am no longer a part
+of", and asked what Just-A-Rock, Nalana web and PeopleRank v2 even were. So
+before listing a repo, check the remote owner and his notes for whether he's
+still on it, and say in one plain line what each repo is.
+
+Two finishing agents died mid-edit on a weekly usage limit, leaving
+uncommitted work in Playcall and OpenVision. When he says "save this all todo
+a diff day", the work-ledger entry (`--scope ~`) names every repo's state:
+pushed with its commit, PR open with its URL, died mid-run with what it was
+on, not started, and dropped with the reason. A list that only says "resume"
+makes the next tab redo the scan.
+
+The design pass fits the audience, and it cuts words. The Crown Institute redo
+(2026-10-17) passed every check and Caleb still said it "reads like a slop big
+wall of text", then "we gotta keep it professional tho it's not a tech site
+like lemma". For a church, school or family client: fewer words per section,
+one point each, calm layout, and none of the startup motion or punchy kickers.
+Judge the screenshot by whether it reads in a glance, not whether it builds.

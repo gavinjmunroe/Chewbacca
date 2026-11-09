@@ -102,6 +102,18 @@ class JevTests(unittest.TestCase):
             self.assertNotIn("state", result)
             self.assertIn("latency_ms", result)
 
+    def test_in_process_call_without_model_gets_the_pinned_default(self):
+        # gtme next-move, 2026-10-16: every in-process call without "model" raised, silently.
+        bare = {k: v for k, v in REQUEST.items() if k != "model"}
+        with patch.object(jev, "api_key", return_value="test-key"), patch.object(jev.urllib.request, "build_opener") as build:
+            build.return_value.open.return_value = io.BytesIO(json.dumps(RESPONSE).encode())
+            jev.evaluate(bare)
+            sent = json.loads(build.return_value.open.call_args.args[0].data)
+            self.assertEqual(sent["model"], jev.MODEL)
+        self.assertNotIn("model", bare, "the caller's dict isn't changed")
+        with self.assertRaises(jev.JevError):
+            jev.evaluate(dict(REQUEST, model="gpt-4"))
+
     def test_http_error_does_not_echo_input_or_retry(self):
         with patch.object(jev, "api_key", return_value="secret"), patch.object(jev.urllib.request, "build_opener") as build:
             build.return_value.open.side_effect = urllib.error.HTTPError(jev.ENDPOINT, 429, "secret", {}, io.BytesIO(b"private request"))

@@ -20,7 +20,12 @@ COMMIT = re.compile(
     r"\b(send|submit|post|publish|pay|purchase|buy|checkout|check out|place order|order now|book|reserve|"
     r"delete|remove|archive|unsubscribe|cancel (my )?(subscription|plan|account)|sign in|log in|login|"
     r"sign up|confirm|apply|transfer|withdraw|donate|invite|share|merge|deploy|run workflow|run all|"
-    r"run column|run rows?|enrich)\b",
+    r"run column|run rows?|enrich|"
+    # Campaign state. launch-guard lets jev-browse run on a Clay page because
+    # this floor holds these too (2026-10-16): a Clay campaign starts from a
+    # Launch, Start or Resume button and grows from Enroll or Add leads.
+    r"launch|resume|unpause|activate|enroll|start( campaign| sending| sequence)?|"
+    r"add (leads|contacts|people|to (campaign|sequence)))\b",
     re.I,
 )
 

@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Every outside platform the projects lean on, connected or not, from a checkout or a symlinked install."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "platforms.py"), run_name="__main__")

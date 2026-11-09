@@ -1,0 +1,969 @@
+#!/usr/bin/env python3
+"""
+chewbacca usc: a USC student's day in one screen, for any student on any Mac.
+
+  chewbacca usc                 what's due this week, the dining hall, events today
+  chewbacca usc setup           sign in from whichever Chrome profile has USC
+  chewbacca usc lockin          "I need to lock in on school": your courses from
+                                your own enrollment, what's due first, the ledger
+                                it would build, and how many lecture files to pull
+  chewbacca usc lockin --apply  build the ledger (new files only) and pull every
+                                lecture file to ~/coursework/slides/<CODE>/
+  chewbacca usc read [CODE]     the text of every pulled file (PDF pages, slides,
+                                Word), labeled by page, with nothing to install
+  chewbacca usc read --find "office hours"   matching lines across every course
+  chewbacca usc syllabus        what every pulled syllabus says about class times,
+                                office hours, absences and grading, and what it
+                                would fill (--apply writes empty fields only)
+  chewbacca usc grades          released Brightspace scores onto the ledger's
+                                matching grading parts (--apply writes)
+  chewbacca usc food            mobile order and the dining halls: what's open, waits,
+                                menus with prices, lunch near you, a ready cart (bin/usc-food)
+  chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
+  chewbacca usc --json          the same, as data
+
+lockin reads Brightspace with the session already in Chrome (bin/brightspace-sync),
+so it needs no api engine and no setup beyond being signed in once. The rest:
+every section is one plain-HTTP call through `chewbacca api` (no browser), run
+side by side, and a section that fails prints one line saying why while the
+rest still show. Nothing here writes to any USC system.
+
+The hall you pick is remembered in ~/.chewbacca/usc.json.
+"""
+import argparse
+import concurrent.futures as cf
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(os.environ.get("CHEWBACCA_ROOT") or Path(__file__).resolve().parent.parent)
+# What the student types to run this. Hall installs it as plain `usc`, and
+# its --help and every "then run" hint said `chewbacca usc`, a command a Hall
+# student doesn't have (SPEC piece 2, left for later on 2026-10-28).
+PROG = os.environ.get("CHEWBACCA_USC_PROG") or "chewbacca usc"
+API = ["bash", str(ROOT / "bin" / "chewbacca-api")]
+CONFIG = Path(os.environ.get("CHEWBACCA_USC_CONFIG", Path.home() / ".chewbacca" / "usc.json"))
+HALLS = ("parkside", "evk", "university-village")
+SIGNIN = {
+    "brightspace": "brightspace.usc.edu",
+    "handshake": "usc.joinhandshake.com",
+}
+
+
+def call(site, op, **args):
+    cmd = API + ["call", site, op] + [f"{k}={v}" for k, v in args.items()]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+        return json.loads(out.strip().splitlines()[-1])
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, IndexError) as e:
+        return {"ok": False, "class": "error", "reason": f"no answer ({e.__class__.__name__})"}
+
+
+def why(res, site):
+    if res.get("class") == "auth":
+        return f"not signed in: open {SIGNIN.get(site, site)} in Chrome once, then `{PROG} setup`"
+    return res.get("reason") or res.get("class") or "failed"
+
+
+def due(today):
+    """The week's Brightspace items through the Chrome session, the same path
+    lockin uses. The day screen used to go through the api engine, and a
+    signed-out student saw its raw "HTTP 403 with no login or challenge
+    markers: { Errors: ... }" line (USC week walk, 2026-10-13)."""
+    bs = load_tool("brightspace-sync")
+    try:
+        client = bs.Client()
+        # due_items starts from now; the screen's week is today plus 7 days.
+        rows = bs.due_items(client, 7 + 1)
+    except bs.Stop as e:
+        return {"error": signed_out(str(e))}
+    end = (today + dt.timedelta(days=7)).isoformat()
+    return {"items": [{"due": r["due"], "course": r["course"], "title": r["title"]}
+                      for r in rows if r["due"][:10] <= end]}
+
+
+def signed_out(why):
+    """One plain line for a Brightspace refusal, never the server's body."""
+    try:
+        reader = load_tool("brightspace")
+        stale = reader.stale_cookie_message() if reader.has_session_cookies() else None
+    except Exception:
+        stale = None
+    if stale:
+        return stale
+    if re.search(r"no Brightspace session|HTTP 40[13]|session expired|sign-in", why):
+        return ("Brightspace says you're signed out. Open brightspace.usc.edu in Chrome and sign in once, "
+                f"then rerun `{PROG}`.")
+    if "HTTP 429" in why:
+        return "Brightspace asked us to slow down. Try again in a few minutes."
+    return f"Brightspace didn't answer: {why[:120]}"
+
+
+def food(today, hall, now):
+    # Weekends serve Brunch then Dinner; weekdays Breakfast, Lunch, Dinner.
+    if today.weekday() >= 5:
+        meal = "Brunch" if now.hour < 15 else "Dinner"
+    else:
+        meal = "Breakfast" if now.hour < 10 else "Lunch" if now.hour < 15 else "Dinner"
+    res = call("usc-dining", f"menu{meal}", hall=hall, year=today.year,
+               month=f"{today.month:03d}", day=f"{today.day:03d}")
+    if not res.get("ok"):
+        return {"meal": meal, "hall": hall, "error": why(res, "usc-dining")}
+    stations = [{"station": s.get("station"), "items": [m.get("item") for m in s.get("menu") or []][:4]}
+                for s in res.get("data") or []]
+    return {"meal": meal, "hall": hall, "stations": stations}
+
+
+def events(today):
+    res = call("usc-events", "upcoming", start=today.isoformat(),
+               end=(today + dt.timedelta(days=1)).isoformat())
+    if not res.get("ok"):
+        return {"error": why(res, "usc-events")}
+    return {"items": [{"title": e.get("title"), "start": e.get("start"), "location": e.get("location")}
+                      for e in (res.get("data") or [])[:8]]}
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_config(cfg):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(cfg, indent=2))
+
+
+def setup():
+    ok = True
+    for site, host in SIGNIN.items():
+        r = subprocess.run(API + ["login", site], capture_output=True, text=True)
+        line = (r.stdout.strip().splitlines() or [""])[-1]
+        if r.returncode == 0:
+            print(f"{site}: {line or 'signed in'}")
+        else:
+            ok = False
+            print(f"{site}: no session yet. Sign in at https://{host} in Chrome once, then run this again.")
+    # Renewed every 15 min from then on, so the student never opens a USC
+    # site just to keep Chewbacca signed in.
+    r = subprocess.run(API + ["keepalive"], capture_output=True, text=True)
+    print("sessions: " + ((r.stdout.strip().splitlines() or ["kept alive in the background"])[-1]
+                          if r.returncode == 0 else "keepalive not registered: " + r.stderr.strip()[-200:]))
+    return 0 if ok else 1
+
+
+def short_time(value):
+    if not value:
+        return ""
+    try:
+        t = dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        if (t.hour, t.minute) == (0, 0):
+            return t.strftime("%a") + " all day"
+        return t.strftime("%a %-I:%M%p").replace(":00", "").lower().capitalize()
+    except ValueError:
+        return value
+
+
+def render(report):
+    out = []
+    d = report["due"]
+    out.append("Due this week")
+    if "error" in d:
+        out.append(f"  {d['error']}")
+    elif not d["items"]:
+        out.append("  nothing in Brightspace")
+    for i in d.get("items", []):
+        out.append(f"  {short_time(i['due']):<12} {i['course'] or '':<11} {i['title']}")
+    f = report["food"]
+    out.append("")
+    out.append(f"{f['meal']} at {f['hall']}" + ("" if f.get("picked", True) else
+               f" (pick yours: {PROG} --hall {'|'.join(HALLS)})"))
+    if "error" in f:
+        out.append(f"  {f['error']}")
+    for s in f.get("stations", []):
+        out.append(f"  {s['station']}: {', '.join(x for x in s['items'] if x)}")
+    e = report["events"]
+    out.append("")
+    out.append("On campus today")
+    if "error" in e:
+        out.append(f"  {e['error']}")
+    elif not e["items"]:
+        out.append("  nothing listed")
+    for i in e.get("items", []):
+        out.append(f"  {short_time(i['start']):<12} {i['title']}" + (f" ({i['location']})" if i.get("location") else ""))
+    return "\n".join(out)
+
+
+# ── lockin ───────────────────────────────────────────────────────────────────
+# The demo sentence. A stranger who just installed this says "I need to lock in
+# on school" and gets, from their own Brightspace enrollment and nothing typed:
+# their courses, what's due first, a ledger seeded with every dated item, and
+# every lecture file on disk. Built 2026-10-10 after "pull my slides" took
+# minutes of disk hunting on the one Mac that already had everything set up.
+
+LEDGER = Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework").expanduser()
+SIGNIN_STAMP = Path(os.environ.get("CHEWBACCA_USC_SIGNIN_STAMP") or Path.home() / ".chewbacca" / "usc-signin-opened")
+SEASON = {"1": "Spring", "2": "Summer", "3": "Fall"}
+
+
+def load_tool(name):
+    sys.dont_write_bytecode = True  # never litter the kit snapshot with .pyc
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(ROOT / "bin" / name))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def term_name(code):
+    """USC term codes are YYYYT: 20263 is Fall 2026, 20271 Spring 2027."""
+    if len(code) == 5 and code.isdigit() and code[4] in SEASON:
+        return f"{SEASON[code[4]]} {code[:4]}"
+    return code or "this term"
+
+
+def norm(code):
+    return re.sub(r"[^a-z0-9]", "", code.lower())
+
+
+def ledger_codes():
+    out = []
+    for f in sorted((LEDGER / "courses").glob("*.yml")):
+        m = re.search(r'^code:\s*"?([^"\n#]+)', f.read_text(errors="replace"), re.M)
+        if m:
+            out.append(m.group(1).strip())
+    return out
+
+
+def in_ledger(code, have):
+    want = norm(code)
+    # Ledger codes carry suffixes the enrollment lacks ("BISC 101Lxg" for BISC-101).
+    return any(norm(h).startswith(want) or want.startswith(norm(h)) for h in have)
+
+
+def clean(text):
+    text = re.sub(r'["\\\n\r]+', " ", str(text))
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", "", text).strip()
+
+
+# A calendar row is either work to hand in or a place to be. On the 2026-10-13
+# USC week walk a workshop landed in the ledger as a deliverable and Due first
+# mixed it with exams. Hiding real work costs far more than showing an extra
+# row, so "event" needs an event word and no sign of a hand-in. "review" alone
+# isn't one: the real ledgers hold "Weekly review quiz" and "Peer Review response".
+EVENT = re.compile(r"(?i)\b(workshops?|office hours?|lectures?|review sessions?|info(rmation)? sessions?"
+                   r"|screenings?|guest speakers?|webinars?|orientation)\b")
+HAND_IN = re.compile(r"(?i)\b(due|submit|submission|draft|upload|turn in|report|response|reflection"
+                     r"|paper|essay|quiz|exam|assignment|homework|hw)\b")
+# Written work first: "Final Essay" and "Midterm Paper" aren't exams to study for.
+KINDS = (("assignment", r"\b(paper|essay|project|portfolio|draft)\b"), ("exam", r"\b(exam|midterm|final)\b"), ("quiz", r"\bquiz(zes)?\b"), ("lab", r"\b(lab|pre-?lab|post-?lab)\b"),
+         ("reading", r"\b(read|reading|chapter)\b"))
+
+
+def item_kind(title):
+    if EVENT.search(title) and not HAND_IN.search(title):
+        return "event"
+    for kind, pattern in KINDS:
+        if re.search(pattern, title, re.I):
+            return kind
+    return "assignment"
+
+
+def course_yaml(code, title, term, ids, items, today):
+    lines = [
+        f"# Seeded by `{PROG} lockin` on {today} from your own Brightspace enrollment.",
+        "# Brightspace knows the course and its calendar. It doesn't know the",
+        "# meetings or grading: those come from the syllabus, usually in",
+        f"# ~/coursework/slides/{code.replace(' ', '-')}/.",
+        f'code: "{clean(code)}"',
+        f'title: "{clean(title)}"',
+        f'term: "{term}"',
+        f"brightspace_ids: [{', '.join(str(i) for i in ids)}]",
+        "deliverables:",
+    ]
+    events = [it for it in items if item_kind(it["title"]) == "event"]
+    items = [it for it in items if item_kind(it["title"]) != "event"]
+    if not items:
+        lines[-1] = "deliverables: []"
+    for it in items:
+        due = it["due"]
+        lines += [f'  - name: "{clean(it["title"])}"',
+                  f"    due: {due[:10]}"]
+        if len(due) >= 16 and due[11:16] != "00:00":
+            lines.append(f'    at: "{due[11:16]}"')
+        lines += [f"    type: {item_kind(it['title'])}",
+                  "    status: todo",
+                  f'    source: "Brightspace calendar, read {today}"']
+    if events:
+        lines.append("calendar_events:")
+    for it in events:
+        lines += [f'  - name: "{clean(it["title"])}"',
+                  f"    date: {it['due'][:10]}",
+                  f'    source: "Brightspace calendar, read {today}"']
+    return "\n".join(lines) + "\n"
+
+
+def open_signin():
+    """The one page a signed-out student needs, at most once every ten minutes."""
+    try:
+        if time.time() - SIGNIN_STAMP.stat().st_mtime < 600:
+            return False
+    except OSError:
+        pass
+    if os.environ.get("CHEWBACCA_NO_OPEN"):
+        return False
+    # Never a new window. Handing Chrome a profile on the command line opens a
+    # NEW window and Chrome brings it to the front even under `open -g`: on
+    # 2026-10-11 that flashed over Caleb's work twice ("WHY DID YOU WHIPLASH
+    # FLASH BANG ME WITH A NEW TAB"). Instead add a background tab to a window
+    # that already shows a usc.edu page (that window is the school profile),
+    # put the window's own tab back in front, and close ours once signed in.
+    shown = bool(add_hidden_tab("https://brightspace.usc.edu/d2l/home"))
+    if shown:
+        SIGNIN_STAMP.parent.mkdir(parents=True, exist_ok=True)
+        SIGNIN_STAMP.touch()
+    return shown
+
+
+HIDDEN_TAB = None
+
+
+def add_hidden_tab(url):
+    """A tab at the back of a usc.edu window, without activating Chrome. Returns its id."""
+    global HIDDEN_TAB
+    if subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True).returncode != 0:
+        return None  # an AppleScript call would launch Chrome, which is its own flash
+    script = f'''
+tell application "Google Chrome"
+  set target to missing value
+  repeat with pass in {{"brightspace.usc.edu", ".usc.edu"}}
+    repeat with w in windows
+      repeat with t in tabs of w
+        if URL of t contains (pass as text) then
+          set target to w
+          exit repeat
+        end if
+      end repeat
+      if target is not missing value then exit repeat
+    end repeat
+    if target is not missing value then exit repeat
+  end repeat
+  if target is missing value then return ""
+  set keep to active tab index of target
+  set made to make new tab at end of tabs of target with properties {{URL:"{url}"}}
+  set active tab index of target to keep
+  return (id of made) as text
+end tell'''
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    HIDDEN_TAB = r.stdout.strip() or None
+    return HIDDEN_TAB
+
+
+def close_hidden_tab():
+    if not HIDDEN_TAB:
+        return
+    subprocess.run(["osascript", "-e", f'''
+tell application "Google Chrome"
+  repeat with w in windows
+    repeat with t in tabs of w
+      if (id of t as text) is "{HIDDEN_TAB}" then close t
+    end repeat
+  end repeat
+end tell'''], capture_output=True)
+
+
+def wait_for_session():
+    # 20s: the Work profile went from the sign-in page to the Brightspace home
+    # in about 4s on 2026-10-11, and Chrome writes cookies to disk lazily.
+    deadline = time.time() + float(os.environ.get("CHEWBACCA_SIGNIN_WAIT", "20"))
+    while time.time() < deadline:
+        try:
+            if load_tool("brightspace").has_session_cookies():
+                close_hidden_tab()
+                return True
+        except Exception:
+            pass
+        time.sleep(2)
+    return False  # the tab stays: it's the sign-in page the student needs
+
+
+def blocked(bs, why):
+    """Say the real reason, never "sign in" to someone who is signed in."""
+    try:
+        reader = load_tool("brightspace")
+        has_cookies = reader.has_session_cookies()
+        # Only someone who has signed in can have a session stuck in memory:
+        # an idle profile's file is hours old too, and telling a student who
+        # never signed in to quit Chrome hides the one page they need.
+        stale = reader.stale_cookie_message() if has_cookies else None
+    except Exception:
+        stale, has_cookies = None, False
+    if stale:
+        print(stale)
+        return 3
+    if "no Brightspace session" in why or not has_cookies:
+        opened = open_signin()
+        # USC single sign-on usually finishes on its own in the school
+        # profile, so give it the time a redirect takes before calling it
+        # blocked. Only a real password or Duo prompt should reach the student.
+        if opened and wait_for_session():
+            return "retry"
+        print("BLOCKED: Brightspace isn't signed in in Chrome yet. "
+              + ("It's waiting as a tab in your USC Chrome window: sign in once there, then rerun."
+                 if opened else "Sign in once at https://brightspace.usc.edu in Chrome, then rerun."))
+        return 3
+    print(f"BLOCKED: {why}")
+    return 3
+
+
+def lockin(apply, out, days, retried=False):
+    bs = load_tool("brightspace-sync")
+    today = dt.date.today().isoformat()
+    try:
+        client = bs.Client()
+        courses = bs.courses(client)
+    except bs.Stop as e:
+        r = blocked(bs, str(e))
+        return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
+    if not courses:
+        print("Brightspace shows no courses for this term yet.")
+        return 1
+    term = term_name(courses[0].get("term", ""))
+    by_code = {}
+    for c in courses:
+        entry = by_code.setdefault(c["code"], {"ids": [], "title": clean(c["name"].split(": ", 1)[-1])})
+        entry["ids"].append(c["id"])
+    try:
+        due = bs.due_items(client, days)
+    except bs.Stop as e:
+        r = blocked(bs, str(e))
+        return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
+
+    print(f"{term}: {len(by_code)} courses from your Brightspace enrollment")
+    for code, e in by_code.items():
+        print(f"  {code:<10} {e['title']}")
+    print()
+    window = [r for r in due if r["due"][:10] <= (dt.date.today() + dt.timedelta(days=14)).isoformat()]
+    soon = [r for r in window if item_kind(r["title"]) != "event"]
+    print("Due first" + ("" if soon else ": nothing in the next 14 days"))
+    for r in soon[:12]:
+        when = dt.datetime.fromisoformat(r["due"])
+        print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {item_kind(r['title']):<10} {r['title']}")
+    events = [r for r in window if item_kind(r["title"]) == "event"]
+    if events:
+        print("On your calendar, nothing to hand in")
+    for r in events[:12]:
+        when = dt.datetime.fromisoformat(r["due"])
+        print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {r['title']}")
+    if soon:
+        print(f"  Start with: {soon[0]['course']} {soon[0]['title']}")
+    # On 2026-11-05 a real lockin missed an in-class talk and a poll due the next
+    # day, because neither was on the Brightspace calendar. A list that looks
+    # complete and isn't is what breaks trust, so it says what it can't see.
+    print("  This is what's posted on Brightspace. In-class work and syllabus-only dates can be missing.")
+    print()
+
+    have = ledger_codes()
+    new = {code: e for code, e in by_code.items() if not in_ledger(code.replace("-", " "), have)}
+    print(f"Ledger at {LEDGER}: " + (
+        f"{'adding' if apply else 'would add'} {len(new)} course file(s)" if new else "every course already has a file"))
+    if apply and new:
+        (LEDGER / "courses").mkdir(parents=True, exist_ok=True)
+        semester = LEDGER / "semester.yml"
+        if not semester.exists():
+            semester.write_text(
+                f'term: "{term}"\nschool: USC\nsource: "Brightspace enrollment term code '
+                f'{courses[0].get("term", "")}, read {today}"\n')
+        for code, e in new.items():
+            items, seen = [], set()
+            for r in due:
+                if r["course"] == code and r["title"] not in seen:
+                    seen.add(r["title"])
+                    items.append(r)
+            dest = LEDGER / "courses" / f"{bs.safe(code.lower()).replace(' ', '-')}.yml"
+            if dest.exists():
+                continue
+            dest.write_text(course_yaml(code.replace("-", " "), e["title"], term, e["ids"], items, today))
+            print(f"  wrote {dest.relative_to(LEDGER)} ({len(items)} dated items)")
+    elif new:
+        for code in new:
+            print(f"  courses/{bs.safe(code.lower()).replace(' ', '-')}.yml")
+    print()
+
+    import types
+    total, per_code = 0, {}
+    print(f"Lecture files to {out}/<CODE>/:")
+    for c in courses:
+        ns = types.SimpleNamespace(out=str(out), apply=apply, quiet=not apply, since=None,
+                                   from_chapter=None, also=[])
+        try:
+            n = bs.sync_files(client, c, ns)
+        except bs.Stop as e:
+            r = blocked(bs, str(e))
+            return lockin(apply, out, days, True) if r == "retry" and not retried else (3 if r == "retry" else r)
+        total += n
+        # A lecture and its lab share a code and a folder: one line per course.
+        per_code[c["code"]] = per_code.get(c["code"], 0) + n
+    if not apply:
+        for code, n in per_code.items():
+            print(f"  {code:<10} {n} new file(s)")
+    if not apply:
+        print(f"{total} file(s) to pull. Nothing written: rerun with --apply.")
+    else:
+        print(f"Pulled {total} file(s). Rerunning only fetches what's new.")
+        # The seeded ledger has no class times, office hours, attendance budget
+        # or grading, and every answer is in a syllabus lockin just pulled.
+        print()
+        syllabus(True, out, LEDGER)
+        print()
+        grades(True, LEDGER)
+    return 0
+
+
+# ── read ─────────────────────────────────────────────────────────────────────
+# The study session and the syllabus both start from the files lockin pulled,
+# and on a fresh Mac nothing could read them: `chewbacca docs` needs genoffice,
+# stock python3 has no PDF library and there's no pdftotext (USC week walk,
+# 2026-10-13). PDFKit ships with macOS and JXA reaches it, and .pptx/.docx are
+# zipped XML, so every file reads with what the Mac already has. Each page or
+# slide is labeled so a quiz question can cite where it came from.
+
+JXA_PDF = '''function run(argv) {
+  ObjC.import("PDFKit");
+  const doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));
+  if (!doc) return "";
+  const out = [];
+  for (let i = 0; i < doc.pageCount; i++) {
+    const s = doc.pageAtIndex(i).string;
+    out.push("\\f" + (s.isNil() ? "" : ObjC.unwrap(s)));
+  }
+  return out.join("");
+}'''
+
+
+# 35 real course decks and docs, 555 slide and document parts, measured
+# 2026-10-31: the biggest was 228 KB uncompressed. 5 MB is 20 times that, so a
+# part over it is a damaged file or a zip bomb, not a lecture.
+OOXML_PART_MAX = 5_000_000
+OOXML_OPEN = re.compile(r"<(?:a|w):p[ >]")
+OOXML_CLOSE = re.compile(r"</(?:a|w):p>")
+
+
+def ooxml_paragraphs(xml):
+    """Each <a:p>...</a:p> (or w:p) in order, in one pass. A lazy regex over
+    the whole part rescanned to the end from every unclosed paragraph tag, so
+    a hostile file could hang `usc read` (security review, 2026-10-28)."""
+    i = 0
+    while True:
+        start = OOXML_OPEN.search(xml, i)
+        if not start:
+            return
+        end = OOXML_CLOSE.search(xml, start.end())
+        if not end:
+            return
+        yield xml[start.start():end.end()]
+        i = end.end()
+
+
+def ooxml_parts(path, prefix, tag):
+    import zipfile
+    # [^<>] not [^>]: attributes never hold a raw "<", and stopping there keeps
+    # a run of unclosed <a:t tags from rescanning the paragraph each time.
+    run = re.compile(rf"<{tag}(?: [^<>]*)?>([^<]*)</{tag}>")
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist() if re.fullmatch(prefix + r"\d*\.xml", n)]
+        names.sort(key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)) if re.search(r"\d+\.xml$", n) else 0)
+        for n in names:
+            if z.getinfo(n).file_size > OOXML_PART_MAX:
+                raise ValueError(f"{n} is over {OOXML_PART_MAX // 1_000_000} MB uncompressed")
+            xml = z.read(n).decode("utf8", "replace")
+            paras = []
+            for p in ooxml_paragraphs(xml):
+                text = "".join(run.findall(p))
+                if text.strip():
+                    paras.append(unescape(text))
+            yield paras
+
+
+def unescape(s):
+    import html
+    return html.unescape(s)
+
+
+PPT_ATOM = re.compile(rb"\x00\x00(\xa0|\xa8)\x0f(.{4})", re.S)
+PPT_BOILERPLATE = re.compile(r"^(Click to edit|Second level|Third level|Fourth level|Fifth level|\*)", re.I)
+
+
+def ppt_text(path):
+    """Text from a binary PowerPoint 97-2003 .ppt.
+
+    Six of the BISC 101 decks pulled on 2026-10-13 were .ppt, which no zip
+    reader opens. Slide text sits in TextCharsAtom (0x0FA0, UTF-16LE) and
+    TextBytesAtom (0x0FA8, Latin-1) records, each behind an 8-byte header, so
+    finding those headers recovers the words without an Office install. Slide
+    order is the stream's order; slide numbers aren't recovered.
+    """
+    import struct
+    data = path.read_bytes()
+    out = []
+    for m in PPT_ATOM.finditer(data):
+        size = struct.unpack("<I", m.group(2))[0]
+        start = m.end()
+        if not 0 < size < 65536 or start + size > len(data):
+            continue
+        raw = data[start:start + size]
+        text = raw.decode("utf-16-le", "replace") if m.group(1) == b"\xa0" else raw.decode("latin-1")
+        text = text.replace("\r", "\n").replace("\x0b", "\n").strip()
+        # The same four bytes can turn up inside an embedded picture; real
+        # slide text is printable, picture bytes decoded as text are not.
+        if sum(c.isprintable() or c == "\n" for c in text) < 0.95 * len(text):
+            continue
+        if text and not PPT_BOILERPLATE.match(text) and (not out or out[-1] != text):
+            out.append(text)
+    return [("text", "\n".join(out))]
+
+
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def file_pages(path):
+    """[(label, text)] for one course file, with terminal control bytes dropped
+    (a file is someone else's text), or None when its type can't be read."""
+    pages = raw_pages(path)
+    return None if pages is None else [(label, CONTROL.sub("", text)) for label, text in pages]
+
+
+def raw_pages(path):
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        r = subprocess.run(["/usr/bin/osascript", "-l", "JavaScript", "-e", JXA_PDF, str(path)],
+                           capture_output=True, text=True, timeout=120)
+        pages = [(f"page {i}", t.strip()) for i, t in enumerate(r.stdout.rstrip("\n").split("\f")[1:], 1)]
+        if not any(t for _, t in pages):
+            # Locked, damaged, or a scan with no text layer: say so, never an
+            # empty header that reads as "this file says nothing".
+            raise ValueError("no text layer, likely a scan" if pages else "PDFKit couldn't open it")
+        return pages
+    if ext == ".pptx":
+        return [(f"slide {i}", "\n".join(p)) for i, p in enumerate(ooxml_parts(path, "ppt/slides/slide", "a:t"), 1)]
+    if ext == ".docx":
+        return [("text", "\n".join(p)) for p in ooxml_parts(path, "word/document", "w:t")]
+    if ext == ".ppt":
+        return ppt_text(path)
+    if ext in (".txt", ".md", ".csv"):
+        return [("text", path.read_text(errors="replace"))]
+    if ext in (".html", ".htm"):
+        return [("text", html_text(path.read_text(errors="replace")))]
+    return None
+
+
+def html_text(markup):
+    """A Brightspace HTML page (a syllabus written in the course's Content
+    editor) as lines: block tags become line breaks, scripts and styles go."""
+    markup = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", markup)
+    markup = re.sub(r"(?i)<br\s*/?>|</(p|div|li|tr|h[1-6]|table|ul|ol)>", "\n", markup)
+    markup = re.sub(r"(?i)</t[dh]>", " ", markup)
+    text = unescape(re.sub(r"<[^>]+>", "", markup))
+    return "\n".join(" ".join(l.split()) for l in text.splitlines() if l.strip())
+
+
+def course_files(target, slides):
+    """A file, a course folder by code (bisc120, BISC-120, "BISC 120"), or every course."""
+    p = Path(target).expanduser() if target else None
+    if p and p.is_file():
+        return [p]
+    if p and p.is_dir():
+        roots = [p]
+    elif target:
+        roots = [d for d in sorted(slides.glob("*")) if d.is_dir() and norm(d.name) == norm(target)]
+        if not roots:
+            roots = [d for d in sorted(slides.glob("*")) if d.is_dir() and norm(d.name).startswith(norm(target))]
+        if not roots:
+            return None
+    else:
+        roots = [d for d in sorted(slides.glob("*")) if d.is_dir()]
+    return [f for r in roots for f in sorted(r.rglob("*")) if f.is_file() and not f.name.startswith(".")]
+
+
+def read(target, find, slides):
+    files = course_files(target, slides)
+    if files is None:
+        have = ", ".join(d.name for d in sorted(slides.glob("*")) if d.is_dir()) or "none yet"
+        print(f"No course folder matches {target!r} in {slides} (have: {have}). "
+              f"`{PROG} lockin --apply` pulls them.")
+        return 1
+    words = [w.lower() for w in find.split()] if find else []
+    skipped, hits = [], 0
+    for f in files:
+        try:
+            pages = file_pages(f)
+        except Exception as e:  # a corrupt zip or a PDF PDFKit refuses: name it, keep going
+            skipped.append(f"{f.name} ({e if isinstance(e, ValueError) else e.__class__.__name__})")
+            continue
+        if pages is None:
+            skipped.append(f.name)
+            continue
+        rel = f.relative_to(slides) if f.is_relative_to(slides) else f
+        if words:
+            for label, text in pages:
+                for line in text.splitlines():
+                    if all(w in line.lower() for w in words):
+                        hits += 1
+                        print(f"{rel}, {label}: {line.strip()}")
+            continue
+        print(f"=== {rel}")
+        for label, text in pages:
+            print(f"--- {label}\n{text}" if len(pages) > 1 or label != "text" else text)
+        print()
+    if words and not hits:
+        print(f"Nothing in {len(files)} file(s) mentions {find!r}.")
+    if skipped:
+        print(f"Can't read here: {', '.join(skipped)}", file=sys.stderr)
+    return 1 if files and len(skipped) == len(files) else 0
+
+
+# ── syllabus into the ledger ─────────────────────────────────────────────────
+# Lockin seeded course files with no class times, office hours, attendance
+# budget or grading, and `coursework check` listed 13 gaps for 4 courses on the
+# 2026-10-13 USC week walk while every answer sat in a pulled syllabus. This
+# reads each one and fills only the empty fields, each value naming its file
+# and page (bin/lib/syllabus_ledger.py has the rules).
+
+SYLLABUS_EXT = {".pdf", ".docx", ".pptx", ".ppt", ".html", ".htm", ".txt", ".md"}
+
+
+def syllabus_files(slides):
+    """{course folder: [syllabus files]}: any readable file under the folder
+    whose name or parent folder says syllabus."""
+    out = {}
+    for d in sorted(p for p in slides.glob("*") if p.is_dir()):
+        files = [f for f in d.rglob("*") if f.is_file() and f.suffix.lower() in SYLLABUS_EXT
+                 and "syllab" in (f.name + " " + f.parent.name).lower()
+                 # A folder named Syllabus also holds the schedule and the
+                 # assignment prompts; only a file that says syllabus counts.
+                 and "syllab" in f.name.lower()]
+        if files:
+            out[d] = files
+    return out
+
+
+def course_file_for(folder, ledger):
+    want = norm(folder.name)
+    for f in sorted((ledger / "courses").glob("*.yml")):
+        m = re.search(r'^code:\s*"?([^"\n#]+)', f.read_text(errors="replace"), re.M)
+        if m and (norm(m.group(1)).startswith(want) or want.startswith(norm(m.group(1)))):
+            return f
+    return None
+
+
+def syllabus(apply, slides, ledger, compare=None, quiet=False):
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import syllabus_ledger as sl
+    today = dt.date.today().isoformat()
+    groups = syllabus_files(slides)
+    if not groups:
+        print(f"No syllabus in {slides} yet. `{PROG} lockin --apply` pulls them.")
+        return 1
+    report = {}
+    for folder, files in groups.items():
+        dest = course_file_for(folder, ledger)
+        found, read_names, unreadable = [], [], []
+        for f in sorted(files, key=sl.syllabus_order):
+            try:
+                pages = file_pages(f)
+            except Exception as e:  # a scan or a damaged file: named, never a silent empty
+                unreadable.append(f"{f.name} ({e if isinstance(e, ValueError) else e.__class__.__name__})")
+                continue
+            if pages:
+                found.append(sl.read_syllabus(pages, f.name))
+                read_names.append(f.name)
+        merged = sl.merge(found)
+        entry = {"folder": folder.name, "files": read_names, "unreadable": unreadable,
+                 "found": merged, "course_file": str(dest) if dest else None}
+        if dest is None:
+            entry["skipped"] = "no course file in the ledger for this folder"
+        elif merged:
+            before = dest.read_text()
+            after, written, conflicts, gaps = sl.fill(before, merged, " and ".join(read_names), today)
+            entry.update(written=written, conflicts=conflicts, gaps=gaps)
+            if apply and after != before:
+                dest.write_text(after)
+        report[folder.name] = entry
+    if compare is not None:
+        return compare_ledgers(report, ledger, compare)
+    if quiet:
+        return report
+    for name, e in report.items():
+        print(f"{name}: {', '.join(e['files']) or 'nothing readable'}")
+        if e.get("skipped"):
+            print(f"  skipped: {e['skipped']}")
+            continue
+        for w in e.get("written", []):
+            print(f"  {'filled' if apply else 'would fill'} {w}")
+        for c in e.get("conflicts", []):
+            print(f"  left alone, differs: {c}")
+        for g in e.get("gaps", []):
+            print(f"  not in the syllabus: {g}")
+        for u in e["unreadable"]:
+            print(f"  can't read: {u}")
+    if not apply:
+        print("Nothing written: rerun with --apply.")
+    return 0
+
+
+def grades(apply, ledger, quiet=False):
+    """Released Brightspace scores onto the ledger's matching grading parts,
+    so `coursework grade` has something to add up."""
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import syllabus_ledger as sl
+    r = subprocess.run([sys.executable, str(ROOT / "bin" / "brightspace"), "grades", "--json"],
+                       capture_output=True, text=True)
+    try:
+        courses = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        print("Grades: " + signed_out(r.stderr.strip() or r.stdout.strip() or "no answer"))
+        return 3
+    today = dt.date.today().isoformat()
+    print("Grades from Brightspace:")
+    for c in courses:
+        dest = course_file_for(Path(c["course"].replace(" ", "-")), ledger)
+        if dest is None or not c["grades"]:
+            continue
+        before = dest.read_text()
+        after, scored, unmatched = sl.add_scores(before, c["grades"], today)
+        if apply and after != before:
+            dest.write_text(after)
+        for s_ in scored:
+            print(f"  {c['course']:<10} {'scored' if apply else 'would score'} {s_}")
+        if unmatched:
+            print(f"  {c['course']:<10} no single grading part for: {', '.join(unmatched)}")
+    if not apply:
+        print("Nothing written: rerun with --apply.")
+    return 0
+
+
+def course_facts(ledger):
+    r = subprocess.run(["node", str(ROOT / "bin" / "coursework"), "show", "--json"],
+                       capture_output=True, text=True, env={**os.environ, "COURSEWORK_DIR": str(ledger)})
+    return {norm(c.get("code", "")): c for c in json.loads(r.stdout or "[]")}
+
+
+def compare_ledgers(report, scratch, real):
+    """Score the scratch ledger the syllabi filled against a ledger a person
+    filled by hand: per field, match, miss (the person has it, the syllabus
+    read didn't), conflict (both have it and they differ) or extra."""
+    got, want = course_facts(scratch), course_facts(real)
+    tally = {"match": 0, "miss": 0, "conflict": 0, "extra": 0}
+    rows = []
+
+    def score(course, field, mine, theirs, same):
+        kind = ("match" if same(mine, theirs) else "conflict") if mine and theirs else \
+               "miss" if theirs else "extra" if mine else None
+        if kind:
+            tally[kind] += 1
+            rows.append((course, field, kind, mine, theirs))
+
+    # Only courses a syllabus was read for: a course with none pulled (ACAD 185
+    # keeps its syllabus as a spreadsheet in Downloads) says nothing about the reader.
+    read_codes = {norm(Path(e["course_file"]).stem) for e in report.values() if e.get("course_file") and e["files"]}
+    for key, real_c in want.items():
+        mine_c = got.get(key)
+        if mine_c is None or not any(key.startswith(c) or c.startswith(key) for c in read_codes):
+            continue
+        code = real_c.get("code", key)
+        m_meets = [(tuple(m.get("days", [])), m.get("start"), m.get("end")) for m in (mine_c.get("meets") or [])]
+        r_meets = [(tuple(m.get("days", [])), m.get("start"), m.get("end")) for m in (real_c.get("meets") or [])
+                   if m.get("start")]
+        score(code, "class times", m_meets[:1], r_meets[:1], lambda a, b: a[0] == b[0])
+        m_room = (mine_c.get("meets") or [{}])[0].get("room", "") if mine_c.get("meets") else ""
+        r_room = r_meets and (real_c.get("meets") or [{}])[0].get("room", "")
+        score(code, "room", m_room, r_room, lambda a, b: norm(a) and norm(a) in norm(b))
+        mi, ri = mine_c.get("instructor"), real_c.get("instructor")
+        mi = mi if isinstance(mi, dict) else {}
+        r_text = json.dumps(ri) if ri else ""
+        ri_d = ri if isinstance(ri, dict) else {}
+        score(code, "instructor email", mi.get("email"), ri_d.get("email") or (re.search(r"[\w.]+@[\w.]+", r_text) or [None])[0],
+              lambda a, b: a.lower() == b.lower())
+        score(code, "office hours", mi.get("office_hours"), ri_d.get("office_hours"),
+              lambda a, b: bool(set(re.findall(r"\d{1,2}", a)) & set(re.findall(r"\d{1,2}", b))) or norm(a)[:10] in norm(b))
+        ma, ra = mine_c.get("absences") or {}, real_c.get("absences") or {}
+        score(code, "absences allowed", ma.get("allowed"), ra.get("allowed"), lambda a, b: a == b)
+        mg = [(g.get("name"), g.get("weight"), g.get("points")) for g in (mine_c.get("grading") or [])]
+        rg = [(g.get("name"), g.get("weight"), g.get("points")) for g in (real_c.get("grading") or [])]
+        score(code, "grading parts", mg, rg,
+              lambda a, b: len(a) == len(b) and sorted(x[1] or x[2] or 0 for x in a) == sorted(x[1] or x[2] or 0 for x in b))
+    for course, field, kind, mine, theirs in rows:
+        print(f"  {kind:<8} {course:<12} {field:<17} read {short(mine)}  ledger {short(theirs)}")
+    print(f"\n{tally['match']} match, {tally['miss']} miss, {tally['conflict']} conflict, {tally['extra']} extra "
+          f"across {len({r[0] for r in rows})} course(s) with a syllabus pulled.")
+    return 0
+
+
+def short(v):
+    s = json.dumps(v) if not isinstance(v, str) else v
+    return (s[:48] + "...") if len(s) > 51 else (s or "-")
+
+
+def main():
+    if sys.argv[1:2] == ["food"]:
+        food_cli = str(ROOT / "bin" / "usc-food")
+        if not os.path.exists(food_cli):
+            print(f"`{PROG} food` isn't in this install yet: it needs bin/usc-food.", file=sys.stderr)
+            return 2
+        os.execv(sys.executable, [sys.executable, food_cli] + sys.argv[2:])
+    ap = argparse.ArgumentParser(prog=PROG, add_help=True)
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin", "read", "syllabus", "grades"])
+    ap.add_argument("target", nargs="?", help="read: a course code, a folder or a file")
+    ap.add_argument("--find", help="read: only lines with all these words, each with its file and page")
+    ap.add_argument("--apply", action="store_true", help="lockin: write the ledger and pull files")
+    ap.add_argument("--out", default=str(Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework") / "slides"),
+                    help="lockin: where lecture files go")
+    ap.add_argument("--days", type=int, default=120, help="lockin: how far ahead to read the calendar")
+    ap.add_argument("--ledger", help="syllabus: the ledger to fill (default ~/coursework)")
+    ap.add_argument("--compare", help="syllabus: score what was read against this ledger, writing nothing there")
+    ap.add_argument("--hall", choices=HALLS)
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    if a.cmd == "setup":
+        return setup()
+    if a.cmd == "lockin":
+        return lockin(a.apply, Path(a.out).expanduser(), a.days)
+    if a.cmd == "read":
+        return read(a.target, a.find, Path(a.out).expanduser())
+    if a.cmd == "grades":
+        return grades(a.apply, Path(a.ledger).expanduser() if a.ledger else LEDGER)
+    if a.cmd == "syllabus":
+        ledger = Path(a.ledger).expanduser() if a.ledger else LEDGER
+        return syllabus(a.apply, Path(a.out).expanduser(), ledger,
+                        Path(a.compare).expanduser() if a.compare else None)
+    cfg = load_config()
+    if a.hall:
+        cfg["hall"] = a.hall
+        save_config(cfg)
+    hall = cfg.get("hall", "university-village")
+    # A student who never picked a hall sees the default named as one, so
+    # nobody reads Village's menu thinking it is the hall they eat at.
+    hall_picked = bool(cfg.get("hall"))
+    now = dt.datetime.now()
+    today = now.date()
+    # One sync up front, so the three sections don't each re-check every spec.
+    subprocess.run(API + ["sync"], capture_output=True)
+    with cf.ThreadPoolExecutor(max_workers=3) as pool:
+        jobs = {"due": pool.submit(due, today), "food": pool.submit(food, today, hall, now),
+                "events": pool.submit(events, today)}
+        report = {k: v.result() for k, v in jobs.items()}
+    report["food"]["picked"] = hall_picked
+    print(json.dumps(report, indent=2) if a.json else render(report))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

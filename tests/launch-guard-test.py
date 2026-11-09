@@ -1,4 +1,9 @@
-"""launch-guard.sh: a campaign launch needs a full, unchanged pre-send gate receipt.
+"""launch-guard.sh: the original 2026-10-05 cases, kept as regressions.
+
+Reads still run; every launch-shaped command, click or receipt forgery refuses.
+The receipts are set up as before, so a case refusing proves the hook no longer
+lets fresh receipts open a shell launch. tests/test_launch_guard_grade.py holds
+the allowlist and the send-path grade checks.
 
 Run: python3 tests/launch-guard-test.py
 """
@@ -6,16 +11,36 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 
-H = os.path.expanduser("~/.claude/hooks/launch-guard.sh")
+# The repo's hook, not the installed copy: the installed one lags a commit.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+H = os.path.join(ROOT, ".claude", "hooks", "launch-guard.sh")
+# A real signed launch grade for cam_x, so only the pre-send half decides here.
+SIGN = r"""
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import gtme_grade as G
+class Passed:
+    n = 1
+    passed = True
+G.write_receipt("1372623", "cam_x", "launch", {"name": "t", "raw": json.load(open(sys.argv[3]))},
+                [Passed()], [sys.argv[2]])
+"""
 
 
-def run(tool, tool_input, receipt=None, files=None, last_url=None):
-    home = tempfile.mkdtemp()
+def run(tool, tool_input, receipt=None, files=None, last_url=None, chat=None):
+    home = os.path.realpath(tempfile.mkdtemp())
     state = os.path.join(home, ".chewbacca", "state")
     os.makedirs(state)
+    session = "s-caleb"
+    if chat is not None:
+        rec_session, age = chat
+        os.makedirs(os.path.join(state, "clay-chat-approval"))
+        with open(os.path.join(state, "clay-chat-approval", rec_session + ".json"), "w") as fh:
+            json.dump({"v": 2, "interactive": True, "at": int(time.time()) - age, "session_id": rec_session}, fh)
     if last_url:
         with open(os.path.join(state, "launch-guard-last-url"), "w") as fh:
             fh.write(last_url)
@@ -29,10 +54,27 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None):
                     fh.write(content)
                 hashes[p] = hashlib.sha256(recorded.encode()).hexdigest()
             receipt["hashes"] = hashes
-        with open(os.path.join(state, "send-gate-receipt.json"), "w") as fh:
+        # One receipt per client since 2026-10-13.
+        os.makedirs(os.path.join(state, "send-gate-receipts"), exist_ok=True)
+        with open(os.path.join(state, "send-gate-receipts", "test-client.json"), "w") as fh:
             json.dump(receipt, fh)
-    env = dict(os.environ, HOME=home)
-    p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
+    # These cases test the pre-send half; a passing gtme-grade receipt is always
+    # present so only that half decides. tests/test_launch_guard_grade.py covers
+    # the grade half.
+    gin = os.path.join(home, "graded.csv")
+    with open(gin, "w") as fh:
+        fh.write("email\n")
+    fixtures = os.path.join(home, "clay")
+    os.makedirs(fixtures)
+    with open(os.path.join(fixtures, "cam_x.json"), "w") as fh:
+        json.dump({"id": "cam_x", "sequence": []}, fh)
+    # The repo's bin first, so `work-ledger` resolves to this checkout's shim on any machine.
+    env = dict(os.environ, HOME=home, GTME_GRADE_KEY_FILE=os.path.join(home, "k", "grade.key"),
+               PATH=os.path.join(ROOT, "bin") + os.pathsep + os.environ.get("PATH", ""),
+               GTME_GRADE_CLAY_FIXTURE_DIR=fixtures, CHEWBACCA_ROOT=ROOT)
+    subprocess.run([sys.executable, "-c", SIGN, os.path.join(ROOT, "tools"), gin,
+                    os.path.join(fixtures, "cam_x.json")], env=env, check=True, timeout=30)
+    p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input, "session_id": session}),
                        capture_output=True, text=True, env=env, timeout=20)
     return p.returncode
 
@@ -42,7 +84,7 @@ FULL = {"time": now, "full": True}
 SAME = {"list.csv": ("a,b\n", "a,b\n")}
 EDITED = {"list.csv": ("a,b\nextra\n", "a,b\n")}
 CLAY = "https://app.clay.com/workspaces/1/campaigns/cam_x"
-L = 'chewie web click "Launch"'
+L = 'chewie web click "Launch"  # cam_x'
 cases = [
     # must PASS (0): reads, navigation, unrelated clicks
     ("read analytics", "Bash", {"command": "clay campaigns analytics cam_x"}, None, None, None, 0),
@@ -54,8 +96,11 @@ cases = [
      None, None, None, 0),
     ("gate run passes the hook", "Bash",
      {"command": "python3 scripts/pre_send_gate.py l.csv --mx"}, None, None, None, 0),
-    ("launch, fresh full receipt, files unchanged", "Bash", {"command": L},
-     FULL, SAME, None, 0),
+    # Since 2026-10-10 no shell command starts a campaign, receipts or not: a
+    # START goes only through chewbacca clay, a person and a passing grade.
+    ("launch from a shell refuses even with fresh receipts", "Bash",
+     {"command": "clay campaigns update cam_x --status active"},
+     FULL, SAME, None, 2),
     ("mcp click off clay", "mcp__chrome-devtools__click", {"uid": "1"},
      None, None, "https://github.com", 0),
     # must BLOCK (2)
@@ -71,6 +116,9 @@ cases = [
      None, None, None, 2),
     ("clay cli status active", "Bash", {"command": "clay campaigns update cam_x --status active"},
      None, None, None, 2),
+    ("catalog read passes", "Bash", {"command": "clay workflows actions list"}, None, None, None, 0),
+    ("--version is exact, never a prefix", "Bash",
+     {"command": "clay --version campaigns update cam_x --status active"}, None, None, None, 2),
     ("partial receipt does not unlock", "Bash", {"command": L},
      {"time": now, "full": False}, SAME, None, 2),
     ("stale receipt does not unlock", "Bash", {"command": L},
@@ -95,11 +143,110 @@ cases = [
      "mcp__plugin_playwright_playwright__browser_click", {"ref": "e5"}, None, None, CLAY, 2),
 ]
 
+# 2026-10-10: Caleb's "do it yourself" in chat (chat-approval.sh) stands in for a
+# person at the Clay UI, in his session, for 2 hours, and never skips the gate.
+FULL_NO_LINES = {"time": now, "full": False, "full_but_lines": True}
+HOME_PAGE = "https://app.clay.com/workspaces/1/home"
+cases = [(*c, None) for c in cases] + [
+    # The recorded URL lags in-app navigation, so a "home page" click may land on Start.
+    ("chat ok alone never opens a Clay click, URL lagging", "mcp__chrome-devtools__click", {"uid": "2"},
+     None, None, HOME_PAGE, 2, ("s-caleb", 60)),
+    ("chat ok + gate pass opens a Clay click", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 0, ("s-caleb", 60)),
+    ("chat ok: a campaign-page click still needs a gate receipt", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     None, None, CLAY, 2, ("s-caleb", 60)),
+    ("chat ok + full receipt, lines off: Start goes through", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     FULL_NO_LINES, SAME, CLAY, 0, ("s-caleb", 60)),
+    ("chat ok + receipt, list edited after the pass", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     FULL_NO_LINES, EDITED, CLAY, 2, ("s-caleb", 60)),
+    ("chat ok + partial receipt", "Bash", {"command": L},
+     {"time": now, "full": False}, SAME, None, 2, ("s-caleb", 60)),
+    ("chat ok from another tab's session, gate passed", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 2, ("s-other", 60)),
+    ("chat ok older than 2 hours, gate passed", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 2, ("s-caleb", 3 * 3600)),
+    ("writing the chat approval with the Write tool", "Write",
+     {"file_path": "/Users/x/.chewbacca/state/clay-chat-approval.json", "content": "{}"},
+     None, None, None, 2, None),
+    ("writing the chat approval from the shell", "Bash",
+     {"command": "echo {} > ~/.chewbacca/state/clay-chat-approval.json"}, None, None, None, 2, None),
+    ("an ordinary file write", "Write", {"file_path": "/tmp/notes.md", "content": "x"},
+     None, None, None, 0, None),
+]
+
+# 2026-10-11: the Bash description is never run. "Quit and relaunch Kyber"
+# there refused a plain quit. The block cases are the seven bypasses a review
+# reproduced against a narrower rule tried the same night; the substring rule
+# must keep refusing every one.
+# A git repo of its own: the kit's real ledger files, committed clean, plus a
+# planted json.py beside the shim. Its HEAD is not in the kit's history.
+EVIL_REPO = os.path.realpath(tempfile.mkdtemp())
+os.makedirs(os.path.join(EVIL_REPO, "bin"))
+os.makedirs(os.path.join(EVIL_REPO, "tools"))
+for rel in ("bin/work-ledger", "tools/work_ledger.py"):
+    with open(os.path.join(ROOT, rel)) as src, open(os.path.join(EVIL_REPO, rel), "w") as dst:
+        dst.write(src.read())
+with open(os.path.join(EVIL_REPO, "bin", "json.py"), "w") as fh:
+    fh.write("raise SystemExit('planted')\n")
+GENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+            GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL="/dev/null")
+for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x", "--no-verify"]):
+    subprocess.run(["git", "-C", EVIL_REPO, *cmd], check=True, capture_output=True, env=GENV)
+# Review of 6d975eb3: git run inside the candidate would run its fsmonitor.
+FSMON_MARK = os.path.join(EVIL_REPO, "fsmonitor-ran")
+subprocess.run(["git", "-C", EVIL_REPO, "config", "core.fsmonitor", f"touch {FSMON_MARK}; false"],
+               check=True, capture_output=True, env=GENV)
+# A real kit worktree with a planted json.py in bin/ is refused too.
+PLANTED = os.path.realpath(tempfile.mkdtemp()) + "/wt"
+subprocess.run(["git", "-C", ROOT, "worktree", "add", "-q", "--detach", PLANTED, "HEAD"],
+               check=True, capture_output=True, env=GENV)
+with open(os.path.join(PLANTED, "bin", "json.py"), "w") as fh:
+    fh.write("raise SystemExit('planted')\n")
+# Review of 7f0df333: any extra file in bin/, not just a module-shaped one.
+EXTRA = os.path.realpath(tempfile.mkdtemp()) + "/wt"
+subprocess.run(["git", "-C", ROOT, "worktree", "add", "-q", "--detach", EXTRA, "HEAD"],
+               check=True, capture_output=True, env=GENV)
+with open(os.path.join(EXTRA, "bin", "sitecustomize"), "w") as fh:
+    fh.write("x\n")
+U = lambda c, want, desc="": (c[:60], "Bash", {"command": c, "description": desc},  # noqa: E731
+                              None, None, None, want, None)
+cases += [
+    U("osascript -e 'quit app \"Kyber\"' && sleep 1 && open -g -a Kyber", 0,
+      "Quit and relaunch Kyber, check listener and surfaces"),
+    U('nice chewie web click "Launch"', 2),
+    U('{ chewie web click "Launch"; }', 2),
+    U('W=launch; chewie web click $W', 2),
+    U('find . -maxdepth 0 -exec chewie web click launch \\;', 2),
+    U('cat <<EOF | osascript\ntell application "System Events" to click button "Launch" of window 1\nEOF', 2),
+    U('echo "a <<END"\nchewie web click launch', 2),
+    U('fish -c "chewie web click launch"', 2),
+    # Review of f5447e2c: the command text lost $lower's whitespace squeeze.
+    U('chewie web click "add   leads"', 2),
+    U('chewie web click "start\nsending"', 2),
+    # 2026-10-28: a ledger title saying campaign was refused, so the Junto to-dos never landed.
+    U('work-ledger add --scope /Users/x "Run our 164 owners as a separate Dripify campaign next to his"', 0),
+    U('work-ledger list --scope /Users/x', 0),
+    U('work-ledger add "campaign" && clay campaigns update cam_x --status active', 2),
+    U('work-ledger add "campaign" > /tmp/x', 2),
+    # Review of 8364cb82: a planted work-ledger, or one naming Clay state, stays refused.
+    U('/tmp/evil/bin/work-ledger add "campaign"', 2),
+    U('work-ledger add "campaign" --title "see ~/.chewbacca/state/send-gate-receipts"', 2),
+    # Review of 09fd9e1c: a repo of its own with a clean, committed ledger is still not the kit.
+    U(f'{EVIL_REPO}/bin/work-ledger add "campaign"', 2),
+    U(f'{PLANTED}/bin/work-ledger add "campaign"', 2),
+    U(f'{EXTRA}/bin/work-ledger add "campaign"', 2),
+]
+
 bad = 0
-for name, tool, ti, receipt, files, last_url, want in cases:
-    got = run(tool, ti, receipt, files, last_url)
+for name, tool, ti, receipt, files, last_url, want, chat in cases:
+    got = run(tool, ti, receipt, files, last_url, chat)
     ok = got == want
     bad += not ok
     print(f"{'ok  ' if ok else 'FAIL'} {name}: want {want} got {got}")
+ran = os.path.exists(FSMON_MARK)
+print(f"{'FAIL' if ran else 'ok  '} the candidate repo's git config never runs")
+bad += ran
+for wt in (PLANTED, EXTRA):
+    subprocess.run(["git", "-C", ROOT, "worktree", "remove", "--force", wt], capture_output=True, env=GENV)
 print(f"\n{len(cases) - bad}/{len(cases)} passed")
 raise SystemExit(1 if bad else 0)

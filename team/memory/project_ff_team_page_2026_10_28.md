@@ -1,0 +1,34 @@
+---
+name: project_ff_team_page_2026_10_28
+description: Firm Foundation /team page (PR #3), founders plus a board of advisors and Christian tech advisors; what's sourced, what's NEED, what's left before Gav merges
+metadata:
+  type: project
+---
+
+Firm Foundation's site got a /team page on 2026-10-28 (Caleb's ask: move the founders off /mission onto a new Team tab and add advisors). It's PR #3 on gavinjmunroe/firm-foundation, branch `feat/team-page`, worktree ~/code/wt-ff-team. Not merged. Gav merges, since Vercel only deploys his commits.
+
+What's on it, in Caleb's order:
+
+- Board of advisors: Andrew Laffoon (lead advisor, full-width card), Joel Newton, Jim Munroe, Erik Fish, Holly Dunlap
+- Christian tech advisors: Duncan Inganji, Pastor Joe Hwang, Joel George, Luke Ren
+- Copy lives in `team` in site/lib/content.ts, layout in site/components/Advisors.tsx, page at site/app/team/page.tsx
+
+Sources for every bio line: Andrew (his LinkedIn About + Crunchbase: Mixbook 2006, #1 on Wirecutter, 23K five-star Trustpilot, Inc 30 Under 30, Forbes Most Promising CEOs Under 35, UC Berkeley), Joel Newton (Praxis + XR Must: co-founded The Virtual Reality Company, Jurassic World VR, CityLights, directed Tutankhamun: Enter the Tomb), Holly (LinkedIn + Crunchbase), Erik (erikfish.com), Luke (LinkedIn headline + MindFort's YC page), Duncan "Google" (Caleb's Contacts only).
+
+Headshots: only Andrew (LinkedIn public og:image, 200px) and Joel Newton (his Praxis headshot) are real. The rest show royal-to-ice monograms. LinkedIn's voyager photo endpoint 302-looped and public pages 999'd, Instagram ops returned drift, and Contacts only had a flower for Joel.
+
+Still open before merge:
+
+- Every advisor says yes first. Andrew hadn't been called as of 10/28.
+- NEED boxes: Jim Munroe (title + bio; a DFW "Director of Sales, Ashton and Associates" exists on LinkedIn but isn't confirmed as Gav's Jim), Duncan (bio), Pastor Joe (church + bio), Joel George (title, church, bio)
+- Headshots from Jim, Erik, Holly, Duncan, Joe, Joel George, Luke
+- Suggested adds Caleb hasn't answered: John Knox (Medrano, ex Gloo), Grandpa Stan (Crown Institute of Theology)
+- Railway preview (firm-foundation.up.railway.app) had 3 builds queued at 11:06 and /team still 404'd; check `railway deployment list` from site/
+
+Design calls Caleb made on it: "make it as useful as possible so they look at the page and think dang this is legit", descriptions for each person "ESPECIALLY Andrew Laffoon", real headshots ("stop being lazy"), and "don't make it a funeral pdf" (grayscale photos in hairline boxes were rejected; it's now the navy night band, full-colour photos, rounded cards, 2-column grid).
+
+Also 10/28: D14 ("website first, then more" for the site demo) confirmed by Caleb in DECISIONS.md, 5729d7d. See [[project_firm_foundation_site]], [[project_firm_foundation_site_motion_split]].
+
+**Update 2026-10-29: merged and live** at firmfoundation.tech/team, now served from Railway off calebnewtonusc/firm-foundation main (see feedback_vercel_hobby_blocks_collaborator_commits). Every advisor is sourced from a LinkedIn or page Caleb pasted, or from public pages (Praxis, I Am Second, Novus, the On Coaching podcast, Duncan's sermon). Open items: Caleb's founder sentences, color photos of Joel Newton and Jim Munroe, photos of Joel George and Luke Ren, schools for Holly, Travis, Joe and John Knox.
+
+Caleb's verdicts that set the layout, all 2026-10-29: "looks like a funeral pdf" (black and white founder photos, small circle headshots, a wall of uniform text cards), "didn't even try to add logos or descriptions", "you didn't stress the christian leadership enough", then "isn't the best visually". What landed: big colour portraits with name on the photo, a cross-marked faith line on every card where a source names one, a row of org logos, and the bio plus one line per org rising over the photo on hover or tap; the lead advisor as a split card with his own quote; grids sized so no row holds one card (filler card is real content, the FaithTech partnership); networks with logos, official partners first. Logos come from Google's favicon service at sz=128 and anything blurry (16px) or a placeholder globe gets dropped or swapped for one Caleb sends.

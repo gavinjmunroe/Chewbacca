@@ -111,7 +111,12 @@ def inbox(limit=40):
             row = json.loads(line)
         except ValueError:
             continue
-        said = (row.get("said") or "").strip()
+        # One row that is JSON but not a {"said": str} object (a list, a
+        # number, "said": 5, "at": null) killed the whole inbox with an
+        # AttributeError, hiding every captured ask (break-it, 2026-10-19).
+        if not isinstance(row, dict) or not isinstance(row.get("said"), str):
+            continue
+        said = row["said"].strip()
         if len(said) < 12:
             continue
         key = said[:70].lower()
@@ -124,7 +129,7 @@ def inbox(limit=40):
             continue
         hits = sum(1 for w in set(words) if w in text)
         if hits / len(set(words)) < 0.45:
-            rows.append((row.get("at", "")[:16], said))
+            rows.append((str(row.get("at") or "")[:16], said))
     if not rows:
         print("  every captured request is mentioned in the backlog")
         return 0
@@ -138,6 +143,10 @@ def inbox(limit=40):
 
 def main():
     arg = (sys.argv[1] if len(sys.argv) > 1 else "").lower()
+    # `backlog --help` searched the backlog for "--help" (break-it, 2026-10-19).
+    if arg in ("-h", "--help", "help"):
+        print(__doc__ or "backlog [all|next|done|dead|inbox|<word>]")
+        return 0
     secs = sections()
 
     if arg == "inbox":

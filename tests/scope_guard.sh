@@ -18,24 +18,37 @@ probe() {        # name, expected exit, reply, prompts...
   local name="$1" want="$2" reply="$3"; shift 3
   local t; t=$(transcript "$@")
   jq -cn --arg m "$reply" --arg t "$t" '{last_assistant_message:$m,transcript_path:$t}' \
-    | bash "$HOOK" >/dev/null 2>&1
+    | HOOK_JUDGE_STUB="${HOOK_JUDGE_STUB-}" bash "$HOOK" >/dev/null 2>&1
   local got=$?
   if [ "$got" = "$want" ]; then echo "  ok    $name"; else echo "  FAIL  $name: wanted $want got $got"; fail=$((fail+1)); fi
 }
 
 ASK="Graph engineer finding a ton of creators like him and then scraping all their stuff too"
-echo "refuses a cut he didn't make:"
-probe "the 2026-10-09 reply" 2 \
-  "The 36 closest fits get the full pull. Instagram and TikTok are on hold." "$ASK"
-probe "scope set two prompts back" 2 \
-  "Capped at the 10 newest videos per channel." "$ASK" "Continue"
-probe "top N" 2 "Ingesting the top 20 creators by fit." "scrape every creator you found"
-echo "lets through:"
-probe "a named hard blocker" 0 \
-  "Instagram is on hold. BLOCKED: Instagram 429s his session; needs a second account." "$ASK"
-probe "full scope, no cut" 0 "All 238 creators are queued across every platform." "$ASK"
-probe "no totality word" 0 "Capped at 10 videos per channel." "grab a few of his videos"
-probe "injection alone isn't his ask" 0 "Capped at 10 videos per channel." "grab a few of his videos"
+CUT="The 36 closest fits get the full pull. Instagram and TikTok are on hold."
+
+# Whether a reply cuts scope is Jev's call. The stub stands in for it. Phrasings
+# and live scores: tests/eval_reply_judges_jev.py.
+echo "refuses when Jev reads a cut and he asked for all of it:"
+HOOK_JUDGE_STUB=0.9 probe "the 2026-10-09 reply" 2 "$CUT" "$ASK"
+echo "stays out of the way:"
+HOOK_JUDGE_STUB=0.1 probe "Jev reads no cut" 0 "All 238 creators are queued." "$ASK"
+HOOK_JUDGE_STUB="" probe "Jev down means no refusal" 0 "$CUT" "$ASK"
+HOOK_JUDGE_STUB=0.9 probe "he never said all" 0 "$CUT" "ingest these creators"
+HOOK_JUDGE_STUB=0.9 probe "only a hook injection said all" 0 "$CUT" "ok"
+HOOK_JUDGE_STUB=0.9 probe "a named blocker" 0 "Instagram is on hold. BLOCKED: Instagram 429s his session." "$ASK"
+# hook_judge reads both ends of a long reply and survives a split character. A fake
+# jev.py beside a copy of lib.sh, so this never reaches the network.
+mkdir -p "$TMP/x/.claude/hooks" "$TMP/x/bin/lib"
+cp "$(dirname "$HOOK")/lib.sh" "$TMP/x/.claude/hooks/lib.sh"
+cat > "$TMP/x/bin/lib/jev.py" <<'PY'
+def ask(state, q, timeout=0, decision=None):
+    return {"q": {"noul": 0.5 if state["text"].endswith("THE-END") else 0.1}}
+def probability(v): return v
+PY
+SEEN=$(python3 -I -c 'print("\u2019" * 1000 + "x" * 9000 + "THE-END", end="")' \
+  | HOME="$TMP/home" bash -c 'source "$1"; hook_judge t q' _ "$TMP/x/.claude/hooks/lib.sh")
+[ "$SEEN" = "0.5" ] && echo "  ok    a long reply keeps its end and its split character" || { echo "  FAIL  long reply: $SEEN"; fail=$((fail+1)); }
+if grep -qE 're\.finditer' "$HOOK"; then echo "  FAIL  cut words are back"; fail=$((fail+1)); fi
 
 [ "$fail" = 0 ] && echo "scope-guard ok" || echo "$fail failed"
 exit "$fail"

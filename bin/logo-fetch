@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""logo-fetch: pull a site's mark at 128px for a logo row, and refuse the blurry ones.
+
+  logo-fetch --out site/public/media/logos mixbook.com praxis.co gloo.com
+  logo-fetch --out DIR name=domain ...      save under a chosen file name
+  logo-fetch --check FILE...                print each PNG's width, exit 1 on any under 64
+
+Google's favicon service answers every domain, so a miss never errors: it returns
+a 16px grey globe, or the site's own 16px icon. On 2026-10-29 the Firm Foundation
+/team page shipped a blurry 16px Cisco mark and two globe placeholders (Medrano,
+UC Irvine) before anyone looked. A mark under 64px wide is refused and named, so the
+fix is to ask for the real logo, not to ship the stand-in.
+"""
+import os
+import struct
+import sys
+import urllib.request
+
+MIN_WIDTH = 64  # the 2026-10-29 rejects were all 16px; every crisp mark came back 64 or 128
+
+
+def png_size(data: bytes):
+    """Width and height from a PNG's IHDR, or None when it isn't a PNG."""
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return struct.unpack(">II", data[16:24])
+
+
+def check(paths):
+    bad = 0
+    for path in paths:
+        with open(path, "rb") as fh:
+            size = png_size(fh.read(32))
+        if size is None:
+            print(f"{path}: not a PNG")
+            bad += 1
+        elif size[0] < MIN_WIDTH:
+            print(f"{path}: {size[0]}px, too small, ask for the real logo")
+            bad += 1
+        else:
+            print(f"{path}: {size[0]}px ok")
+    return 1 if bad else 0
+
+
+def fetch(out, specs):
+    os.makedirs(out, exist_ok=True)
+    bad = 0
+    for spec in specs:
+        name, _, domain = spec.partition("=") if "=" in spec else (spec.split(".")[0], "", spec)
+        url = f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+        try:
+            data = urllib.request.urlopen(url, timeout=15).read()
+        except OSError as err:
+            print(f"{domain}: fetch failed ({err})")
+            bad += 1
+            continue
+        size = png_size(data)
+        if size is None or size[0] < MIN_WIDTH:
+            width = size[0] if size else "?"
+            print(f"{domain}: {width}px, refused, ask for the real logo")
+            bad += 1
+            continue
+        path = os.path.join(out, f"{name}.png")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        print(f"{domain}: {size[0]}px -> {path}")
+    return 1 if bad else 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if argv[0] == "--check":
+        return check(argv[1:])
+    if argv[0] == "--out" and len(argv) >= 3:
+        return fetch(argv[1], argv[2:])
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

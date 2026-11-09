@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Pull an Instagram post down so an agent can read it: every slide, the video, the caption.
+
+  ig-read https://www.instagram.com/p/<code>/        a carousel or a single post
+  ig-read https://www.instagram.com/reel/<code>/     a reel, as an mp4
+  ig-read <url> <url> --json                         several, as JSON
+  ig-read <url> --out ~/somewhere                    somewhere other than ~/.chewbacca/ig
+
+Links people text themselves are mostly carousels of stills: "7 repos", "the AI
+news you missed". `summarize` and the video tools see nothing there, because a
+carousel has no video, and yt-dlp stops on every slide with "No video formats
+found". The slides are its thumbnails, at full size (1440x1920 on one post read
+2026-09-27), so this asks for thumbnails and ignores the missing formats.
+
+Carousels past four slides also get contact sheets, four slides to an image,
+because a model reading slides one at a time spends a call on each: seventeen
+became five on the first post this was written for.
+
+Reading is all it does. It never likes, follows, comments or posts.
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+CODE = re.compile(r"instagram\.com/(?:[^/?#]+/)?(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)")
+HOME_OUT = Path(os.environ.get("IG_READ_DIR") or Path.home() / ".chewbacca" / "ig")
+# Public posts came down with no cookies on 2026-09-27. A private account or a
+# login wall needs the browser's session, and which Chrome profile holds the
+# Instagram login differs per Mac, so it is a setting: IG_READ_COOKIES="chrome:Profile 5".
+COOKIES = os.environ.get("IG_READ_COOKIES", "chrome")
+STILL = {".jpg", ".jpeg", ".png", ".webp"}
+PER_SHEET = 4
+
+
+def code_of(url):
+    m = CODE.search(url or "")
+    return m.group(1) if m else None
+
+
+def fetch(url, dest, cookies=None):
+    """yt-dlp into dest. True when anything came down."""
+    cmd = ["yt-dlp", "--ignore-no-formats-error", "--write-info-json",
+           "--write-thumbnail", "--convert-thumbnails", "jpg",
+           "-f", "mp4/best", "-o", str(dest / "%(autonumber)02d.%(ext)s"),
+           "-o", "pl_infojson:" + str(dest / "post"), "--no-progress", "--quiet"]
+    if cookies:
+        cmd += ["--cookies-from-browser", cookies]
+    subprocess.run(cmd + [url], capture_output=True, text=True, timeout=300)
+    return any(p.suffix.lower() in STILL | {".mp4"} for p in dest.iterdir())
+
+
+def collect(dest):
+    """What a download left in dest: slides, videos, and the post's words."""
+    meta = {}
+    for info in sorted(dest.glob("*.info.json")):
+        try:
+            row = json.loads(info.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # The playlist file carries the caption of a carousel; a single post's
+        # one info file carries it too. Prefer whichever says the most.
+        if len(row.get("description") or "") >= len(meta.get("description") or ""):
+            meta = row
+    videos = sorted(p for p in dest.glob("[0-9]*.mp4"))
+    # A video slide keeps its poster frame as a slide too: on the 2026-09-27
+    # news carousel eight of seventeen slides were clips, and the headline and
+    # the paragraph under it were in the frame, not in any caption.
+    slides = sorted(p for p in dest.iterdir()
+                    if p.suffix.lower() in STILL and p.stem[:2].isdigit())
+    return {
+        "author": meta.get("channel") or meta.get("uploader"),
+        "posted": meta.get("upload_date"),
+        "caption": (meta.get("description") or "").strip(),
+        "slides": [str(p) for p in slides],
+        "videos": [str(p) for p in videos],
+    }
+
+
+def tile(paths, dest):
+    """Four slides to a sheet, each at the first slide's size, so text stays legible."""
+    sheets = []
+    if len(paths) <= PER_SHEET:
+        return sheets
+    try:
+        from PIL import Image
+    except ImportError:
+        # The slides are already on disk; a sheet only saves opening them one by one.
+        return sheets
+    w, h = Image.open(paths[0]).size
+    for n in range(0, len(paths), PER_SHEET):
+        group = paths[n:n + PER_SHEET]
+        sheet = Image.new("RGB", (w * 2, h * ((len(group) + 1) // 2)), "white")
+        for k, p in enumerate(group):
+            sheet.paste(Image.open(p).convert("RGB").resize((w, h)), ((k % 2) * w, (k // 2) * h))
+        out = dest / f"sheet-{n // PER_SHEET + 1}.jpg"
+        sheet.save(out, quality=90)
+        sheets.append(str(out))
+    return sheets
+
+
+def read(url, out_root):
+    code = code_of(url)
+    if not code:
+        return {"url": url, "error": "not an Instagram post, reel or carousel link"}
+    dest = out_root / code
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    got = fetch(url, dest) or fetch(url, dest, COOKIES)
+    if not got:
+        return {"url": url, "code": code, "error":
+                "nothing came down, with or without cookies; the post may be private, "
+                f"gone, or behind a login this Mac's {COOKIES!r} cookies do not hold "
+                "(set IG_READ_COOKIES to the Chrome profile signed in to Instagram)"}
+    post = collect(dest)
+    (dest / "caption.txt").write_text(post["caption"] + "\n", encoding="utf-8")
+    post.update(url=url, code=code, dir=str(dest),
+                sheets=tile([Path(p) for p in post["slides"]], dest))
+    return post
+
+
+def show(post):
+    if "error" in post:
+        return f"{post['url']}\n  {post['error']}"
+    lines = [f"{post['url']}", f"  by {post['author']}, posted {post['posted']}",
+             f"  {len(post['slides'])} slides, {len(post['videos'])} videos, in {post['dir']}"]
+    look = post["sheets"] or post["slides"]
+    if look:
+        lines.append("  read these: " + " ".join(look))
+    for v in post["videos"]:
+        lines.append(f"  video: {v}")
+    lines += ["  caption:", *("    " + c for c in post["caption"].splitlines() or ["(none)"])]
+    return "\n".join(lines)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("urls", nargs="+")
+    ap.add_argument("--out", type=Path, default=HOME_OUT)
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    if not shutil.which("yt-dlp"):
+        print("ig-read needs yt-dlp: brew install yt-dlp", file=sys.stderr)
+        return 2
+    posts = [read(u, a.out.expanduser()) for u in a.urls]
+    print(json.dumps(posts, indent=2) if a.json else "\n\n".join(map(show, posts)))
+    return 1 if any("error" in p for p in posts) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

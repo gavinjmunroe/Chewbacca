@@ -5,7 +5,7 @@ repo, and nothing else.
 This Mac runs code from the brain repo without asking (sync scripts from
 launchd, brain-check at SessionStart, .githooks on commit, .claude hooks and
 skills when a session opens there), and it loads CLAUDE.md files as
-instructions. Once a phone session can push (docs/PHONE.md), anything that
+instructions. Once a phone session can push (docs/guide/PHONE.md), anything that
 steers that session could plant either. So a pull is an ALLOWLIST: every path
 the remote changed must be a plain note file. Two review rounds on 2026-10-07
 broke a denylist of code extensions (extensionless scripts, the claude/ skills

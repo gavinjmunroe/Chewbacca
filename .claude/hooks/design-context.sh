@@ -30,26 +30,33 @@ type hook_init >/dev/null 2>&1 && hook_init design-context.sh 6
 # each other."
 set -uo pipefail
 
-PAYLOAD=$(cat)
 command -v jq >/dev/null 2>&1 || exit 0
-PROMPT=$(printf '%s' "$PAYLOAD" | jq -r '.prompt // empty')
-[ -n "$PROMPT" ] || exit 0
 
-# Only fire on work that actually renders something. A shell-script session
-# must not carry the animation rules.
-#
-# Short words match whole words only. As substrings, `ui` fired on "build",
-# "quick", "guide" and "suite": 45 of 300 prompts on 2026-10-05, about 2,000
-# characters each, including a hook audit that never mentioned a page.
-echo "$PROMPT" | grep -qiE 'design|animat|scroll|hover|layout|landing|component|website|gizmo|motion|typograph|spacing' \
-  || echo "$PROMPT" | grep -qiwE 'ui|ux|css|hero|page|pages|site|sites|svg|color|colour' \
-  || exit 0
+# Only work that renders something needs the animation rules, and a shell-script
+# session must not carry them. A word list decided that until 2026-11-05: `ui`
+# fired on "build" and "guide" (45 of 300 prompts, 2026-10-05), and "design" fired
+# a 2,000 character block on a sweep of hook code the day it was removed. Caleb:
+# "ur an llm not an if statement". So the model decides, and pulls the block.
+if [ "${1:-}" != "--full" ]; then
+  cat >/dev/null
+  jq -n --arg c 'If this turn is about how something looks or moves (a page, styles, animation, a visual, even a complaint that it looks off), run `bash ~/.claude/hooks/design-context.sh --full` first and use what it prints. Otherwise ignore this.' \
+    '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $c}}'
+  exit 0
+fi
 
 # The engine adds what this project has learned. The hard numbers below do not
 # need it, and exiting when it was absent meant every Mac but the author's got
 # no design context at all: on 2026-09-24 the hook was silent on "make the hero
 # scroll animation smoother" here, and its own test had failed for as long.
-ENGINE="${UX_ENGINE:-$HOME/code/tools/ux-engine}"
+# ux-engine ships inside the kit (apps/ux-engine) since 2026-10-09, so every
+# teammate's install has the same gate. It used to be a separate private repo
+# at ~/code/tools/ux-engine, which only Caleb's Mac had.
+_kit="${CHEWBACCA_ROOT:-}"
+if [ -z "$_kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+  _kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
+fi
+ENGINE="${UX_ENGINE:-${_kit:-$HOME/code/chewbacca}/apps/ux-engine}"
+[ -d "$ENGINE" ] || ENGINE="$HOME/code/tools/ux-engine"  # a checkout that has not pulled apps/ yet
 
 AVOID=""
 if [ -x "$ENGINE/bin/ux-trial" ]; then
@@ -83,7 +90,7 @@ REFERENCE PARAMETERS, starting points to verify on the current design:
   No drop shadows in dark UI: a four-step surface ladder plus 1px hairlines.
 
 BEFORE BUILDING:
-- Name the stance and what it refuses (tools/stances.py has six). A page
+- Name the stance and what it refuses (apps/ux-engine/tools/stances.py has six). A page
   committed to none is what reads as derivative.
 - research/12: subtraction is not generated as a candidate unless you say so.
   Removal is free and costs nothing. Uncued, people subtract 41% of the time;
@@ -113,5 +120,4 @@ LEARNED IN THIS PROJECT ($TRIALS trial(s) recorded so far):
 $AVOID"
 fi
 
-jq -n --arg c "$CONTEXT" \
-  '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $c}}'
+printf '%s\n' "$CONTEXT"

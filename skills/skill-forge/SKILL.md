@@ -1,6 +1,8 @@
 ---
 name: skill-forge
-description: Write a new skill, or fix one that is not being obeyed. Use when the user asks for a new skill, says a skill is being ignored or does the wrong thing, wants to turn a repeated task into something reusable, or asks to install a skill someone else wrote. Also use before writing any SKILL.md, because the authoring order matters more than the file.
+description: "Write a new skill, or fix one that isn't being obeyed. Use for a new skill, a skill being ignored, turning a repeated task into something reusable, installing someone's skill, or before any SKILL.md."
+triggers: >-
+  Write a new skill, or fix one that is not being obeyed. Use when the user asks for a new skill, says a skill is being ignored or does the wrong thing, wants to turn a repeated task into something reusable, or asks to install a skill someone else wrote. Also use before writing any SKILL.md, because the authoring order matters more than the file.
 ---
 
 # skill-forge

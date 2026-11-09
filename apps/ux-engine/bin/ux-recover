@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""Recover the generator from its output, for every figure on a page.
+
+Caleb, 2026-09-26, after this worked on one plate: "Bro, do it for the whole
+site!"
+
+WHY THIS EXISTS. Reproducing a generated page by eye does not converge. Every
+figure gets approximated, checked against a screenshot, adjusted by a
+constant, and checked again, with the user as the error signal. On the Lemma
+reference that method reached roughly 1% after hours.
+
+But a generated page carries its own answer. The geometry is server-rendered
+into the HTML, so every coordinate the generator emitted is readable. The
+generator itself is not shipped and does not need to be: with the complete
+output in hand, recovering the rule is a FITTING problem, which is mechanical
+and converges.
+
+The first run of this method found something eyeballing could never reach.
+The reference's dot plate looked like an arch, so an arch was built, with a
+parabola mask. It is not an arch. It is a complete 40x50 rectangular grid
+covering the whole viewBox, half-width identical at every row, and the shape
+is a DITHER: the radius takes exactly two values and the probability of the
+larger one rises with depth. The shape is made of probability, and no amount
+of adjusting a mask arrives there.
+
+WHAT IT REPORTS, per figure:
+
+  LATTICE     distinct x and y positions, and the pitch of each. A regular
+              pitch means a grid, and the grid is the generator's skeleton.
+  DISCRETE    attributes taking only a few distinct values. Two radii across
+              2,000 circles is a dither, not a gradient, and the two read
+              completely differently.
+  FIELD       how a varying attribute depends on position, fitted against
+              normalised depth and distance from centre.
+  FAMILY      for a set of similar paths, whether they are one curve swept by
+              a parameter, and how many samples each one carries.
+
+REPRODUCE THE PROCESS, NOT THE SAMPLE. Where a per-element fit lands near
+chance, the values are random draws and the honest reconstruction matches the
+DISTRIBUTION. Fitting them individually is overfitting to one seed of someone
+else's random number generator, and it does not even look better.
+"""
+
+import argparse, json, math, re, sys
+from collections import Counter
+
+import numpy as np
+
+
+def parse_points(d):
+    """Coordinates out of a path `d` or a polyline `points`, command-agnostic.
+
+    Only the numbers matter here: this recovers where a generator PUT things,
+    not how it chose to encode the moves between them.
+    """
+    nums = [float(v) for v in re.findall(r'-?\d*\.?\d+(?:e-?\d+)?', d)]
+    return np.array(nums[: len(nums) // 2 * 2]).reshape(-1, 2) if len(nums) >= 4 else None
+
+
+def lattice(vals, label):
+    u = np.unique(np.round(vals, 2))
+    if len(u) < 2:
+        return None
+    step = np.diff(u)
+    med = float(np.median(step))
+    # A regular pitch means a grid. Irregular spacing means the positions came
+    # from a function, not from an index.
+    reg = float(np.std(step) / med) if med else 9.9
+    return {"axis": label, "distinct": len(u), "pitch": round(med, 4),
+            "regular": reg < 0.18, "spread": round(reg, 3),
+            "lo": round(float(u[0]), 2), "hi": round(float(u[-1]), 2)}
+
+
+def field_fit(x, y, v):
+    """How a value depends on position: depth, and distance from centre."""
+    if len(v) < 30 or np.ptp(v) == 0:
+        return None
+    d = (y - y.min()) / max(np.ptp(y), 1e-9)
+    u = np.abs(x - (x.min() + x.max()) / 2) / max(np.ptp(x) / 2, 1e-9)
+    A = np.column_stack([np.ones_like(d), d, d * d, u, u * u])
+    co, *_ = np.linalg.lstsq(A, v, rcond=None)
+    pred = A @ co
+    ss = 1 - ((v - pred) ** 2).sum() / max(((v - v.mean()) ** 2).sum(), 1e-12)
+    # Row means, because a dithered field is random per element and smooth in
+    # aggregate. This is the number that says whether a rule exists at all.
+    rows = {}
+    for yy, vv in zip(np.round(y, 1), v):
+        rows.setdefault(yy, []).append(vv)
+    ks = sorted(rows)
+    rm = np.array([np.mean(rows[k]) for k in ks])
+    rd = (np.array(ks) - min(ks)) / max(max(ks) - min(ks), 1e-9)
+    rco = np.polyfit(rd, rm, 2) if len(ks) > 3 else None
+    rss = (1 - ((rm - np.polyval(rco, rd)) ** 2).sum()
+           / max(((rm - rm.mean()) ** 2).sum(), 1e-12)) if rco is not None else 0
+    return {"r2_per_element": round(float(ss), 4),
+            "r2_row_mean": round(float(rss), 4),
+            "depth_poly": [round(float(c), 4) for c in rco] if rco is not None else None}
+
+
+def describe(svg):
+    h = svg["html"]
+    out = {"children": svg["n"], "viewBox": svg["vb"],
+           "rendered": f"{svg['w']}x{svg['h']}", "findings": []}
+
+    circles = [(float(a), float(b), float(c)) for a, b, c in re.findall(
+        r'<circle(?=[^>]*cx="([-\d.]+)")(?=[^>]*cy="([-\d.]+)")(?=[^>]*r="([-\d.]+)")', h)]
+    geoms = re.findall(r'<(?:path[^>]*\sd|polyline[^>]*\spoints)="([^"]{8,})"', h)
+
+    if circles:
+        a = np.array(circles); x, y, r = a[:, 0], a[:, 1], a[:, 2]
+        out["primitive"] = f"{len(a)} circles"
+        for lat in (lattice(x, "x"), lattice(y, "y")):
+            if lat: out["findings"].append(lat)
+        ur = np.unique(np.round(r, 4))
+        if len(ur) <= 6:
+            cnt = Counter(np.round(r, 4))
+            out["findings"].append({"discrete_radius": [float(v) for v in ur],
+                                    "counts": [int(cnt[v]) for v in ur],
+                                    "note": "two values is a DITHER, not a gradient"})
+            big = (r > ur.mean()).astype(float)
+            f = field_fit(x, y, big)
+            if f: out["findings"].append({"probability_field": f})
+        else:
+            f = field_fit(x, y, r)
+            if f: out["findings"].append({"radius_field": f})
+
+    if geoms:
+        pts = [parse_points(g) for g in geoms]
+        pts = [p for p in pts if p is not None]
+        out["primitive"] = (out.get("primitive", "") + " " if out.get("primitive") else "") \
+                           + f"{len(geoms)} paths"
+        if pts:
+            lens = [len(p) for p in pts]
+            allp = np.vstack(pts)
+            out["findings"].append({
+                "curve_family": {
+                    "curves": len(pts),
+                    "samples_each": f"{min(lens)}..{max(lens)}",
+                    "uniform_sampling": len(set(lens)) == 1,
+                    "x_range": [round(float(allp[:, 0].min()), 2), round(float(allp[:, 0].max()), 2)],
+                    "y_range": [round(float(allp[:, 1].min()), 2), round(float(allp[:, 1].max()), 2)],
+                }})
+            # ---- DISCRIMINATING TESTS -------------------------------
+            # Jev was asked to name these constructions from counts and
+            # ranges and answered "parametric curves" at 0.99 confidence for
+            # a pencil of lines, a pentagon rose AND a tile lattice, ranking
+            # the right answer at 0.00. That is not a model failure, it is
+            # mine: those features are equally true of all four families, so
+            # the answer was never in the input. High confidence on
+            # insufficient features is worth nothing.
+            #
+            # The facts that DO separate them are exact, cheap and
+            # deterministic, so they belong in code and not in a judgment.
+
+            # IDENTICAL COPIES: are all the coordinate sets the same? Then
+            # the figure is one shape repeated, and the variation lives in
+            # transforms. This is the test that would have told me 60
+            # "harmograph-line" paths are one pentagon.
+            if len(pts) > 2 and all(p.shape == pts[0].shape for p in pts):
+                same = all(np.allclose(p, pts[0], atol=1e-6) for p in pts)
+                if same:
+                    rots = re.findall(r'transform="rotate\(([-\d.]+)', h)
+                    step = None
+                    if len(rots) > 2:
+                        r2 = sorted(float(v) for v in rots)
+                        dif = np.diff(r2); step = float(np.median(dif[dif > 0])) if (dif > 0).any() else None
+                    out["findings"].append({"identical_copies": {
+                        "n": len(pts), "vertices": int(pts[0].shape[0]),
+                        "rotation_step_deg": round(step, 3) if step else None,
+                        "note": "ONE shape repeated; the variation is in transforms"}})
+
+            # CONVERGENCE: do all curves pass through a common point? Then it
+            # is a pencil, and the bright spot is convergence, not a drawn
+            # highlight. Measured on the midpoint of each curve.
+            if len(pts) > 4 and all(len(p) > 2 for p in pts):
+                mids = np.array([p[len(p) // 2] for p in pts])
+                spread = float(np.hypot(*(mids.max(0) - mids.min(0))))
+                if spread < 1.0:
+                    out["findings"].append({"pencil": {
+                        "common_point": [round(float(mids[:, 0].mean()), 3),
+                                          round(float(mids[:, 1].mean()), 3)],
+                        "spread": round(spread, 4),
+                        "note": "every curve passes through one point"}})
+
+            # CLOSED QUADS: 4-point paths with a repeating edge basis are a
+            # tiling, and a tiling is not a set of lines: only tiles can be
+            # filled, faded or lifted individually.
+            quad = [p for p in pts if len(p) == 4]
+            if len(quad) > 20 and len(quad) == len(pts):
+                q = np.array(quad)
+                e1 = (q[:, 1] - q[:, 0]).mean(0); e2 = (q[:, 3] - q[:, 0]).mean(0)
+                sd = float(np.abs(q[:, 1] - q[:, 0] - e1).mean())
+                out["findings"].append({"tiling": {
+                    "tiles": len(quad),
+                    "edge_u": [round(float(e1[0]), 3), round(float(e1[1]), 3)],
+                    "edge_v": [round(float(e2[0]), 3), round(float(e2[1]), 3)],
+                    "edge_consistency": round(sd, 4),
+                    "note": "closed quads on a repeating basis: a TILING"}})
+
+            # Do the curves start on a circle? That is a radial sweep.
+            starts = np.array([p[0] for p in pts])
+            c = starts.mean(0)
+            rad = np.hypot(starts[:, 0] - c[0], starts[:, 1] - c[1])
+            if len(rad) > 4 and rad.mean() > 0:
+                cv = float(rad.std() / rad.mean())
+                if cv < 0.12:
+                    ang = np.sort(np.degrees(np.arctan2(starts[:, 1] - c[1], starts[:, 0] - c[0])) % 360)
+                    step = np.diff(ang)
+                    out["findings"].append({"radial_sweep": {
+                        "centre": [round(float(c[0]), 2), round(float(c[1]), 2)],
+                        "radius": round(float(rad.mean()), 3),
+                        "radius_spread": round(cv, 4),
+                        "angle_step_deg": round(float(np.median(step)), 3),
+                        "note": "starts lie on a circle: swept by angle"}})
+    return out
+
+
+def classify(fig):
+    """Name the construction family from measured features, via Jev.
+
+    The class names on the page are not trustworthy. The reference labels 60
+    paths "harmograph-line" and they are a regular PENTAGON repeated 60 times
+    at 6.10 degree rotations, which is a rose and not a harmonograph. I read
+    that name and built a harmonograph, and the geometry had said otherwise
+    the whole time.
+
+    So the judgment is made from the numbers and never from the label. Code
+    computes the features; a typed judgment names the family; the name is
+    then checked against the geometry rather than trusted.
+    """
+    import subprocess, tempfile
+    feats = {k: v for k, v in fig.items() if k != "html"}
+    req = {"model": "jev-1.13.0",
+           "state": {"note": "Measured features of one SVG figure, parsed from "
+                             "its served geometry. Class names on the page are "
+                             "known to be misleading and are not included.",
+                     "figure": feats},
+           "questions": {"family": {"type": "choice",
+               "instructions": "Which geometric construction do these measurements "
+                               "describe? Judge only from the numbers: counts, "
+                               "sample counts, lattice pitch, ranges, and any fitted "
+                               "fields.",
+               "criteria": {
+                 "pencil_of_lines": "many straight lines all passing through one common point",
+                 "rotated_copies": "one shape repeated at a constant angular step about a centre",
+                 "lattice_of_tiles": "a regular grid of closed polygons tiling a plane",
+                 "point_field": "a grid of points whose size or density varies by position",
+                 "parametric_curves": "a family of smooth curves swept by one parameter",
+                 "wireframe_solid": "rings and arcs describing a 3D surface in projection"}}}}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(req, f); path = f.name
+    r = subprocess.run(["jev", "evaluate", path], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    a = json.loads(r.stdout)["answers"]["family"]
+    return {"family": a.get("choice"), "confidence": round(a.get("confidence", 0), 2),
+            "runners_up": sorted(a.get("probabilities", {}).items(),
+                                 key=lambda kv: -kv[1])[1:3]}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--min-children", type=int, default=40)
+    ap.add_argument("--json", default="")
+    ap.add_argument("--jev", action="store_true",
+                    help="name each construction from its numbers, not its class name")
+    a = ap.parse_args()
+
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 1280, "height": 900})
+        pg.goto(a.url, wait_until="networkidle")
+        pg.wait_for_timeout(3000)
+        svgs = pg.evaluate("""(minN) => [...document.querySelectorAll('svg')].map((s,i)=>{
+            const r=s.getBoundingClientRect();
+            return {i, n:s.querySelectorAll('*').length, vb:s.getAttribute('viewBox'),
+                    w:Math.round(r.width), h:Math.round(r.height), html:s.outerHTML};
+          }).filter(x=>x.n>=minN);""", a.min_children)
+        b.close()
+
+    print(f"{a.url}\n{len(svgs)} figures with {a.min_children}+ children\n")
+    res = []
+    for s in svgs:
+        d = describe(s)
+        res.append(d)
+        print(f"--- figure #{s['i']}  {d['children']} children  "
+              f"vb={d['viewBox']}  {d['rendered']}  [{d.get('primitive','?')}]")
+        for f in d["findings"]:
+            k = next(iter(f))
+            if k == "axis":
+                print(f"      lattice {f['axis']}: {f['distinct']} distinct, pitch {f['pitch']}, "
+                      f"{'REGULAR' if f['regular'] else 'irregular'} (spread {f['spread']}), "
+                      f"{f['lo']}..{f['hi']}")
+            elif k == "discrete_radius":
+                print(f"      DISCRETE radius {f['discrete_radius']} counts {f['counts']}")
+                print(f"        {f['note']}")
+            elif k in ("probability_field", "radius_field"):
+                v = f[k]
+                print(f"      {k}: per-element R2 {v['r2_per_element']}, "
+                      f"row-mean R2 {v['r2_row_mean']}")
+                if v["depth_poly"]:
+                    c = v["depth_poly"]
+                    print(f"        p(d) = {c[0]:+.4f}d^2 {c[1]:+.4f}d {c[2]:+.4f}")
+                if v["r2_per_element"] < 0.3:
+                    print(f"        per-element fit near chance -> values are RANDOM DRAWS, "
+                          f"reproduce the distribution")
+            elif k == "curve_family":
+                v = f[k]
+                print(f"      curve family: {v['curves']} curves, {v['samples_each']} samples each, "
+                      f"{'uniform' if v['uniform_sampling'] else 'varying'} sampling")
+                print(f"        x {v['x_range']}  y {v['y_range']}")
+            elif k == "identical_copies":
+                v = f[k]
+                print(f"      IDENTICAL COPIES: {v['n']} copies of one {v['vertices']}-vertex shape"
+                      + (f", rotation step {v['rotation_step_deg']} deg" if v['rotation_step_deg'] else ""))
+                print(f"        {v['note']}")
+            elif k == "pencil":
+                v = f[k]
+                print(f"      PENCIL OF LINES through {v['common_point']} (spread {v['spread']})")
+                print(f"        {v['note']}")
+            elif k == "tiling":
+                v = f[k]
+                print(f"      TILING: {v['tiles']} quads, edge u {v['edge_u']} v {v['edge_v']} "
+                      f"(consistency {v['edge_consistency']})")
+                print(f"        {v['note']}")
+            elif k == "radial_sweep":
+                v = f[k]
+                print(f"      RADIAL SWEEP centre {v['centre']} radius {v['radius']} "
+                      f"(spread {v['radius_spread']}), angle step {v['angle_step_deg']} deg")
+        if a.jev:
+            c = classify(d)
+            if c:
+                print(f"      Jev names this: {c['family']}  (confidence {c['confidence']})")
+                print(f"        runners-up: {c['runners_up']}")
+            else:
+                print("      Jev unavailable")
+        print()
+    if a.json:
+        open(a.json, "w").write(json.dumps(res, indent=1))
+        print(f"wrote {a.json}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

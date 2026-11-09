@@ -7,6 +7,7 @@ never costs more than the rules already cost.
 
 Docs: https://docs.typesafe.ai/api.md
 """
+from __future__ import annotations
 import json
 import math
 import os
@@ -150,7 +151,10 @@ def _send(body: bytes, key: str, timeout: float, max_attempts: int,
                 payload = json.loads(resp.read())
         except urllib.error.HTTPError as err:
             status = err.code
-            err.close()
+            # An HTTPError built with fp=None (a proxy's bare reply, or a
+            # fixture) has no file on 3.9, and close() raised KeyError: 'file'.
+            if err.fp is not None:
+                err.close()
             if status not in retry_codes or attempt + 1 == max_attempts:
                 return None, f"HTTP {status}"
         except (OSError, urllib.error.URLError, ValueError) as err:

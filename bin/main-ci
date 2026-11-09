@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""main-ci: run the whole suite against the newest commit on origin/main, on this Mac.
+
+  main-ci tick        fetch; if origin/main's newest commit has no result yet
+                      and none is running, queue one run through chewbacca jobs
+  main-ci run <sha>   test that commit in a throwaway worktree (what the job runs)
+  main-ci status      the last results, and the range a red one came from
+  main-ci install     refused: see install() for why runs stay on demand
+
+WHY. GitHub Actions has been dead since 2026-10-03 over billing, and a dozen
+tabs push about 87 commits a day to main, so "tests pass" meant "passed in
+whichever tab ran them, on whatever tree it had". Nothing ran the suite on main
+itself, so a break showed up only when somebody tripped on it.
+
+Only the newest commit is tested. The full suite takes six minutes or more
+under load, which can't keep up with 87 commits a day, so a red result names
+the range since the last green one; `git bisect` across that range finds the
+commit. Runs go through `chewbacca jobs` as build work, so they wait for room
+instead of piling onto a busy Mac.
+
+Results are local: ~/.chewbacca/ci/results.jsonl, one line per run. A run
+that turns main red after green posts a macOS notification and writes
+~/.chewbacca/ci/RED, which `status` and anything else can read.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve()
+REPO = Path(os.environ.get("MAIN_CI_REPO") or HERE.parents[1])
+STATE = Path(os.environ.get("MAIN_CI_DIR", str(Path.home() / ".chewbacca" / "ci")))
+RESULTS = STATE / "results.jsonl"
+RUNNING = STATE / "running.json"
+RED = STATE / "RED"
+LABEL = "com.chewbacca.main-ci"
+# A run that died without writing a result leaves running.json behind; after
+# this long it is treated as gone. The slowest full run seen on this Mac was
+# about 15 minutes under load (team memory: feedback_chewbacca_full_suite_is_slow).
+STALE_S = 90 * 60
+
+
+def git(*args: str, cwd: Path = REPO) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def results() -> list[dict]:
+    if not RESULTS.exists():
+        return []
+    out = []
+    for line in RESULTS.read_text().splitlines():
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+# The suite runs whatever was pushed to main as this user. A security review
+# of 83ba37ef called an unattended run remote code execution, and it is, so
+# runs are on demand only (see install) and this sandbox is a backstop, not a
+# boundary: a later review found IPC, persistence and egress paths it misses. It gets
+# no network beyond loopback, can't read the stores that matter (Messages,
+# Mail, keychains, ssh, browser profiles, the brain, the kit's own secrets),
+# and can't write anywhere that outlives the run or changes what runs later
+# (launch agents, shell startup files, the live hooks, tools on PATH).
+SECRET_PATHS = ["Library/Messages", "Library/Mail", "Library/Keychains", "Library/Cookies",
+                "Library/Application Support/Google/Chrome", "Library/Application Support/com.apple.TCC",
+                "Library/Safari", ".ssh", ".gnupg", "second-brain", ".chewbacca/clay-key", ".chewbacca/gmail",
+                ".chewbacca/email", ".config/gh", ".aws", ".netrc"]
+PERSIST_PATHS = ["Library/LaunchAgents", ".zshrc", ".zprofile", ".bashrc", ".bash_profile", ".claude",
+                 ".local/bin", ".chewbacca/bin", ".gitconfig", ".ssh"]
+
+
+def sandbox_profile(home: Path, worktree: Path) -> str:
+    # Paths resolved, because the sandbox matches real paths: /var/folders is
+    # /private/var/folders, and a profile written with the link matched nothing.
+    home, worktree = home.resolve(), worktree.resolve()
+
+    def sub(rel: str) -> str:
+        return f'(subpath "{home / rel}")'
+    return "\n".join([
+        "(version 1)",
+        "(allow default)",
+        "(deny network-outbound (remote ip))",
+        '(allow network-outbound (remote ip "localhost:*"))',
+        "(deny file-read* " + " ".join(sub(r) for r in SECRET_PATHS) + ")",
+        "(deny file-write* " + " ".join(sub(r) for r in PERSIST_PATHS) + ")",
+        f'(allow file-read* file-write* (subpath "{worktree}"))',
+    ])
+
+
+def last_green(rs: list[dict]) -> dict | None:
+    return next((r for r in reversed(rs) if r.get("ok")), None)
+
+
+def tick() -> int:
+    STATE.mkdir(parents=True, exist_ok=True)
+    try:
+        if not os.environ.get("MAIN_CI_NO_FETCH"):
+            git("fetch", "-q", "origin", "main")
+    except subprocess.CalledProcessError as err:
+        print(f"main-ci: fetch failed: {err.stderr.strip()}", file=sys.stderr)
+        return 1
+    sha = git("rev-parse", "origin/main")
+    if any(r["sha"] == sha for r in results()):
+        return 0
+    if RUNNING.exists():
+        try:
+            started = json.loads(RUNNING.read_text()).get("queued", 0)
+        except json.JSONDecodeError:
+            started = 0
+        if time.time() - started < STALE_S:
+            return 0
+        RUNNING.unlink()
+    RUNNING.write_text(json.dumps({"sha": sha, "queued": time.time()}))
+    jobs = os.environ.get("MAIN_CI_JOBS") or shutil.which("chewbacca-jobs") or str(REPO / "bin" / "chewbacca-jobs")
+    subprocess.run([sys.executable, jobs, "submit", "--build", "--title", f"main-ci {sha[:8]}", "--",
+                    sys.executable, str(HERE), "run", sha], cwd=str(REPO), check=False)
+    return 0
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def failures(log: str) -> list[str]:
+    """The suite prints `  FAIL  <group>: <check>` per failing check."""
+    out = []
+    for line in log.splitlines():
+        plain = ANSI.sub("", line).strip()
+        if plain.startswith("FAIL "):
+            out.append(plain[4:].strip())
+    return out[:40]
+
+
+def notify(text: str) -> None:
+    # display notification posts as osascript itself and opens no app.
+    subprocess.run(["osascript", "-e", f"display notification {json.dumps(text)} with title \"Chewbacca main is red\""],
+                   capture_output=True, check=False)
+
+
+def run(sha: str) -> int:
+    STATE.mkdir(parents=True, exist_ok=True)
+    wt = STATE / f"wt-{sha[:12]}"
+    started = time.time()
+    rc, log = 2, ""
+    try:
+        if wt.exists():
+            subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=REPO, check=False)
+        git("worktree", "add", "-q", "--detach", str(wt), sha)
+        env = dict(os.environ, CHEWBACCA_NO_SEND="1")
+        profile = STATE / f"sandbox-{sha[:12]}.sb"
+        profile.write_text(sandbox_profile(Path.home(), wt))
+        done = subprocess.run(["sandbox-exec", "-f", str(profile), "bash", "tests/run.sh"],
+                              cwd=wt, capture_output=True, text=True, env=env)
+        profile.unlink(missing_ok=True)
+        rc, log = done.returncode, done.stdout + done.stderr
+    finally:
+        # Only this run's own worktree, by exact path (team memory:
+        # feedback_remove_only_your_worktree).
+        if wt.exists():
+            subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=REPO, check=False)
+    prior = last_green(results())
+    summary = ANSI.sub("", next((l for l in reversed(log.splitlines()) if "passed" in l), ""))
+    result = {"sha": sha, "ok": rc == 0, "exit": rc, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+              "seconds": round(time.time() - started), "summary": summary.strip(), "failures": failures(log)}
+    if not result["ok"]:
+        result["since_green"] = prior["sha"] if prior else None
+        (STATE / f"log-{sha[:12]}.txt").write_text(log)
+    with RESULTS.open("a") as fh:
+        fh.write(json.dumps(result) + "\n")
+    RUNNING.unlink(missing_ok=True)
+    if result["ok"]:
+        RED.unlink(missing_ok=True)
+    elif not RED.exists():
+        first = result["failures"][0] if result["failures"] else "see the log"
+        RED.write_text(json.dumps(result, indent=2))
+        notify(f"{sha[:8]}: {len(result['failures'])} failing. First: {first}"[:220])
+    return 0
+
+
+def status(n: int = 8) -> int:
+    rs = results()
+    if not rs:
+        print("main-ci: no runs yet")
+        return 0
+    for r in rs[-n:]:
+        mark = "green" if r["ok"] else "RED  "
+        print(f"{r['at']}  {mark}  {r['sha'][:8]}  {r['seconds']}s  {r.get('summary', '')}")
+    latest = rs[-1]
+    if not latest["ok"]:
+        since = latest.get("since_green")
+        print(f"\nRed since {since[:8] if since else 'the first run'}: git bisect {since[:8] + '..' if since else ''}{latest['sha'][:8]}")
+        for f in latest["failures"][:10]:
+            print(f"  FAIL {f}")
+    if RUNNING.exists():
+        print("\nrunning:", json.loads(RUNNING.read_text())["sha"][:8])
+    return 1 if not latest["ok"] else 0
+
+
+def install() -> int:
+    # Refused. A second review of the sandbox found three escapes (Apple
+    # events and other IPC to unsandboxed apps, persistence paths the list
+    # missed, egress through local services), the same shape as the word-list
+    # gate that never converged (team memory: feedback_denylist_gate_is_a_backstop).
+    # A blocklist sandbox can't make unattended runs of pushed code safe on
+    # the Mac that holds everything. The right homes for an unattended run are
+    # GitHub Actions or a throwaway VM; until one exists, main-ci runs only
+    # when a person or a tab starts it.
+    if not os.environ.get("MAIN_CI_ALLOW_UNATTENDED"):
+        print("main-ci: unattended runs are off on this Mac; run `main-ci tick` or `main-ci run <sha>` "
+              "by hand, or move it to GitHub Actions or a VM", file=sys.stderr)
+        return 3
+    return _install()
+
+
+def _install() -> int:
+    # launchd runs a copy outside any checkout: the shared checkout lags main
+    # by hours and worktrees get removed, so neither is a stable path. The
+    # copy works on the main checkout's object store (the common git dir),
+    # which every worktree shares.
+    common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+    home_bin = Path.home() / ".chewbacca" / "bin"
+    home_bin.mkdir(parents=True, exist_ok=True)
+    stable = home_bin / "main-ci"
+    shutil.copy2(HERE, stable)
+    path = f"{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    # A service of chewbacca-daemon, the one Login Items row Chewbacca has
+    # (Caleb, 2026-10-11: "only 1 thing"), not its own LaunchAgent.
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    import daemon_register
+    print(daemon_register.register("main-ci", ["/usr/bin/python3", str(stable), "tick"], every=600,
+                                   env={"PATH": path, "MAIN_CI_REPO": str(common)}, legacy_label=LABEL))
+    return 0
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__.split("WHY.")[0].strip())
+        return 0
+    cmd = args[0]
+    if cmd == "tick":
+        return tick()
+    if cmd == "run" and len(args) == 2:
+        return run(args[1])
+    if cmd == "status":
+        return status()
+    if cmd == "install":
+        return install()
+    print(f"main-ci: unknown command {cmd}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

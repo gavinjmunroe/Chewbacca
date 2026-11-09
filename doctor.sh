@@ -58,7 +58,13 @@ for a in "$@"; do
 done
 
 PASS=0; FAIL=0; WARN=0
-FIXED=0
+FIXED=0; SKIPPED=0
+KIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# How to run this kit's own command on this Mac: `chewbacca` when it's on
+# PATH, else the checkout's own path. A runtime install puts nothing on PATH,
+# so the 10/12 stranger run got fix lines naming a command it didn't have.
+if command -v chewbacca >/dev/null 2>&1; then CHEW="chewbacca"; else CHEW="$KIT_ROOT/bin/chewbacca"; fi
+runnable() { case "$1" in "chewbacca "*) printf '%s' "$CHEW ${1#chewbacca }" ;; *) printf '%s' "$1" ;; esac; }
 
 declare -a PROBLEMS=()
 # Every result, for --json and for the history file. A check that only ever
@@ -78,18 +84,24 @@ ok()   { PASS=$((PASS+1)); record pass "$1" ""; logline "pass  $1"; [ "$QUIET" -
 # MCP server used to look identical.
 bad()  { local sev="${3:-major}"
          if muted "$1"; then WARN=$((WARN+1)); record muted "$1" "$sev"; return 0; fi
+         if not_installed_here; then SKIPPED=$((SKIPPED+1)); record skip "$1" "$sev"; logline "skip  $1 (not part of a runtime install)"; return 0; fi
+         set -- "$1" "$(runnable "${2:-}")" "$sev"
          FAIL=$((FAIL+1)); record fail "$1" "$sev"
          logline "FAIL[$sev]  $1${2:+ | fix: $2}"; PROBLEMS+=("[$sev] $1${2:+ -> $2}")
          [ "$JSON" -eq 1 ] || echo -e "  ${RED}FAIL${NC}  ${BLD}$sev${NC}  $1"
          [ -n "${2:-}" ] && [ "$JSON" -eq 0 ] && echo -e "        ${YLW}fix:${NC} $2"
          return 0; }
 warn() { if muted "$1"; then record muted "$1" minor; return 0; fi
+         if not_installed_here; then SKIPPED=$((SKIPPED+1)); record skip "$1" minor; logline "skip  $1 (not part of a runtime install)"; return 0; fi
          WARN=$((WARN+1)); record warn "$1" "${2:-minor}"; logline "warn  $1"
          [ "$QUIET" -eq 1 ] || echo -e "  ${YLW}warn${NC}  $1"; }
 section() { SECTION="$1"; logline ""; logline "== $1"; [ "$QUIET" -eq 1 ] || echo -e "\n${BLD}$1${NC}"; }
 # Run a repair when --fix is on, and say what it did. A checker that names a
 # problem and hands it back is doing half a job it could finish itself.
 fixable() {
+  # Never repair a part a runtime install doesn't install: --fix there
+  # would quietly turn it into a different install than the one chosen.
+  not_installed_here && return 1
   local what="$1"; shift
   if [ "$FIX" -eq 1 ]; then
     if "$@" >/dev/null 2>&1; then
@@ -107,6 +119,22 @@ CLAUDE_DIR="$HOME/.claude"
 # absent reports the install working as designed as if it were a problem. Four
 # yellow lines after a successful install reads as "it did not work".
 PROFILE="$(cat "$CLAUDE_DIR/.chewbacca-profile" 2>/dev/null || echo developer)"
+# A runtime install (setup.sh --runtime NAME, the README's checkout path)
+# writes shared context, skills and hooks and says it installs nothing else.
+# Judged as the full install it read as broken: exit 2 with 20 to 22
+# failures in the 10/12 and 10/13 stranger runs, every one for a part it
+# never installs. The full installer writes .chewbacca-profile (since 9/4)
+# and copies its hooks into ~/.claude/hooks (always); a runtime install does
+# neither, so a full install from before 9/4 that later ran `agent setup`
+# still has its hooks and is still judged in full (review, 10/13).
+if [ ! -f "$CLAUDE_DIR/.chewbacca-profile" ] && ! ls "$CLAUDE_DIR/hooks/"*.sh >/dev/null 2>&1 \
+   && ls "$HOME/.chewbacca/runtime-installs/"*.json >/dev/null 2>&1; then
+  PROFILE=runtime
+fi
+# The sections a runtime install never writes. Their findings are recorded
+# as skipped, counted, and named in the verdict, never hidden.
+RUNTIME_SKIPS="|Standards|macOS tools|The display|Documented tools|Version|Always-on imports|Kits|People|Coursework|"
+not_installed_here() { [ "$PROFILE" = runtime ] && case "$RUNTIME_SKIPS" in *"|${SECTION:-}|"*) true ;; *) false ;; esac; }
 for_profile() {
   case "$PROFILE" in
     personal) [ "$1" = "personal" ] ;;
@@ -143,16 +171,27 @@ command -v git >/dev/null 2>&1 &&
   ok "git present" ||
   bad "git missing" "xcode-select --install"
 
+# A personal install makes no commits and no repos, so git identity and gh are
+# developer tools there. On 2026-10-09 a fresh personal install ended its setup
+# output with "FAIL major: no global git identity, every commit will fail" and
+# "FAIL major: gh not authenticated", which reads to a non-developer as "the
+# install broke" when nothing they will ever do needs either.
 if [ -n "$(git config --global user.name 2>/dev/null)" ] &&
   [ -n "$(git config --global user.email 2>/dev/null)" ]; then
   ok "git identity: $(git config --global user.name)"
+elif ! for_profile developer; then
+  ok "no git identity, which a $PROFILE install never needs"
 else
   bad "no global git identity, every commit will fail" \
     "git config --global user.name 'You'; git config --global user.email 'you@example.com'"
 fi
 
-command -v gh >/dev/null 2>&1 && ok "gh present" || bad "gh missing" "brew install gh"
-gh auth status >/dev/null 2>&1 && ok "gh authenticated" || bad "gh not authenticated" "gh auth login"
+if for_profile developer; then
+  command -v gh >/dev/null 2>&1 && ok "gh present" || bad "gh missing" "brew install gh"
+  gh auth status >/dev/null 2>&1 && ok "gh authenticated" || bad "gh not authenticated" "gh auth login"
+else
+  ok "GitHub not needed for a $PROFILE install"
+fi
 command -v jq >/dev/null 2>&1 && ok "jq present (hooks parse their input with it)" || bad "jq missing, every hook will no-op" "brew install jq"
 
 # ── The node-on-PATH trap ─────────────────────────────────────────────────────
@@ -174,6 +213,10 @@ if [ -f "$CLAUDE_DIR/hooks/format-and-sync.sh" ]; then
   echo "{\"tool_input\":{\"file_path\":\"$TMPF\"}}" | "$CLAUDE_DIR/hooks/format-and-sync.sh" >/dev/null 2>&1
   if grep -q '"a": 1' "$TMPF" 2>/dev/null; then
     ok "format hook actually formats a file"
+  elif ! for_profile developer && ! command -v prettier >/dev/null 2>&1; then
+    # Formatting code is a developer feature; a personal install has no prettier
+    # and nothing for it to format, so its absence is the design, not a fault.
+    ok "code formatting off, which is fine for a $PROFILE install"
   else
     bad "format hook ran but changed nothing" "check that prettier is installed: npm i -g prettier"
   fi
@@ -255,6 +298,38 @@ sys.exit(0 if d.get('hooks', {}).get('$event') else 1)
   fi
 done
 
+# Every script a registered hook command names has to exist. Break-it,
+# 2026-10-19: deleting one hook script, or all 90, left the fail count
+# unchanged, and the check above printed "Stop wired (not via stop-check.sh)"
+# while settings.json still ran the missing file on every turn. A missing
+# script fails open: the hook errors and the action goes ahead.
+MISSING_HOOKS="$(python3 - <<'PY' 2>/dev/null
+import json, os, pathlib, re
+p = pathlib.Path.home() / ".claude/settings.json"
+try:
+    d = json.loads(p.read_text())
+except Exception:
+    raise SystemExit
+home = str(pathlib.Path.home())
+missing = set()
+for event, groups in (d.get("hooks") or {}).items():
+    for g in groups or []:
+        for h in (g or {}).get("hooks", []) if isinstance(g, dict) else []:
+            cmd = str(h.get("command", "")).replace("$HOME", home).replace("${HOME}", home)
+            for path in re.findall(r"(?:~|/)[^\s'\";|&]+\.(?:sh|py)\b", cmd):
+                path = os.path.expanduser(path)
+                if not os.path.exists(path):
+                    missing.add(path.replace(home, "~"))
+print("\n".join(sorted(missing)))
+PY
+)"
+if [ -n "$MISSING_HOOKS" ]; then
+  bad "$(printf '%s\n' "$MISSING_HOOKS" | wc -l | tr -d ' ') registered hook script(s) are missing, so those hooks error and let everything through: $(printf '%s' "$MISSING_HOOKS" | head -3 | tr '\n' ' ')" \
+      "run setup.sh to put them back, or remove their entries from ~/.claude/settings.json" major
+else
+  ok "every registered hook script exists"
+fi
+
 # A hook that emits malformed JSON is worse than one that emits nothing.
 if [ -x "$CLAUDE_DIR/hooks/env-guard.sh" ]; then
   OUT="$(echo '{"tool_input":{"file_path":"/tmp/probe/.env"}}' | "$CLAUDE_DIR/hooks/env-guard.sh" 2>/dev/null)"
@@ -282,6 +357,10 @@ if [ -f "$CLAUDE_DIR/d1-config.sh" ]; then
       warn "$name not set"
     elif [ -d "$dir/.git" ]; then
       ok "$name is a git repo"
+    elif ! for_profile developer; then
+      # A personal install with no name given keeps the brain as a plain local
+      # folder, by design: there is no remote for it to sync to.
+      ok "$name is a local folder, kept on this Mac only"
     else
       bad "$name points at $dir, which is not a git repo, so syncing silently does nothing" \
         "fix the path in ~/.claude/d1-config.sh"
@@ -375,7 +454,10 @@ if [ -z "$CLAUDE_MD" ]; then
   bad "no CLAUDE.md found" "run setup.sh or install.sh"
 else
   ok "CLAUDE.md found at $CLAUDE_MD"
-  IMPORTS="$(grep -c '^@' "$CLAUDE_MD" 2>/dev/null || echo 0)"
+  # grep -c prints 0 AND exits 1 on no match, so `|| echo 0` made "0\n0"
+  # and the -eq below errored into a false pass (stranger test, 2026-10-12).
+  IMPORTS="$(grep -c '^@' "$CLAUDE_MD" 2>/dev/null || true)"
+  IMPORTS="${IMPORTS:-0}"
   if [ "$IMPORTS" -eq 0 ]; then
     bad "CLAUDE.md has no @ imports, so the rules files load nothing" \
       "this is the bug that made all 18 rules inert; reinstall from the current kit"
@@ -489,6 +571,13 @@ if python3 "$BACKEND_ROOT/tools/agents_md.py" --check >/dev/null 2>&1; then
 else
   warn "Codex AGENTS.md is stale; run python3 tools/agents_md.py"
 fi
+
+# REA (rea-agents) is optional, so this is one line of information and never a
+# warning: present or not, pinned version, which agents have the MCP, and
+# whether native analysis works. Offline and under a second; it reads config
+# and looks for Ghidra, a JDK 21 and Hopper, and never runs REA itself.
+REA_LINE="$(python3 "$BACKEND_ROOT/tools/rea_kit.py" status --line 2>/dev/null)"
+[ -n "$REA_LINE" ] && ok "$REA_LINE"
 
 section "macOS tools"
 
@@ -717,7 +806,7 @@ elif command -v coursework >/dev/null 2>&1; then
     if [ "$CW_COURSES" -gt 0 ]; then
       ok "$CW_COURSES course file(s) in $COURSEWORK_HOME/courses"
       # `coursework check` exits non-zero on a ledger that parses but lies by
-      # omission: a deadline with no source, a course with no AI policy.
+      # omission: a deadline with no source, a past-due item still open.
       if coursework check >/dev/null 2>&1; then
         ok "ledger validates"
       else
@@ -915,6 +1004,94 @@ elif [ "$INST_VER" = "unrecorded" ]; then
     warn "no installed version recorded. Run: chewbacca setup"
 else
   bad "installed $INST_VER, repo is $REPO_VER" "chewbacca setup" minor
+fi
+
+# PATH tools run from ~/.chewbacca/kit/current, a worktree of origin/main no
+# tab edits. On 2026-10-10 they ran from the dirty shared checkout instead and
+# `chewbacca` on PATH was hours behind main. Compared against the local
+# origin/main ref, which the runtime's own fetch keeps current; no network here.
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
+  KR_JSON="$(python3 -I "$REPO_DIR/tools/kit_runtime.py" status --json 2>/dev/null)"
+  KR_LINE="$(printf '%s' "$KR_JSON" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("none||||0"); sys.exit()
+print("|".join([d.get("sha") or "none", d.get("origin_main") or "none",
+                "1" if d.get("equal") else "0", str(d.get("behind") or ""),
+                str(len(d.get("links_into_source") or []))]))
+' 2>/dev/null)"
+  IFS='|' read -r KR_SHA KR_ORIGIN KR_EQ KR_BEHIND KR_STRAY <<<"${KR_LINE:-none||||0}"
+  KR_FIX="python3 -I $REPO_DIR/tools/kit_runtime.py update --fetch --link-bin $HOME/.local/bin"
+  if [ "$KR_SHA" = none ]; then
+    fixable "built the kit runtime" bash -c "$KR_FIX" ||
+      bad "no kit runtime: PATH tools run from the shared checkout's working tree" "$KR_FIX" major
+  elif [ "$KR_EQ" = 1 ]; then
+    ok "PATH tools run from runtime ${KR_SHA:0:12}, equal to origin/main"
+  else
+    fixable "moved the kit runtime to origin/main" bash -c "$KR_FIX" ||
+      bad "kit runtime ${KR_SHA:0:12} is ${KR_BEHIND:-?} commit(s) behind origin/main ${KR_ORIGIN:0:12}" "$KR_FIX" major
+  fi
+  if [ "${KR_STRAY:-0}" -gt 0 ]; then
+    warn "$KR_STRAY PATH link(s) still point into the shared checkout (run the runtime update to move them)"
+  fi
+fi
+
+# The gtme engine lives in Dough. Every `chewbacca gtme` and tools/gtme_*.py is a
+# front door that runs ~/.chewbacca/dough/current (tools/dough_home.py), so a
+# missing Dough breaks outbound and a stale one sends on old gate code.
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ "${CHEWBACCA_NO_DOUGH:-0}" != 1 ] && [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
+  DO_FIX="python3 -I $REPO_DIR/tools/kit_runtime.py dough-update --fetch"
+  DO_LINE="$(python3 -I "$REPO_DIR/tools/kit_runtime.py" dough-status --json 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("none|none|0"); sys.exit()
+print("|".join([d.get("sha") or "none", d.get("origin_main") or "none", "1" if d.get("equal") else "0"]))
+' 2>/dev/null)"
+  IFS='|' read -r DO_SHA DO_ORIGIN DO_EQ <<<"${DO_LINE:-none|none|0}"
+  if [ -n "${DOUGH_HOME:-}" ]; then
+    warn "DOUGH_HOME=$DOUGH_HOME: gtme front doors run that checkout, not the installed Dough"
+  fi
+  if [ "$DO_SHA" = none ]; then
+    fixable "installed Dough, which runs the gtme engine" bash -c "$DO_FIX" ||
+      bad "Dough isn't installed, so every chewbacca gtme command fails (needs read access to calebnewtonusc/dough)" "$DO_FIX" major
+  elif [ "$DO_EQ" = 1 ]; then
+    ok "gtme engine runs from Dough ${DO_SHA:0:12}, equal to its origin/main"
+  else
+    fixable "moved Dough to its origin/main" bash -c "$DO_FIX" ||
+      bad "Dough ${DO_SHA:0:12} differs from its origin/main ${DO_ORIGIN:0:12}: gtme runs old engine code" "$DO_FIX" major
+  fi
+fi
+
+# Background services run on the kit generation they started from. On
+# 2026-10-11 three processes ran from snapshots already pruned, and nothing
+# said so. `status --check` fails when a daemon service is still on an old
+# generation more than 60 s after kit/current moved.
+GEN_NODE="$HOME/.chewbacca/runtime/node"; [ -x "$GEN_NODE" ] || GEN_NODE="$(command -v node 2>/dev/null)"
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -n "$GEN_NODE" ] && [ -f "$REPO_DIR/bin/chewbacca-daemon" ] \
+   && [ -d "$HOME/.chewbacca/daemon/services" ]; then
+  GEN_JSON="$("$GEN_NODE" "$REPO_DIR/bin/chewbacca-daemon" status --json 2>/dev/null)"
+  GEN_LINE="$(printf '%s' "$GEN_JSON" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("?||"); sys.exit()
+pruned = ["pid %s (%s)" % (o["pid"], o["command"].split()[0].rsplit("/", 1)[-1]) for o in d.get("others", []) if o.get("pruned")]
+print("|".join([str(len(d.get("late", []))), ", ".join(d.get("late", [])), "; ".join(pruned)]))
+' 2>/dev/null)"
+  IFS='|' read -r GEN_LATE GEN_NAMES GEN_PRUNED <<<"${GEN_LINE:-?||}"
+  if [ "$GEN_LATE" = "?" ]; then
+    warn "could not read chewbacca-daemon status"
+  elif [ "$GEN_LATE" -gt 0 ]; then
+    bad "background service(s) still on an old kit generation past 60 s: $GEN_NAMES" "chewbacca-daemon status" major
+  else
+    ok "every background service runs on the current kit generation"
+  fi
+  [ -n "$GEN_PRUNED" ] && warn "process(es) outside the daemon run from a pruned kit snapshot: $GEN_PRUNED"
 fi
 
 if [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
@@ -1309,6 +1486,7 @@ fi
 # ── Verdict ───────────────────────────────────────────────────────────────────
 logline ""
 logline "$PASS passed, $WARN warnings, $FAIL failures (profile: $PROFILE)"
+[ "$SKIPPED" -gt 0 ] && logline "$SKIPPED findings skipped: not part of a runtime install"
 
 # History. "It started failing three days ago" was unanswerable.
 HIST="$HOME/.chewbacca/doctor-history.log"
@@ -1319,8 +1497,8 @@ printf '%s|%s|%s|%s|%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PASS" "$WARN" "$FAIL"
 
 if [ "$JSON" -eq 1 ]; then
   {
-    printf '{"pass":%s,"warn":%s,"fail":%s,"fixed":%s,"profile":"%s","version":"%s","checks":[' \
-      "$PASS" "$WARN" "$FAIL" "$FIXED" "$PROFILE" "$REPO_VER"
+    printf '{"pass":%s,"warn":%s,"fail":%s,"fixed":%s,"skipped":%s,"profile":"%s","version":"%s","checks":[' \
+      "$PASS" "$WARN" "$FAIL" "$FIXED" "$SKIPPED" "$PROFILE" "$REPO_VER"
     first=1
     for r in "${RESULTS[@]}"; do
       IFS='|' read -r status message severity sect <<< "$r"
@@ -1339,6 +1517,13 @@ if [ "$JSON" -eq 1 ]; then
 fi
 
 echo ""
+# A runtime install's skipped findings, said once, so a clean verdict never
+# reads as "the whole kit works" when only part of it was installed.
+if [ "$SKIPPED" -gt 0 ]; then
+  echo -e "  This is a runtime install (context, skills and hooks), so $SKIPPED findings about"
+  echo -e "  parts it doesn't install were skipped. The full install: bash $KIT_ROOT/setup.sh --dry-run"
+  echo ""
+fi
 
 if [ "$FAIL" -eq 0 ]; then
   echo -e "${GRN}${BLD}Everything works.${NC}${GRN} $PASS checks passed.${NC}"
@@ -1359,9 +1544,9 @@ for prob in "${PROBLEMS[@]}"; do
 done
 echo ""
 echo -e "  ${BLD}Ask your active agent to repair these findings.${NC}"
-echo "    \"run chewbacca doctor and fix whatever it reports\""
+echo "    \"run $CHEW doctor and fix whatever it reports\""
 echo ""
 echo "  The full diagnostic log is at"
 echo "    $LOG"
-[ "$FIX" -eq 0 ] && echo "  Or try: chewbacca doctor --fix"
+[ "$FIX" -eq 0 ] && echo "  Or try: $CHEW doctor --fix"
 exit 2

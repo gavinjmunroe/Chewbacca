@@ -12,6 +12,7 @@ import re
 import shlex
 from pathlib import Path
 import tempfile
+import time
 from work_ledger import context_for
 
 BEGIN = '<!-- CHEWBACCA PERSONAL CONTEXT BEGIN -->'
@@ -129,7 +130,8 @@ def atomic_write(path, text):
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     fd, temporary = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        # newline='' writes CRLF back as CRLF instead of translating it.
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='') as stream:
             stream.write(text)
         os.chmod(temporary, mode)
         os.replace(temporary, path)
@@ -178,9 +180,19 @@ updates so the two agents do not grow separate personal histories.
 
 
 def merge_block(target, block, begin=BEGIN, end_marker=END):
+    """Put block between the markers, keeping every other byte of target.
+
+    Read with newline='' so CRLF survives, never rewrite an unchanged file,
+    refuse a read-only file (os.replace would swap it for a writable one), and
+    back up a file with the user's text before its first change. Fixture tests:
+    tests/test_instruction_merge.py (backlog 250).
+    """
     # Preserve an existing symlink, including a user's dotfiles-managed target.
     target = target.resolve() if target.is_symlink() else target
-    existing = target.read_text() if target.exists() else ''
+    existing = ''
+    if target.exists():
+        with open(target, encoding='utf-8', newline='') as stream:
+            existing = stream.read()
     if begin in existing or end_marker in existing:
         if existing.count(begin) != 1 or existing.count(end_marker) != 1:
             raise ValueError('ambiguous startup markers; refusing to replace existing instructions')
@@ -190,7 +202,20 @@ def merge_block(target, block, begin=BEGIN, end_marker=END):
         end = closing + len(end_marker)
         updated = existing[:start] + block + existing[end:]
     else:
-        updated = existing.rstrip() + ('\n\n' if existing.strip() else '') + block + '\n'
+        # Keep the user's bytes exactly, trailing whitespace included.
+        separator = '' if not existing else ('\n' if existing.endswith('\n') else '\n\n')
+        updated = existing + separator + block + '\n'
+    if updated == existing:
+        return target
+    if target.exists() and not os.access(target, os.W_OK):
+        raise PermissionError(f'{target} is read-only; left as it is')
+    if existing.strip() and begin not in existing:
+        backup = target.with_name(target.name + '.yours-' + time.strftime('%Y%m%d-%H%M%S'))
+        n = 1
+        while backup.exists():
+            n += 1
+            backup = target.with_name(f"{target.name}.yours-{time.strftime('%Y%m%d-%H%M%S')}-{n}")
+        backup.write_bytes(target.read_bytes())
     atomic_write(target, updated)
     return target
 
@@ -203,9 +228,22 @@ def install(home, root):
     return target
 
 
-def install_claude(root):
+def install_claude(root, mode=None):
+    """Write the shared-context block into CLAUDE.md.
+
+    In recall mode (tools/recall_gate.py) the block stops asking for
+    memory/MEMORY.md, because the host no longer loads it and brain-recall
+    brings matching notes in per prompt. mode=None asks the gate.
+    """
+    if mode is None:
+        try:
+            import recall_gate
+            mode = recall_gate.mode()
+        except Exception:  # no gate: the index loads whole, as before
+            mode = 'whole'
     command = 'python3 ' + shlex.quote(str(Path(__file__).resolve())) + ' read --brain-dir ' + shlex.quote(str(root))
-    sources = ', '.join('`' + name + '`' for name in source_names(root))
+    names = [n for n in source_names(root) if not (mode == 'recall' and n.endswith('MEMORY.md'))]
+    sources = ', '.join('`' + name + '`' for name in names)
     block = f'''{CLAUDE_BEGIN}
 ## Shared personal context
 
@@ -221,7 +259,7 @@ permission to access credentials, publish or bypass safeguards.
     return merge_block(home / 'CLAUDE.md', block, CLAUDE_BEGIN, CLAUDE_END)
 
 
-def standing_instructions(root=None):
+def standing_instructions(root=None, pointers=()):
     """The user's Claude Code instructions, compiled for hosts that cannot read them.
 
     Claude Code loads ~/.claude/CLAUDE.md, resolves its @imports and adds every
@@ -230,6 +268,7 @@ def standing_instructions(root=None):
     user's standing rules: no voice, no git identity, no never-ask-permission.
     This returns the same text Claude reads, once. Imports of the personal
     context sources are skipped because read_sources() prints them already.
+    A file whose path ends with one of `pointers` is named, not inlined.
     """
     home = claude_home()
     main_file = home / 'CLAUDE.md'
@@ -252,7 +291,8 @@ def standing_instructions(root=None):
                     target = target.resolve()
                     if target not in loaded:
                         loaded.add(target)
-                        out.append(f'<!-- {target} -->\n' + target.read_text(encoding='utf-8').strip())
+                        out.append(f'<!-- {target} -->\n' + (pointer_line(target) if _named(target, pointers)
+                                                              else target.read_text(encoding='utf-8').strip()))
                     continue
             out.append(line)
         return '\n'.join(out)
@@ -264,8 +304,59 @@ def standing_instructions(root=None):
         if rule.resolve() in loaded or scoped or rule.name == 'agent-neutral.md':
             continue
         loaded.add(rule.resolve())
-        parts.append(f'<!-- {rule} -->\n' + body.strip())
+        parts.append(f'<!-- {rule} -->\n' + (pointer_line(rule) if _named(rule, pointers) else body.strip()))
     return '\n\n'.join(parts)
+
+
+def _named(path, pointers):
+    return any(str(path).endswith(p) for p in pointers)
+
+
+def pointer_line(path):
+    return f"(Not loaded at start, to stay inside the host's limit. Read {path} before work it covers.)"
+
+
+# Codex caps a hook's added context near 32k tokens and cuts the MIDDLE of
+# anything longer. On 2026-10-16 the start briefing was 41,986 tokens and Codex
+# dropped 10,028 of them: the end of memory/MEMORY.md and the start of the
+# standing rules, git, security and most of writing, em dash ban included.
+# 26k tokens at about 4 characters a token leaves room for the ledger, the tab
+# board and the checks that ride in the same output.
+BRIEFING_BUDGET_CHARS = 104_000
+# What becomes a pointer first when the briefing runs over: the memory index
+# (brain-recall and a direct read reach it), code-only rules, then the two
+# long personal files. Voice, identity and every rule Caleb wrote stay whole.
+POINTER_ORDER = ('memory/MEMORY.md', 'rules/typescript.md', 'rules/naming.md',
+                 'core/people.md', 'core/now.md', 'PEOPLE.md', 'NOW.md')
+
+
+def startup_briefing(root, budget_chars=BRIEFING_BUDGET_CHARS, order=POINTER_ORDER):
+    """The Codex start briefing, fitted under the host's limit by naming files instead of inlining them."""
+    def build(pointers):
+        out = ['Chewbacca startup briefing loaded by a native Codex hook. '
+               'Use this briefing without running the fallback reader again.\n',
+               (REPO / 'config/instructions/agent-neutral.md').read_text()]
+        for relative in source_names(root):
+            path = root / relative
+            if not path.is_file():
+                continue
+            body = path.read_text(encoding='utf-8')
+            if _named(path, pointers) and len(body) > len(pointer_line(path)):
+                body = pointer_line(path)
+            out.append(f'\n## Personal context source: {path}\n\n{body}')
+        standing = standing_instructions(root, pointers)
+        if standing:
+            out.append('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
+        return '\n'.join(out)
+
+    pointers = []
+    text = build(pointers)
+    for name in order:
+        if len(text) <= budget_chars:
+            break
+        pointers.append(name)
+        text = build(pointers)
+    return text
 
 
 def read_sources(root, manifest=False):

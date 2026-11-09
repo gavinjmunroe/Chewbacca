@@ -12,9 +12,21 @@
 set -uo pipefail
 
 PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+# Tests point this at a fake; the PATH line above would otherwise put the real
+# gws, and a real Google sign-in, ahead of any fake on PATH.
+GWS_BIN="${CHEWBACCA_GWS:-gws}"
+gws() { command "$GWS_BIN" "$@"; }
 HOME_DIR="${CHEWBACCA_EMAIL_HOME:-$HOME/.chewbacca/email}"
 DEFAULT_CFG="$HOME/.config/gws"
-SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send"
+# Full access to the whole Google account, on purpose. Chewbacca reads AND
+# writes everything it touches, so every narrower scope was a future 403: with
+# calendar.readonly every event add failed (2026-10-09), with read-only Drive
+# the Doc surface refused every edit (2026-10-10), and on 2026-10-11 a team
+# Google Doc couldn't be written at 12:30am before a deadline. Caleb: "CHEWBS
+# SHOULD NEVER BE READ ONLY! ... always literally just ask for full access to
+# their entire google acct." mail.google.com covers read, send, compose and
+# modify; drive covers search by name and edits to any file.
+SCOPES="openid,email,profile,https://mail.google.com/,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/contacts,https://www.googleapis.com/auth/tasks"
 LOG="$HOME/Library/Logs/chewbacca-email-add.log"
 
 say() { printf '%s\n' "$*"; }
@@ -35,12 +47,71 @@ ensure_gws() {
 client_secret() {
   [ -f "$DEFAULT_CFG/client_secret.json" ] && { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
   for d in "$HOME_DIR"/*/; do [ -f "$d/client_secret.json" ] && { echo "$d/client_secret.json"; return 0; }; done
+  # gws 0.22.5 can't create the OAuth client itself, so on a fresh Mac the person
+  # makes a Desktop client in the Cloud console and downloads its JSON. Adopt the
+  # newest one in Downloads (Gavin's Mac, 2026-11-09).
+  local f
+  for f in $(ls -t "$HOME"/Downloads/client_secret_*.json 2>/dev/null); do
+    python3 -c 'import json,sys; c=json.load(open(sys.argv[1]))["installed"]; sys.exit(not c["client_id"].endswith(".apps.googleusercontent.com"))' "$f" 2>/dev/null || continue
+    mkdir -p "$DEFAULT_CFG" && chmod 700 "$DEFAULT_CFG" && cp "$f" "$DEFAULT_CFG/client_secret.json" &&
+      { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
+  done
   return 1
+}
+
+# The console clicks gws can't do, with the project it just set up. Without
+# Publish, Testing status expires every sign-in after 7 days (see chewbacca-google).
+console_steps() {
+  local project
+  project=$(grep -o 'project=[A-Za-z0-9_-]*' "$1" 2>/dev/null | head -1 | cut -d= -f2)
+  [ -n "$project" ] || project=$(gcloud config get-value project 2>/dev/null)
+  # The project belongs to gcloud's account, so the page has to open as that
+  # account. On 2026-11-09 it opened in his loyola.mp3 Chrome profile instead:
+  # "dont use that chrome tab, use gavinjmunroe".
+  local acct url
+  acct=$("${CHEWBACCA_GCLOUD:-gcloud}" config get-value account 2>/dev/null)
+  url="https://console.cloud.google.com/auth/overview?project=$project&authuser=$acct"
+  say "Google won't let a CLI make the sign-in app, so this part is three clicks in the Cloud console."
+  say "Open it in the Chrome profile signed in as ${acct:-the account that owns the project}:"
+  say "  1. $url  Get started: any app name, your email, audience External"
+  say "  2. Audience: Publish app, or every sign-in dies after 7 days"
+  say "  3. Clients: Create client, Desktop app, Create, Download JSON"
+  say "Then run this again. It picks the JSON up from Downloads."
+  [ -n "$project" ] && open -g "$url" 2>/dev/null
+}
+
+# The account a config is signed in as, from `gws auth status`. Needs no API
+# scope, so it answers even when the token is missing the scope being added.
+status_user() {
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null |
+    python3 -c 'import json,sys; t=sys.stdin.read(); print((json.loads(t[t.index("{"):]).get("user") or "").lower())' 2>/dev/null
 }
 
 whoami_in() {
   GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws gmail users getProfile --params '{"userId":"me"}' 2>/dev/null |
     python3 -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t[t.index("{"):])["emailAddress"])' 2>/dev/null
+}
+
+# Gives $2 roles/serviceusage.serviceUsageConsumer on the project behind
+# config $1 when Google refuses its calls for that reason, then waits for the
+# grant to take (it took under a minute on 2026-11-02). Quiet when not needed.
+grant_project_use() {
+  local cfg="$1" addr="$2" err project acct n=0
+  [ -n "$(whoami_in "$cfg")" ] && return 0
+  # Only the account the token actually belongs to gets the grant, read from
+  # `gws auth status`, which needs no project access. A typo'd or different
+  # address never gains a role on the project.
+  [ "$(status_user "$cfg")" = "$(printf '%s' "$addr" | tr '[:upper:]' '[:lower:]')" ] || return 0
+  err=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws gmail users getProfile --params '{"userId":"me"}' 2>&1)
+  printf '%s' "$err" | grep -q 'serviceusage' || return 0
+  project=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d.get("installed") or d.get("web") or {}).get("project_id",""))' "$cfg/client_secret.json" 2>/dev/null)
+  [ -n "$project" ] && command -v gcloud >/dev/null 2>&1 || return 0
+  say "Signed in, but $addr can't use the $project Google project yet. Giving it access..."
+  for acct in $(gcloud auth list --format='value(account)' 2>/dev/null); do
+    gcloud projects add-iam-policy-binding "$project" --account "$acct" --member "user:$addr" \
+      --role roles/serviceusage.serviceUsageConsumer --condition=None --quiet >/dev/null 2>&1 && break
+  done
+  while [ -z "$(whoami_in "$cfg")" ] && [ $n -lt 20 ]; do sleep 6; n=$((n + 1)); done
 }
 
 list() {
@@ -66,30 +137,73 @@ add() {
   if ! secret=$(client_secret); then
     command -v gcloud >/dev/null 2>&1 || brew install --cask google-cloud-sdk >/dev/null 2>&1
     say "First inbox on this Mac: setting up Google sign-in (a browser opens once for Google Cloud)..."
-    gws auth setup --login || { say "Google sign-in setup didn't finish."; return 1; }
-    secret=$(client_secret) || return 1
+    local setup_log="$HOME/Library/Logs/chewbacca-email-setup.log"
+    # Enables the APIs on gcloud's project, then stops at the OAuth client it
+    # can't create (exit 3, "requires manual setup in the Google Cloud Console").
+    gws auth setup </dev/null >"$setup_log" 2>&1
+    secret=$(client_secret) || { console_steps "$setup_log"; return 1; }
   fi
 
-  local cfg="$HOME_DIR/$addr"
+  # The main gws config (~/.config/gws) is the one `chewbacca google`, the Doc
+  # surface and meeting follow-ups read, since they call plain `gws`. When the
+  # address is the account already signed in there, re-consent that config in
+  # place; a per-inbox copy would hold the new scopes where none of them look.
+  # A main sign-in whose token Google revoked names no user at all, so the
+  # match above never fires and every add lands in a per-inbox copy while the
+  # readers stay dead (2026-10-22: both inboxes "Connected", chewbacca google
+  # still invalid_grant). A dead main gets re-consented by whichever add runs.
+  local cfg="$HOME_DIR/$addr" backup="" main_user
+  main_user=$(status_user "$DEFAULT_CFG")
+  # A main config that was never signed in takes the first add, since
+  # `gws auth setup --login` no longer signs it in on a fresh Mac.
+  if [ "$main_user" = "$addr" ] || [ ! -f "$DEFAULT_CFG/credentials.enc" ] ||
+     { [ -z "$main_user" ] && [ -z "$(whoami_in "$DEFAULT_CFG")" ]; }; then
+    cfg="$DEFAULT_CFG"
+    if [ -f "$cfg/credentials.enc" ]; then
+      backup="$cfg/credentials.enc.before-reconsent"
+      cp -p "$cfg/credentials.enc" "$backup"
+    fi
+  fi
   mkdir -p "$cfg" && chmod 700 "$cfg"
-  cp "$secret" "$cfg/client_secret.json"
+  [ "$secret" -ef "$cfg/client_secret.json" ] || cp "$secret" "$cfg/client_secret.json"
   say "A browser window is opening. Pick $addr and click Allow."
+  # One log per address: three adds started together (2026-11-02) truncated
+  # and read one shared log, so each could open another inbox's consent URL.
+  local LOG="$HOME/Library/Logs/chewbacca-email-add-$addr.log"
   : >"$LOG"
   GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth login --scopes "$SCOPES" >>"$LOG" 2>&1 &
   local pid=$! url="" waited=0
   while [ -z "$url" ] && [ $waited -lt 20 ]; do
     url=$(grep -o 'https://accounts.google.com[^ ]*' "$LOG" | head -1); sleep 1; waited=$((waited + 1))
   done
-  [ -n "$url" ] && open "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
+  # -g: the consent tab opens behind whatever he's doing, never in front of it
+  # ("STOP FLASH BANGING ME", 2026-10-22). A login he already granted finishes
+  # with no click.
+  [ -n "$url" ] && open -g "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
   wait "$pid"
+  # gws keeps serving the old access token, with the old scopes, from
+  # token_cache.json after a new login; the fresh scope 403'd until it was
+  # moved aside (2026-10-09).
+  rm -f "$cfg/token_cache.json"
+  # A Workspace account that signed in fine can still be refused every call:
+  # Google bills the call to the sign-in app's project, and the account needs
+  # roles/serviceusage.serviceUsageConsumer there. caleb@firmfoundation.tech
+  # hit this on 2026-11-02 with a valid token, and the grant fixed it in under
+  # a minute. Grant it from whichever gcloud account owns the project.
+  grant_project_use "$cfg" "$addr"
   local got
   got=$(whoami_in "$cfg")
   if [ "$got" = "$addr" ]; then
+    [ -n "$backup" ] && rm -f "$backup"
+    # chewbacca google re-consents this address when the main login expires.
+    [ "$cfg" = "$DEFAULT_CFG" ] && { mkdir -p "$HOME_DIR"; printf '%s\n' "$addr" >"$HOME_DIR/main"; }
     say "Connected $addr. Pulling its mail in..."
     command -v people >/dev/null 2>&1 && people texts sync --quiet >/dev/null 2>&1
     say "Done."
     return 0
   fi
+  # A re-consent that didn't finish leaves the main sign-in as it was.
+  [ -n "$backup" ] && [ -f "$backup" ] && mv -f "$backup" "$cfg/credentials.enc"
   # A Google sign-in app in testing mode admits only listed testers, and the
   # error page says "Access blocked ... has not completed the Google
   # verification process" (Caleb hit it on 2026-10-08 with his work inbox).
@@ -98,7 +212,10 @@ add() {
   say "Google didn't let $addr in."
   say "If it said \"Access blocked\", add $addr as a test user here, signed in as the account that owns the project:"
   say "  https://console.cloud.google.com/auth/audience?project=${project}"
-  say "then run: chewbacca email add $addr"
+  say "(or press Publish app there, so any account can sign in), then run: chewbacca email add $addr"
+  # Take him there, behind his work: on 2026-10-29 a new Workspace inbox hit this
+  # block and the fix was a page he had to go find.
+  [ -n "$project" ] && open -g "https://console.cloud.google.com/auth/audience?project=${project}" 2>/dev/null
   return 1
 }
 

@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Run case-study (sourced, computed client case studies) from a checkout or a symlinked install."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "case_study.py"),
+               run_name="__main__")

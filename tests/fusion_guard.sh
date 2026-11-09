@@ -38,6 +38,8 @@ probe "a person already on the roster" \
   "$BRAIN/memory/probe_fusion.md" "Met with Joel Stone about the deal." 0
 probe "a first name nobody shares" \
   "$BRAIN/memory/probe_fusion.md" "Met with Quentin Hale about the deal." 0
+probe "a company named after a known first name" \
+  "$BRAIN/memory/probe_fusion.md" "Dissolve Joel Keller Studios LLC before February." 0
 probe "outside the notes store" \
   "/tmp/probe_fusion.md" "Met with Joel Keller about the deal." 0
 probe "no names at all" \

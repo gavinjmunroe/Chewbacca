@@ -24,6 +24,9 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 ks = importlib.machinery.SourceFileLoader("kyber_sessions", str(ROOT / "bin" / "kyber-sessions")).load_module()
+ks.RUNS_DIR = Path(tempfile.mkdtemp()) / "kyber-runs"
+ks.KINDS_FILE = Path(tempfile.mkdtemp()) / "kinds.json"
+os.environ["KYBER_NO_JEV"] = "1"
 inbox = ks.sessions_inbox
 
 PASSED = 0
@@ -97,8 +100,28 @@ def test_meta_and_rows() -> None:
           [r["id"] for r in ks.order(rows)] == ["a", "c", "d", "b"])
     shown = ks.session_rows([{"id": "a", "state": "needs", "project": "lemma", "title": "Ship it",
                               "model": "opus", "last": 100.0}], now=400.0)
-    check("a row says what it needs, the model and the age",
-          shown[0]["time"] == "needs you · opus · 5m" and shown[0]["accent"], shown)
+    check("a row says what it needs, where and the age, nothing else",
+          shown[0]["time"] == "needs u · lemma · 5m" and shown[0]["accent"] and shown[0]["text"] == "Ship it", shown)
+    check("a long title is its first clause, short",
+          ks.short_title("What should I automate around here? (Say which tools and skills you would use") ==
+          "What should I automate around here",
+          ks.short_title("What should I automate around here? (Say which tools and skills you would use"))
+    check("and never runs past the limit", len(ks.short_title("word " * 40)) <= ks.TITLE_CHARS + 1)
+    many = [{"id": str(i), "state": "working", "project": "p", "title": "t", "last": 390.0} for i in range(9)]
+    old = [{"id": "f", "state": "failed", "project": "p", "title": "t", "last": 400.0 - 7 * 3600},
+           {"id": "d", "state": "finished", "project": "p", "title": "t", "last": 400.0 - 2 * 3600}]
+    check("a glance is five rows at most", len(ks.session_rows(many, 400.0)) == ks.GLANCE_ROWS)
+    check("old failures and long-finished sessions are history, not rows", ks.session_rows(old, 400.0) == [])
+    mixed = many[:2] + [{"id": "n", "state": "needs", "project": "p", "title": "t", "last": 399.0}]
+    n = ks.counts(mixed, 400.0)
+    check("the numbers on top count what to act on", n == {"needs": 1, "working": 2, "done": 0}, n)
+    check("it opens on the lane that needs u", ks.pick_lane("", n) == "needs")
+    check("a lane shows only its rows", [r["id"] for r in ks.session_rows(mixed, 400.0, "needs")] == ["n"])
+    check("an empty lane says so", ks.list_caption(mixed, 400.0, "done").startswith("Nothing done"))
+    check("an empty list says so", "Nothing running" in ks.list_caption([], 400.0))
+    lines = ks.sessions_surface([], "", n, "needs")
+    check("the glass has numbers, lanes, rows and a new task",
+          all(any(k in l for l in lines) for k in ("Metric", "Segmented", "Events", "action=start")), lines)
 
 
 def test_card_items() -> None:
@@ -424,6 +447,7 @@ def test_serve_draft() -> None:
     srv.lock = threading.Lock()
     srv.cards = {"s-6d901cd1": dict(card)}
     srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
     sent_lines: list[list[str]] = []
     srv.send = sent_lines.append
     calls: list[tuple] = []
@@ -532,6 +556,7 @@ class FakeProc:
         self.argv = argv
         self.kw = kw
         self.fed = ""
+        self.pid = 999_999
         self.closed = threading.Event()
         proc = self
 
@@ -555,8 +580,8 @@ def test_review_fixes() -> None:
     print("the 2026-10-05 review: flags, prefixes, --fork, hidden characters, modes")
     tmp = tempfile.mkdtemp()
     session = {"id": "abc-123", "agent": "claude", "state": "finished", "cwd": tmp, "config": ""}
-    saved = (ks.subprocess.Popen, ks.live_record)
-    ks.subprocess.Popen, ks.live_record = FakeProc, (lambda s: None)
+    saved = (ks.subprocess.Popen, ks.live_record, ks.proc_start)
+    ks.subprocess.Popen, ks.live_record, ks.proc_start = FakeProc, (lambda s: None), (lambda pid: "")
     try:
         for fork in (False, True):
             FakeProc.made.clear()
@@ -572,8 +597,9 @@ def test_review_fixes() -> None:
         out = ks.send({**session, "id": "--dangerously-skip-permissions"}, "hi", lambda t: None)
         check("an id shaped like a flag is refused, nothing started",
               out.get("is_error") and FakeProc.made == [], out)
+        check("a resume from the glass is recorded, so Stop reaches it", "abc-123" in ks.runs())
     finally:
-        ks.subprocess.Popen, ks.live_record = saved
+        ks.subprocess.Popen, ks.live_record, ks.proc_start = saved
         os.rmdir(tmp)
 
     rows = [{"id": "b1-aaaa", "state": "finished", "last": 1}, {"id": "b2-bbbb", "state": "finished", "last": 2},
@@ -648,6 +674,7 @@ def test_tests_need_two_presses() -> None:
     srv.lock = threading.Lock()
     srv.cards = {"s-6d901cd1": dict(card)}
     srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
     srv.tests_armed = {}
     shown: list[tuple] = []
     srv.show_text = lambda name, title, text, beside: shown.append((name, text))
@@ -669,6 +696,326 @@ def test_tests_need_two_presses() -> None:
     check("a folder with no test command needs no confirm", srv.confirm_tests("s-empty", empty))
 
 
+def test_tree() -> None:
+    print("the tree is what the session touched plus one level, and a press names only a drawn row")
+    import subprocess
+    tmp = Path(tempfile.mkdtemp()).resolve()
+    run = lambda *a: subprocess.run(["git", "-C", str(tmp), *a], capture_output=True, check=True)
+    run("init", "-q")
+    for rel in ["src/a.py", "src/b.py", "src/deep/c.py", "docs/x.md", "README.md"]:
+        (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp / rel).write_text("x = 1\n")
+    run("add", ".")
+    run("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "init")
+    outside = Path(tempfile.mkdtemp()) / "secret.txt"
+    outside.write_text("no")
+    entries = [assistant([
+        {"type": "tool_use", "id": "t1", "name": "Edit", "input": {"file_path": str(tmp / "src/a.py")}},
+        {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": str(tmp / "src/b.py")}},
+        {"type": "tool_use", "id": "t3", "name": "Read", "input": {"file_path": str(outside)}},
+        {"type": "tool_use", "id": "t4", "name": "Read", "input": {"file_path": str(tmp / ".git/config")}},
+        {"type": "tool_use", "id": "t5", "name": "Read", "input": {"file_path": str(tmp / "src/../../etc/passwd")}},
+    ])]
+    rows, ids, root = ks.session_tree.build(str(tmp / "src"), entries, {"README.md": "M"})
+    names = [(r["name"], r["depth"], r.get("mark", "")) for r in rows]
+    check("the root is the repo, found from a sub-folder", root == str(tmp), root)
+    check("edited and read files are marked", ("a.py", 1, "edited") in names and ("b.py", 1, "read") in names, names)
+    check("git's own change is marked", ("README.md", 0, "M") in names, names)
+    check("a sibling folder is one collapsed row, never opened",
+          any(r["name"] == "deep" and r.get("collapsed") for r in rows) and "c.py" not in [n for n, _, _ in names], rows)
+    check("a root-level change shows the root's folders collapsed, not their files",
+          any(r["name"] == "docs" and r.get("collapsed") for r in rows) and "x.md" not in [n for n, _, _ in names], names)
+    check("nothing outside the repo or inside .git", not any(n in ("secret.txt", "config", "passwd") for n, _, _ in names), names)
+    check("ids are indexes, never paths", all(k.startswith("t") and "/" not in k for k in ids), ids)
+    check("ids map only to files in the repo", all(Path(v).resolve().is_relative_to(tmp) for v in ids.values()), ids)
+    check("the text form indents by depth", "  a.py  [edited]" in ks.session_tree.text_lines(rows))
+    check("a folder that is not a repo draws no tree", ks.session_tree.build(str(outside.parent), entries)[0] == [])
+
+    # The daemon: a tree row press opens a File, editable, for an unchanged file;
+    # a row id it never drew does nothing.
+    card = {"id": "6d901cd1-cccc", "project": "demo", "agent": "claude", "state": "finished", "cwd": str(tmp)}
+    srv = object.__new__(ks.Serve)
+    srv.lock = threading.Lock()
+    srv.cards = {"s-6d901cd1": dict(card)}
+    srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
+    sent: list[list[str]] = []
+    srv.send = sent.append
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("the tree opens beside the card with the Tree component",
+          sent and sent[0][0].startswith("@ s-6d901cd1-tree at=right") and any("Tree items=@/rows" in l for l in sent[0]), sent)
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("an unchanged tree is not redrawn", len(sent) == 1, sent)
+    b_id = next(k for k, v in srv.trees["s-6d901cd1-tree"][1].items() if v.endswith("src/b.py"))
+    srv.handle({"name": "open", "surface": "s-6d901cd1-tree", "row": b_id})
+    check("a file row opens that file, editable",
+          any("File path=" in l and "src/b.py" in l and "editable=true" in l for l in sent[-1]), sent[-1])
+    count = len(sent)
+    srv.handle({"name": "open", "surface": "s-6d901cd1-tree", "row": "../../etc/passwd"})
+    check("a row id it never drew opens nothing", len(sent) == count)
+    srv.handle({"name": "closed", "surface": "s-6d901cd1-tree"})
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("a tree the person closed stays closed", len(sent) == count and "s-6d901cd1-tree" in srv.trees_closed)
+    srv.trees_closed.clear()
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    srv.handle({"name": "closed", "surface": "s-6d901cd1"})
+    check("closing the card takes its tree down", sent[-1] == ["- s-6d901cd1-tree"] and not srv.trees, sent[-1])
+
+
+def test_bypass_never_needs() -> None:
+    print("in bypass mode a long tool call is working, never 'needs you'")
+    tmp = Path(tempfile.mkdtemp()) / "s.jsonl"
+    entries = [user("deploy it", cwd="/x/site", permissionMode="bypassPermissions"),
+               assistant([{"type": "tool_use", "id": "t1", "name": "Bash",
+                           "input": {"command": "for i in $(seq 1 40); do curl -s x; sleep 10; done"}}],
+                         stop="tool_use"),
+               user("go on", uuid="u2", cwd="/x/site", permissionMode="bypassPermissions"),
+               assistant([{"type": "tool_use", "id": "t2", "name": "Bash",
+                           "input": {"command": "for i in $(seq 1 40); do curl -s x; sleep 10; done"}}],
+                         stop="tool_use", uuid="a2")]
+    tmp.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    ks._parsed.clear()
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 600)
+    check("a 10-minute curl loop in bypass is working", row["state"] == "working", row["state"])
+    lines = ks.alerts([{"id": "a", "state": "needs", "project": "site", "detail": "Bash: pkill -f next", "last": 1}], [], {})
+    check("an alert never prints the raw command", "pkill" not in lines[0][1] and "waiting on u" in lines[0][1], lines)
+
+
+def test_one_shots() -> None:
+    print("a one-shot run in a temp folder is not a tab, even with a desktop entrypoint")
+    one = [user("judge this image", entrypoint="claude-desktop", cwd="/private/var/folders/x/T/judge_1"),
+           assistant([{"type": "text", "text": "limit"}], stop="end_turn")]
+    check("one turn in a temp folder is a script", not ks.meta(one)["interactive"], ks.meta(one))
+    two = one + [user("again", uuid="u2", entrypoint="claude-desktop", cwd="/private/var/folders/x/T/judge_1")]
+    check("a second turn makes it a tab", ks.meta(two)["interactive"])
+    home = [user("hi", entrypoint="claude-vscode", cwd="/Users/x/code/lemma")]
+    check("a fresh tab in a real folder stays", ks.meta(home)["interactive"])
+    tmp = Path(tempfile.mkdtemp()) / "s.jsonl"
+    died = [user("what is it good for", entrypoint="claude-desktop", cwd="/Users/x/code/chewbacca"),
+            assistant([{"type": "text", "text": "You've hit your weekly limit"}], stop="end_turn", isApiErrorMessage=True)]
+    tmp.write_text("\n".join(json.dumps(e) for e in died) + "\n")
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 10)
+    check("a session that failed on its first message is not a tab", row["state"] != "failed" or not row["interactive"], row)
+    tmp.write_text("\n".join(json.dumps(e) for e in [died[0], assistant([{"type": "text", "text": "ok"}], stop="end_turn"),
+                                                      user("go on", uuid="u2")] + died[1:]) + "\n")
+    ks._parsed.clear()
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 10)
+    check("one that died later is still listed", row["interactive"], row)
+
+
+def test_origin() -> None:
+    print("a VS Code session is a row like any other, and says where it runs")
+    entries = [user("hi", entrypoint="claude-vscode", cwd="/x/lemma"), assistant([{"type": "text", "text": "ok"}], stop="end_turn")]
+    m = ks.meta(entries)
+    check("VS Code is named as the origin", m["origin"] == "VS Code" and m["interactive"], m)
+    rows = ks.session_rows([{"id": "a", "state": "needs", "origin": "VS Code", "model": "opus", "last": 0,
+                             "project": "lemma", "title": "t"}], 30)
+    check("the row stays short: no origin or model on the glance", "VS Code" not in rows[0]["time"], rows)
+
+
+def test_runs() -> None:
+    print("Start and Stop: a background run the glass owns, and nothing it does not")
+    saved_dir, saved_root, saved_default, saved_find = ks.RUNS_DIR, ks.CODE_ROOT, ks.DEFAULT_RUN_DIR, ks.find
+    tmp = Path(tempfile.mkdtemp())
+    ks.RUNS_DIR = tmp / "runs"
+    ks.CODE_ROOT = tmp / "code"
+    (ks.CODE_ROOT / "lemma").mkdir(parents=True)
+    (ks.CODE_ROOT / "work" / "tts-dev").mkdir(parents=True)
+    ks.DEFAULT_RUN_DIR = tmp
+    try:
+        task, cwd = ks.plan_task("in lemma: write the README")
+        check("'in <folder>:' picks that folder", task == "write the README" and cwd == (ks.CODE_ROOT / "lemma").resolve(), (task, cwd))
+        task, cwd = ks.plan_task("in TTS-Dev, fix the nav")
+        check("a folder one level down, any case", cwd == (ks.CODE_ROOT / "work" / "tts-dev").resolve(), cwd)
+        task, cwd = ks.plan_task("summarize my week")
+        check("no folder named runs in the default", cwd == tmp and task == "summarize my week", (task, cwd))
+        for bad, why in (("in nowhere: x", "No single folder"), ("   ", "Say what the task is")):
+            try:
+                ks.plan_task(bad)
+                check(f"refuses {bad!r}", False)
+            except ValueError as err:
+                check(f"refuses {bad!r} in words", why in str(err), err)
+
+        FakeProc.made.clear()
+        saved_starts = ks.sessions_inbox._proc_starts
+        ks.sessions_inbox._proc_starts = lambda pids: {p: "Sat Oct 10 17:00:00 2026" for p in pids}
+        rec, proc = ks.start_run("--version; rm -rf /", tmp, spawn=FakeProc)
+        argv = proc.argv
+        check("the task goes on stdin, never argv", "--version; rm -rf /" not in " ".join(argv) and proc.fed == "--version; rm -rf /", argv)
+        check("a fresh session id, headless, detached",
+              argv[:2] == [ks.CLAUDE_BIN, "-p"] and argv[argv.index("--session-id") + 1] == rec["id"]
+              and proc.kw.get("start_new_session") is True, (argv, proc.kw))
+        check("no permission flag is added", not any("permission" in a or "allowed" in a.lower() or "dangerously" in a for a in argv), argv)
+        check("its record is private", oct((ks.RUNS_DIR / f"{rec['id']}.json").stat().st_mode & 0o777) == "0o600")
+        ks.sessions_inbox._proc_starts = saved_starts
+
+        now = 1000.0
+        recs = {rec["id"]: dict(rec, t=now)}
+        found: dict = {}
+        ks.merge_runs(found, recs, now, alive=lambda r: True)
+        row = found.get(rec["id"]) or {}
+        check("a live run with no transcript yet is a working row", row.get("state") == "working" and row.get("origin") == "Kyber" and row.get("run"), row)
+        found = {rec["id"]: {"id": rec["id"], "state": "finished", "interactive": False, "detail": ""}}
+        ks.merge_runs(found, recs, now, alive=lambda r: True)
+        check("a script run the glass started is listed, and working while alive",
+              found[rec["id"]]["interactive"] and found[rec["id"]]["state"] == "working", found)
+        found = {}
+        ks.merge_runs(found, recs, now, alive=lambda r: False)
+        check("a dead run with no transcript is not drawn", found == {}, found)
+
+        signals: list = []
+        state = {"alive": True}
+        starts = lambda pid: rec["start"] if state["alive"] else ""
+
+        def kill(pid, sig):
+            signals.append((pid, sig))
+            state["alive"] = False
+
+        children: list = []
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=starts, sleep=lambda s: None,
+                                     tree=lambda pid: [4242], kill_one=lambda pid, sig: children.append((pid, sig)))
+        check("Stop interrupts its own process group first", stopped and signals == [(rec["pid"], ks.signal.SIGINT)], (signals, words))
+        check("and ends what its tools started, read before the run exits", children == [(4242, ks.signal.SIGTERM)], children)
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=starts, sleep=lambda s: None, tree=lambda pid: [])
+        check("a second Stop says it already stopped", not stopped and "already" in words, words)
+        state["alive"], signals[:] = True, []
+        recycled = lambda pid: "Sun Oct 11 09:00:00 2026"
+        stopped, words = ks.stop_run(rec["id"], kill=kill, starts=recycled, sleep=lambda s: None, tree=lambda pid: [])
+        check("a recycled pid is never signalled", not stopped and signals == [], (signals, words))
+        ks.find = lambda sid, now=None: {"id": sid, "open_in": "VS Code"}
+        stopped, words = ks.stop_run("not-a-run", kill=kill, starts=starts, sleep=lambda s: None, tree=lambda pid: [])
+        check("a VS Code tab is never stopped from the glass", not stopped and "VS Code" in words and signals == [], words)
+
+        card = ks.card_surface({"id": rec["id"], "project": "x", "title": "t", "model": "", "state": "working",
+                                "detail": "", "run": True}, [], [])
+        plain = ks.card_surface({"id": "b", "project": "x", "title": "t", "model": "", "state": "working",
+                                 "detail": ""}, [], [])
+        check("Stop is drawn only on a run the glass owns",
+              any("action=stop" in l for l in card) and not any("action=stop" in l for l in plain))
+        lines = ks.sessions_surface([])
+        check("the list has a New task box and Start", any("action=start" in l for l in lines)
+              and any("/sessions/draft" in l for l in lines), lines)
+    finally:
+        ks.RUNS_DIR, ks.CODE_ROOT, ks.DEFAULT_RUN_DIR, ks.find = saved_dir, saved_root, saved_default, saved_find
+
+
+def test_serve_start() -> None:
+    print("the list's Start, without a display")
+    srv = object.__new__(ks.Serve)
+    srv.lock = threading.Lock()
+    srv.cards, srv.drafts = {}, {}
+    sent: list[list[str]] = []
+    srv.send = sent.append
+    got: list = []
+    srv.start_task = lambda words: got.append(words)
+    srv.list_open, srv.rows_drawn = True, "x"
+    saved_discover = ks.discover
+    ks.discover = lambda now=None, **kw: [{"id": "d", "state": "finished", "project": "p", "title": "t", "last": ks.time.time()}]
+    srv.handle({"name": "select", "component": "lanes", "surface": "sessions", "row": "done"})
+    check("a lane press redraws that lane", srv.lane == "done" and '"id": "d"' in "".join(sent[-1]), sent[-1:])
+    srv.handle({"name": "select", "component": "lanes", "surface": "sessions", "row": "nope"})
+    check("a lane it never drew is ignored", srv.lane == "done")
+    ks.discover = saved_discover
+    srv.on_value('v /sessions/draft "in lemma: write the README"')
+    srv.handle({"name": "start", "component": "start", "surface": "sessions"})
+    check("Start takes what was typed in New task", got == ["in lemma: write the README"], got)
+    del srv.start_task
+    srv.drafts["sessions"] = "in nowhere-at-all: x"
+    srv.start_task("in nowhere-at-all: x")
+    check("a refused Start says why on the list and keeps the draft",
+          "No single folder" in json.dumps(sent[-1]) and srv.drafts["sessions"], sent[-1])
+    saved_file = ks.DRAFT_FILE
+    ks.DRAFT_FILE = Path(tempfile.mkdtemp()) / "draft.json"
+    started: list = []
+    saved_start = ks.start_run
+    ks.start_run = lambda *a, **k: started.append(a)
+    try:
+        ks.main(["draft", "summarize", "my", "week"])
+        srv.list_open = True
+        srv.rows_drawn = "x"
+        srv.take_queued()
+        check("a spoken task fills New task and says to press Start",
+              srv.drafts["sessions"] == "summarize my week" and "Press Start" in json.dumps(sent[-1]), sent[-1])
+        check("and nothing ran", started == [], started)
+        srv.take_queued()
+        check("a draft is taken once", srv.drafts["sessions"] == "summarize my week" and not ks.DRAFT_FILE.exists())
+        ks.queue_draft("old one")
+        check("a stale draft is dropped", ks.take_draft(now=ks.time.time() + 600) == "")
+    finally:
+        ks.DRAFT_FILE, ks.start_run = saved_file, saved_start
+
+
+def test_watch() -> None:
+    print("watch: says what newly needs him, once, and only on the glass")
+    saved = ks.WATCH_STATE
+    ks.WATCH_STATE = Path(tempfile.mkdtemp()) / "watch.json"
+    drawn: list = []
+    draw = lambda lines: drawn.append(lines) or True
+    row = lambda sid, state, **kw: {"id": sid, "state": state, "project": kw.pop("project", "lemma"), "last": 1, **kw}
+    try:
+        got = ks.watch_once([row("a", "needs", ask="Bash: rm -rf build")], [], now=100, draw=draw)
+        check("the first look only remembers", got == [] and drawn == [], drawn)
+        got = ks.watch_once([row("a", "needs", ask="Bash: rm -rf build")], [], now=160, draw=draw)
+        check("something already there is not news", got == [] and drawn == [], drawn)
+        rows = [row("a", "finished"), row("b", "working", origin="Kyber", project="tts"), row("c", "working")]
+        ks.watch_once(rows, [], now=200, draw=draw)
+        rows = [row("a", "needs", ask="Bash: git push"), row("b", "finished", origin="Kyber", project="tts"),
+                row("c", "failed", detail="API error 529")]
+        got = ks.watch_once(rows, [], now=260, draw=draw)
+        check("a new wait, a glass run done and a failed tab are all said",
+              len(got) == 3 and "needs u: Bash: git push" in got[0] and got[1] == "tts finished" and "failed" in got[2], got)
+        check("in one toast that takes itself down",
+              len(drawn) == 1 and "life=" in drawn[0][0] and drawn[0][0].startswith("@ agent-alert at=top"), drawn)
+        got = ks.watch_once(rows, [], now=320, draw=draw)
+        check("nothing is said twice", got == [] and len(drawn) == 1, got)
+        got = ks.watch_once(rows + [row("q", "finished", origin="Kyber", project="quick")], [], now=340, draw=draw)
+        check("a glass run that started and finished between looks is still said", got == ["quick finished"], got)
+        check("the state file is private", oct(ks.WATCH_STATE.stat().st_mode & 0o777) == "0o600")
+        dead = [{"session": "d", "cwd": "/Users/x/code/chewbacca", "died_at": "t1", "resets": "Oct 16 at 7am"}]
+        rows2 = rows + [row("d", "failed", detail="You've hit your weekly limit")]
+        got = ks.watch_once(rows2, dead, now=380, draw=draw)
+        check("a dead tab says how to keep going, once, not also as failed",
+              len(got) == 1 and "usage limit" in got[0] and "Fork" in got[0], got)
+        long = ks.alerts([row("e", "needs", ask="x" * 400)], [], {})
+        check("an alert is one short line", len(long[0][1]) <= ks.ALERT_CHARS, long)
+        state = json.loads(ks.WATCH_STATE.read_text())
+        state["shown"] = [380.0] * ks.ALERTS_PER_HOUR
+        ks.WATCH_STATE.write_text(json.dumps(state))
+        got = ks.watch_once([row("f", "needs", ask="Edit")], [], now=400, draw=draw)
+        check("past the hourly cap nothing is drawn", got == [], got)
+        got = ks.watch_once([row("f", "needs", ask="Edit")], [], now=400 + 3600, draw=draw)
+        check("and the held alert is said once the hour clears", len(got) == 1, got)
+        failing = lambda lines: False
+        ks.watch_once([row("g", "finished")], [], now=8000, draw=failing)
+        got = ks.watch_once([row("g", "needs", ask="Write")], [], now=8060, draw=failing)
+        got = ks.watch_once([row("g", "needs", ask="Write")], [], now=8120, draw=draw)
+        check("with no display, it is said when the display is back", len(got) == 1, got)
+    finally:
+        ks.WATCH_STATE = saved
+
+
+def test_session_kinds() -> None:
+    print("Jev tells a person's tab from a program's one prompt, and the rules stay the floor")
+    def crit_answer(choice, conf):
+        other = "tab" if choice == "run" else "run"
+        return lambda state, q: {"kind": {"type": "choice", "choice": choice, "confidence": conf,
+                                          "probabilities": {choice: conf, other: round(1 - conf, 6)}}}
+    check("a sure 'run' is a run", ks.kind_of("Erik Fish site security review", crit_answer("run", 0.95)) == "run")
+    check("an unsure 'run' hides nothing", ks.kind_of("Warm-up", crit_answer("run", 0.6)) is None)
+    check("a tab is a tab", ks.kind_of("Firm Foundation site", crit_answer("tab", 0.9)) == "tab")
+    boom = lambda state, q: (_ for _ in ()).throw(RuntimeError("down"))
+    check("Jev down decides nothing", ks.kind_of("x", boom) is None)
+    rows = [{"id": "r1", "title": "Partners.tsx landing page security review"}, {"id": "t1", "title": "HUD"}]
+    picks = {"Partners.tsx landing page security review": "run", "HUD": "tab"}
+    ask = lambda state, q: crit_answer(picks[state["title"]], 0.95)(state, q)
+    kinds = ks.classify_now(rows, ask)
+    check("answers are cached per session", kinds == {"r1": "run", "t1": "tab"} and ks.session_kinds() == kinds, kinds)
+    check("the cache is private", oct(ks.KINDS_FILE.stat().st_mode & 0o777) == "0o600")
+    long_tab = {"agent": "claude", "interactive": True, "turns": 40, "origin": "VS Code"}
+    short = {"agent": "claude", "interactive": True, "turns": 1, "origin": "desktop"}
+    check("only short rows are asked about", not ks.borderline(long_tab) and ks.borderline(short))
+
+
 def main() -> int:
     test_classify()
     test_meta_and_rows()
@@ -686,6 +1033,14 @@ def main() -> int:
     test_review_fixes()
     test_card_text_is_cleaned()
     test_tests_need_two_presses()
+    test_tree()
+    test_origin()
+    test_one_shots()
+    test_bypass_never_needs()
+    test_runs()
+    test_serve_start()
+    test_watch()
+    test_session_kinds()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

@@ -1,0 +1,93 @@
+[
+ {
+  "file": "A20-SPEC.md",
+  "title": "# A20 Hero's Journey v1 spec",
+  "body": "Brief (Brightspace dropbox 647598, due Tue 11/3 9am, team PDF)",
+  "expect": "deny",
+  "why": "the 11/2 A20 spec, built from the dropbox brief"
+ },
+ {
+  "file": "A20-SPEC.md",
+  "title": "# A20 Hero's Journey v2 spec",
+  "body": "W10S20 asks for an AI-image storyboard, one character bible",
+  "expect": "allow",
+  "why": "the same spec once it cites the assigning lecture"
+ },
+ {
+  "file": "SPEC.md",
+  "title": "# Kyber landing page spec (A22 live build)",
+  "body": "Built from the one-on-one notes",
+  "expect": "deny",
+  "why": "the A22 landing spec, which never cites W10S20 either"
+ },
+ {
+  "file": "TRIBES-SPEC.md",
+  "title": "# A16 Tribes We Lead: spec",
+  "body": "Draft from the worksheet",
+  "expect": "deny",
+  "why": "the A16 spec, which never cites W8S15"
+ },
+ {
+  "file": "TRIBES-SPEC.md",
+  "title": "# A16 Tribes We Lead: spec",
+  "body": "Per Messaging and Direction, slide 30",
+  "expect": "allow",
+  "why": "citing the deck title is enough"
+ },
+ {
+  "file": "P4a-REWRITE-SPEC.md",
+  "title": "# P4a doc rewrite spec (2026-10-26)",
+  "body": "Rewrite from the P4a audio feedback",
+  "expect": "deny",
+  "why": "the P4a rewrite spec cites no ACAD 324 deck; deck-index now covers every course"
+ },
+ {
+  "file": "ACAD 324 Quiz 2 SPEC.md",
+  "title": "# ACAD 324 Quiz 2 SPEC",
+  "body": "quiz prep",
+  "expect": "allow",
+  "why": "no A-number"
+ },
+ {
+  "file": "HERO-SPEC.md",
+  "title": "# Firm Foundation hero video: spec (30.7 s, Gav's VO is the timeline)",
+  "body": "not school",
+  "expect": "allow",
+  "why": "not coursework"
+ },
+ {
+  "file": "AURAPATH-COPY-SPEC.md",
+  "title": "# AuraPath PIP sequence: spec",
+  "body": "Sources: A15 persona worksheet style",
+  "expect": "allow",
+  "why": "an A-number in the body is a source, not the deliverable"
+ },
+ {
+  "file": "P4a-REWRITE-SPEC.md",
+  "title": "# P4a doc rewrite spec (2026-10-26)",
+  "body": "Per PoD_wk9.2_UX1_Define_CounterScan_102126: define the problem space",
+  "expect": "allow",
+  "why": "the same spec citing the week 9 deck"
+ },
+ {
+  "file": "P3 eval SPEC.md",
+  "title": "# P3 Team and Self Evaluation spec",
+  "body": "eval form fields",
+  "expect": "deny",
+  "why": "the real P3 eval spec cites no deck"
+ },
+ {
+  "file": "DRAFT-SPEC.md",
+  "title": "# WP2 revised draft spec, v2 (2026-10-21)",
+  "body": "Why v1 failed: off prompt. The prompt's job is: name a practice",
+  "expect": "allow",
+  "why": "the real WP2 spec works from the assignment prompt"
+ },
+ {
+  "file": "DRAFT-SPEC.md",
+  "title": "# WP3 draft spec",
+  "body": "op-ed on schools",
+  "expect": "deny",
+  "why": "a WP3 spec that never read Writing Project 3 Assignment Prompt"
+ }
+]

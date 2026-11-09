@@ -14,6 +14,13 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import tabs
 
 
+
+def enter_context(case, manager):
+    """TestCase.enterContext is 3.11; stock /usr/bin/python3 is 3.9."""
+    value = manager.__enter__()
+    case.addCleanup(manager.__exit__, None, None, None)
+    return value
+
 class TabsTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -22,7 +29,7 @@ class TabsTests(unittest.TestCase):
         self.repo = self.root / 'repo'
         self.repo.mkdir()
         self.log = self.root / 'write-log.tsv'
-        self.enterContext(patch.dict(os.environ, {
+        enter_context(self, patch.dict(os.environ, {
             'CHEWBACCA_TABS_DB': str(self.root / 'tabs.sqlite'),
             'CHEWBACCA_WRITE_LOG': str(self.log),
         }))
@@ -48,6 +55,29 @@ class TabsTests(unittest.TestCase):
         seen = tabs.context('a', str(self.repo))
         self.assertIn('started on: "Fix the Slack linker"', seen)
         self.assertIn('latest ask: "Do it all thanks"', seen)
+
+    def test_a_prompt_sees_only_what_changed_since_its_last_one(self):
+        # 2026-10-16: the full board rode every prompt, 494k tokens in a day.
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Fix the Slack linker'})
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'c', 'prompt': 'Map the people tables'})
+        first = self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'one'})
+        self.assertIn('Fix the Slack linker', first)
+        self.assertIn('Map the people tables', first)
+        self.assertEqual(self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'two'}), '')
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Now ship it'})
+        third = self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'three'})
+        self.assertIn('Now ship it', third)
+        self.assertNotIn('Map the people tables', third)
+        self.assertIn('1 other tab unchanged', third)
+        self.assertIn('never stage or commit', third, 'the rules ride with any change')
+        self.hook({'hook_event_name': 'SessionEnd', 'session_id': 'c'})
+        self.assertIn('1 left the board', self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'four'}))
+
+    def test_session_start_shows_the_whole_board_again(self):
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Fix the Slack linker'})
+        self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'a', 'prompt': 'one'})
+        again = self.hook({'hook_event_name': 'SessionStart', 'session_id': 'a'})
+        self.assertIn('Fix the Slack linker', again)
 
     def test_ended_and_stale_tabs_drop_off(self):
         self.hook({'hook_event_name': 'SessionStart', 'session_id': 'gone'})
@@ -76,11 +106,13 @@ class TabsTests(unittest.TestCase):
         target.write_text('')
         self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Refactor shared'})
         self.log.write_text(f'{time.time()}\tb\t{target}\tedit\n')
+        # Checked first: a's PreToolUse below takes a lease, and b is then
+        # rightly warned about a.
+        self.assertEqual(tabs.overlap('b', [str(target)]), '', 'a tab never warns about itself')
         warning = self.hook({'hook_event_name': 'PreToolUse', 'session_id': 'a', 'tool_name': 'Edit',
                              'tool_input': {'file_path': str(target)}})
         self.assertIn('Another live tab', warning)
         self.assertIn('Refactor shared', warning)
-        self.assertEqual(tabs.overlap('b', [str(target)]), '', 'a tab never warns about itself')
 
     def test_old_write_does_not_warn(self):
         target = self.repo / 'shared.py'
@@ -94,6 +126,23 @@ class TabsTests(unittest.TestCase):
         seen = tabs.context('a', str(self.repo))
         self.assertIn('cursor', seen)
         self.assertIn('doing: "Rewriting the install section"', seen)
+
+    def test_note_without_a_session_finds_the_tab_by_its_cwd(self):
+        # 2026-10-16: a Claude desktop tab has no CHEWBACCA_SESSION_ID, so
+        # "landed, merge after me" had to go through the manager tab.
+        wt = self.root / 'wt'
+        wt.mkdir()
+        tabs.upsert('desk-1', 'claude-code', str(wt))
+        self.hook({'hook_event_name': 'SessionStart', 'session_id': 'other'})
+        env = {k: v for k, v in os.environ.items() if k != 'CHEWBACCA_SESSION_ID'}
+        with patch.dict(os.environ, env, clear=True), patch('os.getcwd', return_value=str(wt)):
+            self.assertEqual(tabs.main(['note', 'Landed, merge after me']), 0)
+        self.assertIn('doing: "Landed, merge after me"', tabs.context('other', str(self.repo)))
+        # Two tabs in one directory: refuse rather than guess which.
+        tabs.upsert('desk-2', 'claude-code', str(wt))
+        with patch.dict(os.environ, env, clear=True), patch('os.getcwd', return_value=str(wt)), \
+                patch('sys.stderr', io.StringIO()):
+            self.assertEqual(tabs.main(['note', 'ambiguous']), 2)
 
     def test_hook_cli_prints_plain_context_and_json_for_tool_events(self):
         tabs.upsert('b', 'codex', str(self.repo), task='Other work')

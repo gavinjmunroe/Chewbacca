@@ -52,11 +52,29 @@ grep -q '"attached is"' <<<"$out" && ok "a phrase he never texted is named" || b
 # voice-guard reads the reply, finds quoted drafts in a reply about sending.
 export PATH="$ROOT/bin:$PATH"
 hook="$ROOT/.claude/hooks/voice-guard.sh"
+# Whether a block is a text at all is Jev's call, asked only after voice-check fails.
+# The stub stands in for it; tests/eval_reply_judges_jev.py scores the real question.
+export HOOK_JUDGE_STUB=0.9
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": sys.argv[2], "last_assistant_message": "Text for Jonah on WhatsApp:\n\n> " + sys.argv[1]}))' "$FORMAL" p1)
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "voice-guard refuses a quoted draft that isn't him" || bad "voice-guard let it through"
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "voice-guard refuses once per turn" || bad "voice-guard refused twice"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p2", "last_assistant_message": "Text for Jonah:\n\n> " + sys.argv[1]}))' "$CASUAL")
 printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "voice-guard passes a draft that is him" || bad "voice-guard refused a good draft"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p3", "last_assistant_message": "The doc says:\n\n> " + sys.argv[1]}))' "$FORMAL")
-printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a quote in a reply about something else is left alone" || bad "voice-guard fired on a plain quote"
+printf '%s' "$reply" | HOOK_JUDGE_STUB=0.1 bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a quote in a reply about something else is left alone" || bad "voice-guard fired on a plain quote"
+# 2026-10-26: a gc text in a ``` fence got past the guard ("Bro that doesn't sound human").
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p4", "last_assistant_message": "The gc text:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "voice-guard refuses a fenced draft that isn't him" || bad "voice-guard let a fenced draft through"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p5", "last_assistant_message": "Send it with:\n\n```bash\ncd ~/code && people texts drafts send 3 --dry-run plus some more words here\n```"}))')
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a bash fence is left alone" || bad "voice-guard fired on a bash fence"
+# 2026-10-28: prompts for other agent tabs were graded as texts and refused.
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p6", "last_assistant_message": "Paste this in the OPTRA tab:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | HOOK_JUDGE_STUB=0.1 bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "a fence introduced as a tab prompt is left alone" || bad "voice-guard graded a tab prompt as a text"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p7", "last_assistant_message": "Prompt for the GTM OS session:\n\n```\n" + sys.argv[1] + "\n```\n\nAnd the text for Jonah:\n\n```\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | bash "$hook" >/dev/null 2>&1; [ $? -eq 2 ] && ok "a text fence after a prompt fence is still read" || bad "the text fence after a prompt slipped through"
+# 2026-11-05: a church email under review was refused as a text 8 times.
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p8", "last_assistant_message": "A yes sends this:\n\n```text\nSubject: your church website\n\n" + sys.argv[1] + "\n```"}))' "$FORMAL")
+printf '%s' "$reply" | HOOK_JUDGE_STUB=0.1 bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "an email fence with a Subject line is left alone" || bad "voice-guard graded an email as a text"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p9", "last_assistant_message": "Text for Jonah:\n\n> " + sys.argv[1]}))' "$FORMAL")
+printf '%s' "$reply" | HOOK_JUDGE_STUB="" bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "Jev down means no refusal" || bad "voice-guard refused with no judgment"
 exit $fail

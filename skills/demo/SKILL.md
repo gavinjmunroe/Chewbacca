@@ -1,6 +1,8 @@
 ---
 name: demo
-description: Record a product demo video by reading the product's own code and the craft of demo-making, not by guessing at either. Use when the user asks to record a demo, make a demo video, film the product, show the product working, or produce a launch clip. Also use when a demo already recorded is wrong, boring, or missed the point of the product. Needs the repo and a running instance.
+description: "Record a product demo video from the product's own code and the craft of demos. Use to record or film a demo, show the product working, a launch clip, or fix a demo that is boring or wrong."
+triggers: >-
+  Record a product demo video by reading the product's own code and the craft of demo-making, not by guessing at either. Use when the user asks to record a demo, make a demo video, film the product, show the product working, or produce a launch clip. Also use when a demo already recorded is wrong, boring, or missed the point of the product. Needs the repo and a running instance.
 ---
 
 # Record a demo of the product, from its own source
@@ -86,15 +88,17 @@ with the real selectors, in the real order, with the real fixture data. A demo
 plan is an e2e spec with dwell times.
 
 ```bash
-rg -l "test\(|it\(|describe\(" --glob "**/*.{spec,cy,e2e}.{ts,tsx,js}" .
-rg "getByTestId|data-testid|getByRole" -N --glob "**/*.spec.ts" . | head -40
+grep -rlE "test\(|it\(|describe\(" --exclude-dir=node_modules \
+  --include="*.spec.*" --include="*.cy.*" --include="*.e2e.*" .
+grep -rE "getByTestId|data-testid|getByRole" --exclude-dir=node_modules \
+  --include="*.spec.ts" . | head -40
 ```
 
 **2. `data-testid` attributes.** Stable by contract, which is exactly what a
 storyboard needs. A class name is a refactor away from breaking the demo.
 
 ```bash
-rg -o 'data-testid="[^"]+"' -N . | sort -u
+grep -rhoE 'data-testid="[^"]+"' --exclude-dir=node_modules . | sort -u
 ```
 
 **3. The routes.** `app/**/page.tsx`, `pages/`, the router config. They are the
@@ -299,6 +303,38 @@ ffmpeg -y -i out.mp4 -vf "crop=500:1008:0:72" -c:v libx264 -crf 18 final.mp4
 That crop removes the Simulator's macOS title bar and keeps the phone bezel,
 which reads as a product shot rather than a screen grab.
 
+### Expo Go on a simulator, and screens the app can't reach
+
+Silo, 2026-11-01: the funded-app screens had to be recorded by 9pm, the real
+screens sat behind a production login (creating an account there is off limits),
+and every step below cost a restart before it worked.
+
+- **Behind a login you can't use, build showcase routes on sample data.** Put
+  them under `app/showcase/`, leave the production screens untouched, and say in
+  the handoff that the cooks and orders are made up.
+- **Run Metro offline, never under CI.** `CI=1` turns off reloads and Metro died
+  asking for an Expo login. `EXPO_OFFLINE=1 npx expo start --go --offline
+  --port 8099` works, and `exp://127.0.0.1:8099/--/showcase/feed` deep-links
+  inside Expo Go without the "Open in App?" dialog a custom scheme raises.
+- **A worktree can't symlink node_modules for Metro.** It fails with "Unable to
+  resolve module ./silo/node_modules/expo-router/entry". Clone it instead:
+  `cp -c -R ../silo/node_modules .`, which makes an APFS clone that takes almost no disk.
+- **NativeWind drops function-style Pressable styles**
+  (`style={({pressed}) => ...}`), which collapsed the layout. Track pressed in
+  `useState` from `onPressIn`/`onPressOut` instead.
+- **Never swipe right before a tap in a take.** Scroll momentum swallowed the
+  next taps and the first recording showed nothing happening. Let the list settle,
+  or don't scroll in the clip.
+- **`simctl io recordVideo` writes variable frame rate and stops mid-transition.**
+  Re-encode to 30fps, then hold the settled last screen for about 2.5s by
+  appending its screenshot, or editors play it at the wrong speed and the clip
+  ends on a half-drawn screen:
+
+```bash
+xcrun simctl io <udid> recordVideo --codec h264 raw.mov   # Ctrl-C to stop
+nice -n 19 ffmpeg -y -i raw.mov -vf fps=30 -c:v libx264 -crf 18 -pix_fmt yuv420p take.mp4
+```
+
 ## Demoing Chewbacca itself: driving another Claude tab
 
 A demo of this kit is usually a demo of an agent doing something, which means
@@ -356,5 +392,5 @@ largest window because VS Code also publishes 1512x37 menu-bar strips.
 
 ## When there is no repo
 
-Fall back to `cap-demo <url>`, Cap's deterministic pipeline, and say plainly
+Fall back to the `cap-demo` skill on the URL, Cap's deterministic pipeline, and say plainly
 that it is the ~70% version. Do not pretend a scouted demo read the product.

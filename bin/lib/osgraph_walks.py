@@ -11,6 +11,9 @@ so a press on a row can open THAT node's walk (navigation is traversal), and
     tasks       Tasks owed by me in four lanes, from real run status
     people      Persons ranked by the people CLI's score, with message counts
     conversations  Threads and mail as cards, ACTION or FYI
+    home        the desktop panel: next events, to-dos, who waits on a reply
+    missing     each commitment joined to what it needs and to the others
+                around it: findings as typed edges (osgraph_missing.py)
 
 The three competency questions the ontology was designed against are walks
 too: `owed_to` ("what do I owe Sagar"), `waiting_longest` ("who's waiting on me
@@ -18,6 +21,7 @@ longest"), `due_before` ("what's due before the ACAD 324 midterm").
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from osgraph import ME, Graph, Identities
@@ -69,7 +73,7 @@ def row(g: Graph, node: dict, tier: int, when: str, why: str) -> dict:
     app = props.get("app") or {"Task": "Task", "Assignment": "Class", "Event": "Calendar"}.get(node["type"], node["type"])
     if node["type"] == "Task":
         app = {"agent": "Agent", "backlog": props.get("lane") or "Backlog", "request": "Ask",
-               "promise": "Promise"}.get(props.get("kind"), "Task")
+               "promise": "Promise", "gtme": "Outbound"}.get(props.get("kind"), "Task")
     group = {"Thread": "texts", "MailItem": "mail", "Assignment": "class", "Event": "calendar"}.get(
         node["type"], props.get("kind") or "tasks")
     return {"id": node["id"], "type": node["type"], "label": node["label"], "app": app, "group": group, "when": when,
@@ -130,6 +134,9 @@ def _attention(g: Graph, now: datetime, scope: set[str] | None = None) -> list[d
                 rows.append(row(g, node, BLOCKED, props.get("updated", ""), f"{props.get('status')} on you"))
             elif day and day <= horizon:
                 rows.append(row(g, node, DUE, day, "due " + day))
+        elif kind == "gtme":
+            # Outbound: a frozen batch waiting for the ok, or a lead's reply.
+            rows.append(row(g, node, BLOCKED, props.get("at", ""), props.get("why") or "waiting on you"))
         elif kind == "promise" and day and day <= horizon:
             rows.append(row(g, node, DUE, day, "you promised it"))
         # Requests extracted from a text ride on their thread's row, which is
@@ -142,6 +149,14 @@ def _attention(g: Graph, now: datetime, scope: set[str] | None = None) -> list[d
         if node["props"].get("kind") == "agent" and node["props"].get("status") == "done" and keep(node["id"]):
             rows.append(row(g, node, FYI, node["props"].get("at", ""), "an agent finished"))
     return rows
+
+
+def missing(g: Graph, now: datetime) -> dict:
+    """"What am I missing": the findings walk, which writes each finding back
+    as an edge. Lives in osgraph_missing.py with its rules (CHW-204)."""
+    import osgraph_missing  # noqa: PLC0415  it imports this module for row()
+
+    return osgraph_missing.missing(g, now)
 
 
 def needs_you(g: Graph, now: datetime) -> dict:
@@ -166,6 +181,212 @@ def today(g: Graph, now: datetime) -> dict:
             rows.append(row(g, node, BLOCKED, due_day(g, node["id"]), "overdue"))
     rows.sort(key=lambda r: (r["type"] != "Event", when_of(r["when"])))
     return {"rows": rows[:MOST_ROWS], "day": day}
+
+
+# ── the desktop home ─────────────────────────────────────────────────────
+#
+# Kyber's home panel (hud/Sources/KyberKit/Home.swift) is three short lists on
+# the desktop, read at a glance: what is on next, what to do, and his
+# projects. Rows are flat and carry raw times; the panel
+# words them ("in 20 min", "2d") so a feed written a minute ago never shows a
+# stale "now".
+
+# Four rows a list (five for to-dos) keeps the panel inside a third of a
+# 1512x982 laptop screen; Home.swift measures that. More turns a glance into
+# a read. Guessed, never measured
+# against use.
+HOME_ROWS = 4
+HOME_TODOS = 5
+# Course deadlines land as one calendar event each at the same minute: six at
+# 22:59 on 2026-10-11 on the coursework calendar, which pushed the one class
+# he had to attend off a four-row list. Three or more on one calendar at one
+# start are one row with a count. Not two: two meetings at once is a double
+# booking, worth seeing by name. The deadlines are 15 minutes long, so length
+# cannot tell them from meetings.
+HOME_STACK = 3
+
+
+def _moment(value) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.astimezone()
+
+
+def home_calendar(g: Graph, now: datetime, most: int = HOME_ROWS) -> list[dict]:
+    """What is still on today and tomorrow, anything running first. With
+    nothing in that window, the next thing in the week, so the list says when
+    the calendar picks up again instead of going blank."""
+    today = now.date()
+    horizon = today + timedelta(days=1)
+    seen: set[tuple[str, str]] = set()
+    upcoming = []
+    for node in g.nodes("Event"):
+        props = node["props"]
+        start = _moment(props.get("start"))
+        if start is None:
+            continue
+        end = _moment(props.get("end"))
+        all_day = bool(props.get("all_day"))
+        if all_day:
+            # Calendar ends an all-day event at the next midnight, so a trip
+            # that started yesterday is still on until that midnight passes.
+            last = start.date()
+            if end and end > start:
+                last = (end - timedelta(seconds=1)).date()
+            if last < today:
+                continue
+        elif (end or start) <= now:
+            continue
+        # The same holiday on two calendars is one day off, not two.
+        key = (node["label"].casefold(), start.isoformat())
+        if key in seen:
+            continue
+        seen.add(key)
+        # The day it is on: today for anything that started earlier and runs on.
+        upcoming.append((max(start.date(), today), start, all_day, node))
+    ends = {node["id"]: str(node["props"].get("end") or "") for *_, node in upcoming}
+    # By day, then timed before all-day within it: on 2026-10-11 two holidays
+    # tomorrow took half the list and pushed his 9 AM call with Bill off it. An
+    # all-day event is the day's backdrop, not something to be at.
+    upcoming.sort(key=lambda e: (e[0], e[2], e[1], e[3]["label"]))
+    soon = [e for e in upcoming if e[0] <= horizon] or upcoming[:1]
+
+    stacks: dict[tuple[str, str], list] = {}
+    for _, start, all_day, node in soon:
+        stacks.setdefault((node["props"].get("calendar", ""), start.isoformat()), []).append(node)
+    rows, done = [], set()
+    for _, start, all_day, node in soon:
+        stack = stacks[(node["props"].get("calendar", ""), start.isoformat())]
+        calendar = node["props"].get("calendar", "")
+        if len(stack) >= HOME_STACK and not all_day:
+            if id(stack) in done:
+                continue
+            done.add(id(stack))
+            # Named by its first event, a real node, so a press opens today
+            # and two stacks on one day never share an id.
+            rows.append({"id": node["id"], "title": f"{len(stack)} due",
+                         "detail": calendar, "at": start.isoformat(), "end": ends[node["id"]],
+                         "count": len(stack)})
+        else:
+            rows.append({"id": node["id"], "title": node["label"], "detail": "",
+                         "at": start.isoformat(), "end": ends[node["id"]], "allDay": all_day})
+    return rows[:most]
+
+
+def home_todos(g: Graph, now: datetime, most: int | None = HOME_TODOS) -> tuple[list[dict], int]:
+    """Everything owed by the person that is theirs to do: classwork due
+    within the attention window or overdue, promises (Reminders and the
+    people store), and backlog decisions on them. Asks pulled out of texts
+    are left to the people list, which already names the thread they came
+    from. Overdue first, then soonest, undated last."""
+    today = now.date().isoformat()
+    horizon = (now + timedelta(hours=DUE_WINDOW_H)).date().isoformat()
+    rows = []
+    people = None
+    for e in g.edges(verb="OWED_BY", dst=ME):
+        node = g.node(e["src"])
+        if not node:
+            continue
+        props = node["props"]
+        day = due_day(g, node["id"])
+        detail = ""
+        if node["type"] == "Assignment":
+            if not props.get("overdue") and not (day and day <= horizon):
+                continue
+            overdue = bool(props.get("overdue"))
+        elif node["type"] == "Task":
+            kind = props.get("kind")
+            if kind == "backlog":
+                if not (props.get("status") in BACKLOG_BLOCKING and props.get("priority") in ("P0", "P1")):
+                    continue
+                detail = props.get("lane") or "Backlog"
+            elif kind != "promise":
+                continue
+            overdue = bool(day) and day < today
+        else:
+            continue
+        row = {"id": node["id"], "title": node["label"], "detail": detail, "day": day, "overdue": overdue}
+        person = None
+        if node["type"] == "Task":
+            if people is None and props.get("app") == "Reminders":
+                people = resolved_people(g)
+            person = task_person(g, node, people or [])
+        if person:
+            row.update(detail=f"for {person['label']}", person=person["id"])
+        rows.append(row)
+    rows.sort(key=lambda r: (not r["overdue"], r["day"] or "9999", r["title"].casefold()))
+    return (rows if most is None else rows[:most]), len(rows)
+
+
+def resolved_people(g: Graph) -> list[dict]:
+    """Everyone in the graph the people store has resolved, which is the
+    people he is in touch with this week, never a bare first name taken from
+    a backlog cell."""
+    return [p for p in g.nodes("Person") if p["id"] != ME and not p["unresolved"]]
+
+
+# "Do Reagan's stuff": a capitalised word, with a possessive dropped.
+NAME_WORD = re.compile(r"\b([A-Z][a-z]+(?:-[A-Z][a-z]+)?)(['\u2019]s)?\b")
+# A capitalised word is a name only where a title puts a person: "Reagan's",
+# or after one of these. On 2026-10-11 the review ran titles past the first
+# version, which took any capitalised word, against this week's graph: "Pay
+# Chase card" linked to Chase and "Faith post for loyola.wav" to Faith, each
+# with a handle press on a row that is nobody's. An allowlist, so a new shape
+# links nobody until it is added here.
+NAME_AFTER = frozenset({"text", "call", "ask", "tell", "email", "message", "msg", "dm", "ping", "thank",
+                        "remind", "meet", "see", "invite", "send", "with", "for", "to", "from", "and"})
+
+
+def task_person(g: Graph, node: dict, people: list[dict]) -> dict | None:
+    """Who a to-do is for, so the home panel can hand it to an agent. A
+    people-store task says so (OWED_TO). A reminder only names them: "Do
+    Reagan's stuff", added by voice on 2026-10-05, links to Reagan Popoff
+    because he is the one Reagan in this week's graph. A full name links
+    wherever it is; a first name only in a shape that names a person
+    (NAME_AFTER). Never fuzzy, and the same rule as find_person: a word two
+    people answer to ("Caleb" was Caleb Newton and Caleb Butler on
+    2026-10-11), or two people in one title, links nobody, since the agent
+    would write to whoever it picked."""
+    owed = [p for p in g.out(node["id"], "OWED_TO") if p["id"] != ME]
+    if owed:
+        return owed[0]
+    if node["props"].get("app") != "Reminders":
+        return None
+    label = node["label"]
+    found: dict[str, dict] = {}
+    for person in people:
+        name = person["label"]
+        if len(name.split()) > 1 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", label, re.I):
+            found[person["id"]] = person
+    # The shape decides who a title links to; any capitalised word decides
+    # whom it might be about. "Ask Reagan about Maggie" names Maggie in no
+    # linking shape and still names her, so it links nobody.
+    named = set(found)
+    for match in NAME_WORD.finditer(label):
+        word = match.group(1).casefold()
+        hits = [p for p in people if p["label"].casefold().split()[:1] == [word]]
+        if not hits or any(p["id"] in found for p in hits):
+            continue  # nobody, or named in full already: "Call Caleb Newton"
+        if len(hits) > 1:
+            return None
+        named.add(hits[0]["id"])
+        before = label[:match.start()].split()
+        after = before[-1].casefold().strip(",.:;!?") if before else ""
+        if match.group(2) or after in NAME_AFTER:
+            found[hits[0]["id"]] = hits[0]
+    return next(iter(found.values())) if len(found) == 1 and named == set(found) else None
+
+
+def home(g: Graph, now: datetime, most_todos: int | None = HOME_TODOS) -> dict:
+    """The graph's two lists for the home panel: the calendar and the to-dos,
+    all of them when `most_todos` is None. Projects come from git, not the
+    graph, and crossed-off to-dos from the panel; bin/lib/home_feed.py adds
+    both. The panel had a "reach out" list of people waiting on a reply until
+    2026-10-11, when he asked for it gone."""
+    todos, todo_count = home_todos(g, now, most=most_todos)
+    return {"at": now.isoformat(), "calendar": home_calendar(g, now), "todos": todos, "todoCount": todo_count}
 
 
 class Ambiguous(LookupError):
@@ -266,7 +487,7 @@ def person(g: Graph, ids: Identities, name: str, now: datetime) -> dict:
 
 # The network a message node came over. An ingester for another network sets
 # props.network on its nodes ("WhatsApp", "Slack") and needs nothing here.
-NETWORK_BY_TYPE = {"Message": "iMessage", "MailItem": "Mail"}
+NETWORK_BY_TYPE = {"Message": "iMessage", "MailItem": "Gmail"}
 
 
 def network_of(node: dict) -> str:
@@ -314,7 +535,7 @@ def reply_routes(g: Graph, pid: str) -> dict[str, dict]:
              if m["type"] == "MailItem" and m["props"].get("address") and m["props"].get("verified")]
     if mails:
         m = max(mails, key=lambda x: when_of(x["props"].get("at")))
-        routes["Mail"] = row(g, m, FYI, m["props"].get("at", ""), "")
+        routes["Gmail"] = row(g, m, FYI, m["props"].get("at", ""), "")
     return routes
 
 

@@ -1,0 +1,39 @@
+#!/bin/bash
+set -eu
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" = /* ]] || src="$dir/$src"
+done
+root="$(cd -P "$(dirname "$src")/.." && pwd)"
+label='com.calebnewton.lockdown-ard-switch'
+case "${1:-status}" in
+  open)
+    exec /usr/bin/python3 '/Library/Application Support/LockDown ARD Switch/switch.py' --open
+    ;;
+  status)
+    if /bin/launchctl print "system/$label" >/dev/null 2>&1; then
+      echo 'Installed: macOS runs the watcher independently of Claude and Codex'
+    else
+      echo 'Not installed'
+    fi
+    if /usr/bin/pgrep -x ARDAgent >/dev/null; then echo 'ARD is running'; else echo 'ARD is stopped'; fi
+    if [ -e '/Library/Application Support/LockDown ARD Switch/restore-pending' ]; then
+      echo 'ARD restoration is pending until LockDown Browser exits'
+    fi
+    ;;
+  install|uninstall)
+    script="$root/tools/lockdown_ard/${1}.sh"
+    /usr/bin/osascript - "$script" <<'APPLESCRIPT'
+on run argv
+    do shell script "/bin/sh " & quoted form of (item 1 of argv) with administrator privileges
+end run
+APPLESCRIPT
+    ;;
+  --help|-h|help)
+    echo 'Usage: chewbacca lockdown [open|status|install|uninstall]'
+    echo 'Install needs one administrator approval. No models or network calls run in the watcher.'
+    ;;
+  *) echo 'Usage: chewbacca lockdown [open|status|install|uninstall]' >&2; exit 2 ;;
+esac

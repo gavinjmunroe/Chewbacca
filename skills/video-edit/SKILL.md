@@ -1,6 +1,8 @@
 ---
 name: video-edit
-description: Edit and revise talking-head videos, Instagram reels, TikToks and Shorts, text-overlay skits, memes, reel recreations, demos and screen recordings from camera footage. Use for take selection, quiet-audio recovery, captions and subtitles, hook headlines, sourced b-roll, speed or color fixes, DaVinci Resolve or FFmpeg assembly, retention-minded cuts, and authorized publishing. Also use when an edit was already made and feels slow, unclear or wrong. Not for animation drawn in code (animated-video), scripting before filming (video-script), or product demo capture (demo).
+description: "Edit talking-head videos, reels, TikToks, Shorts, skits and screen recordings: takes, audio, captions, hooks, b-roll, Resolve or FFmpeg. Not animation (animated-video), scripts or demos."
+triggers: >-
+  Edit and revise talking-head videos, Instagram reels, TikToks and Shorts, text-overlay skits, memes, reel recreations, demos and screen recordings from camera footage. Use for take selection, quiet-audio recovery, captions and subtitles, hook headlines, sourced b-roll, speed or color fixes, DaVinci Resolve or FFmpeg assembly, retention-minded cuts, and authorized publishing. Also use when an edit was already made and feels slow, unclear or wrong. Not for animation drawn in code (animated-video), scripting before filming (video-script), or product demo capture (demo).
 ---
 
 # Video edit

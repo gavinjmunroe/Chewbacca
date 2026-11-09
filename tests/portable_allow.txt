@@ -1,0 +1,5 @@
+# Files that held a machine-specific value before tests/portable_code.sh existed
+# (2026-10-11). This list only shrinks: fix one, delete its line.
+apps/presence/com.calebnewton.presence-watch.plist
+apps/ux-engine/research/video-findings/batch-3b-ending-ai-slop-talk.md
+apps/ux-engine/trials/log.jsonl

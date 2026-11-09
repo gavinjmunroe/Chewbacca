@@ -1,0 +1,114 @@
+# Using the kit without a terminal
+
+The honest state, then how to get the part that works.
+
+## Why this document exists
+
+Everything else in this kit is delivered as a `SKILL.md` read off the
+filesystem, a hook in a process lifecycle, or a command-line tool. All three
+need a shell. So the answer to "can somebody use this from Claude or ChatGPT
+in a browser" was **zero percent**, not partially: a browser client has no
+filesystem and no shell, and there was no subset that worked.
+
+A technical co-founder tried the terminal install twice on
+2026-09-19 and 09-20 and stopped at *"it's not a product I need to work for
+me."* That is the bar this fails, and it fails it for a reason that is
+structural rather than cosmetic.
+
+`bin/chewbacca-mcp` is the first surface that does not need a shell. The kit
+already consumed twelve MCP servers and had never exposed itself as one, so
+its own most valuable data was the least reachable thing on the machine.
+
+## What it gives you
+
+Five named reads, plus four tools that reach the rest of the kit, writes
+included.
+
+| Tool                      | Answers                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `who_do_i_know`           | "do I know anyone at X", "who works in Y"                  |
+| `person_brief`            | everything recorded about one person                       |
+| `who_am_i_overdue_with`   | who you have not contacted in longer than your own cadence |
+| `whats_due`               | real deadlines from your syllabus ledger                   |
+| `find_capability`         | searches every read and write the kit offers               |
+| `kit_read`                | runs one read from `config/data/mcp-reads.json`            |
+| `kit_write`               | runs one write from `config/data/mcp-writes.json`          |
+| `kit_confirm`, `kit_undo` | send a draft, or put a write back                          |
+
+Every write comes with a way back. A change on your own Mac (a todo, a
+note, a reminder, a calendar hold, a note about a person, a file in
+`~/second-brain`, `~/Downloads` or `~/Documents`) runs at once, snapshots what
+it touched, and hands back an undo id. `kit_undo` puts it back, and refuses if
+something else changed the same thing since. Anything that reaches another
+person or spends money (a text, an email, a Slack message, any Clay write)
+only makes a draft that names who gets what. It sends only on `kit_confirm`
+with that draft's id, within 15 minutes, once, and still through the kit's own
+gates: `CHEWBACCA_NO_SEND`, a person's quiet hours, and Caleb's ok in chat
+within 2 hours for Clay. Every write is logged with the client and who asked,
+in `~/.chewbacca/mcp-writes/log.jsonl`. Over `--http`, the write tools
+also need the bearer token in `~/.chewbacca/mcp-writes/http-token`, so another
+account on the same Mac can read the port's refusal but never write through it.
+
+## You do not configure anything
+
+`setup.sh` runs `chewbacca-mcp --register`, which writes the server into every
+MCP client already on the machine: Claude Desktop, Claude Code, Cursor and
+Codex (including the Codex inside the ChatGPT app). An app that is installed
+but never opened has no config file yet, so one is created for it. The entry
+names node and the `~/.local/bin` link outright, because an app opened from the
+Dock sees only `/usr/bin:/bin` and a kit snapshot path is pruned on the next
+update. You open the app and the tools are there.
+
+ChatGPT's own chat is the one that cannot get it: it connects only to servers
+at a public https address, run from OpenAI's cloud, so it can never start a
+program on your Mac. `--register` says so instead of claiming it. **No port, no URL, no JSON, no settings
+page.**
+
+That is the whole point, and an earlier version of this document got it wrong
+by leading with a localhost address. The kit author's response was the right one:
+"that means someone would have to open a browser, that's terrible UX." Pasting
+a URL once is still once too many for somebody who does not know what a port
+is.
+
+Registration is idempotent and backs up each config to
+`<config>.before-chewbacca` first. It edits files other programs depend on,
+and a corrupted `claude_desktop_config.json` would stop *their* servers
+working, which is worse than this tool not being registered.
+
+To register by hand later, or after installing a new client:
+
+```
+chewbacca-mcp --register
+```
+
+## The HTTP transport, for clients that take a URL
+
+Some browser clients accept a custom connector URL instead of launching a
+binary. For those only:
+
+```
+chewbacca-mcp --http 7788
+```
+
+**It binds to 127.0.0.1 and nothing else.** This serves an entire relationship
+history and message archive; binding to `0.0.0.0` would publish that to the
+local network, and on campus wifi that is the whole building.
+
+## What this still does not fix
+
+This is one step, not the destination. Still true:
+
+- **It requires the terminal once**, to install. The tool has to exist on disk
+  before a browser can reach it, and there is no signed `.app` yet
+- **It is macOS only.** The data it reads lives in macOS databases
+- **No authentication on the HTTP transport.** Localhost-only is the entire
+  boundary. Any local process can call it
+- **Five tools, not the whole kit.** The crafts, the writing rules, the HUD
+  and the Mac automation are all still shell-shaped
+
+The unit of distribution is still a git clone. Until that changes, "my grandma
+could click one button" is not true, and this document exists so nobody claims
+otherwise from the presence of an MCP server.
+
+For the phone, where none of this runs, see [PHONE.md](PHONE.md): the
+context repo on GitHub is the server.

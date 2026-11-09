@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Postly — Schedule. Publish. Grow.</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --violet: #7c3aed;
+    --violet-light: #8b5cf6;
+    --violet-dark: #5b21b6;
+    --pink: #ec4899;
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #18181f;
+    --border: rgba(255,255,255,0.08);
+    --text: #f8f8ff;
+    --muted: #94a3b8;
+    --subtle: #64748b;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5%;
+    height: 64px;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #a78bfa, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  .nav-cta {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .btn-ghost {
+    padding: 0.5rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+
+  .btn-ghost:hover { border-color: var(--violet-light); color: var(--text); }
+
+  .btn-primary {
+    padding: 0.5rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  /* HERO */
+  .hero {
+    padding-top: 120px;
+    padding-bottom: 80px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -200px; left: 50%;
+    transform: translateX(-50%);
+    width: 900px; height: 600px;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.25) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 1rem;
+    border-radius: 100px;
+    border: 1px solid rgba(139,92,246,0.4);
+    background: rgba(139,92,246,0.1);
+    font-size: 0.8rem;
+    color: #c4b5fd;
+    margin-bottom: 1.5rem;
+    font-weight: 500;
+  }
+
+  .badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #a78bfa;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    max-width: 800px;
+    margin: 0 auto 1.5rem;
+  }
+
+  h1 span {
+    background: linear-gradient(135deg, #a78bfa 0%, #ec4899 50%, #f97316 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 3.5rem;
+  }
+
+  .btn-lg {
+    padding: 0.85rem 2rem;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+
+  .btn-outline-lg {
+    padding: 0.85rem 2rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+
+  .btn-outline-lg:hover { border-color: var(--violet-light); color: var(--text); }
+
+  .social-proof {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--subtle);
+    font-size: 0.85rem;
+  }
+
+  .avatars {
+    display: flex;
+  }
+
+  .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    margin-left: -8px;
+    background: linear-gradient(135deg, #7c3aed, #ec4899);
+    font-size: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+  }
+
+  .avatar:first-child { margin-left: 0; }
+
+  /* DASHBOARD MOCKUP */
+  .mockup-wrap {
+    max-width: 900px;
+    margin: 4rem auto 0;
+    padding: 0 5%;
+    position: relative;
+  }
+
+  .mockup-wrap::before {
+    content: '';
+    position: absolute;
+    bottom: -40px; left: 50%;
+    transform: translateX(-50%);
+    width: 70%; height: 100px;
+    background: linear-gradient(to bottom, rgba(124,58,237,0.3), transparent);
+    filter: blur(40px);
+    pointer-events: none;
+  }
+
+  .mockup {
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  }
+
+  .mockup-bar {
+    background: var(--bg2);
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dot-red { width:10px;height:10px;border-radius:50%;background:#ff5f57; }
+  .dot-yellow { width:10px;height:10px;border-radius:50%;background:#febc2e; }
+  .dot-green { width:10px;height:10px;border-radius:50%;background:#28c840; }
+
+  .mockup-body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 360px;
+  }
+
+  .mockup-sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+  }
+
+  .sidebar-label {
+    font-size: 0.7rem;
+    color: var(--subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+    padding-left: 0.5rem;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+    cursor: pointer;
+  }
+
+  .sidebar-item.active {
+    background: rgba(124,58,237,0.15);
+    color: #c4b5fd;
+  }
+
+  .sidebar-icon {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.4;
+    flex-shrink: 0;
+  }
+
+  .mockup-main {
+    padding: 1.25rem;
+  }
+
+  .mock-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+
+  .mock-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .mock-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .cal-day-label {
+    font-size: 0.65rem;
+    color: var(--subtle);
+    text-align: center;
+    padding: 0.25rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .cal-day {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    border: 1px solid transparent;
+    position: relative;
+  }
+
+  .cal-day.has-post { border-color: rgba(124,58,237,0.3); }
+  .cal-day.today { border-color: var(--violet); color: #c4b5fd; }
+
+  .post-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-top: 2px;
+  }
+
+  .dot-tw { background: #1da1f2; }
+  .dot-ig { background: #e1306c; }
+  .dot-li { background: #0077b5; }
+
+  /* LOGOS */
+  .logos-section {
+    padding: 3rem 5%;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logos-label {
+    font-size: 0.8rem;
+    color: var(--subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.5rem;
+  }
+
+  .logos-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 3rem;
+    flex-wrap: wrap;
+    opacity: 0.35;
+    filter: grayscale(1);
+  }
+
+  .logo-item {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  /* FEATURES */
+  .section {
+    padding: 6rem 5%;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    display: inline-block;
+    font-size: 0.8rem;
+    color: #a78bfa;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-size: clamp(1.8rem, 4vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+  }
+
+  .section-sub {
+    font-size: 1.05rem;
+    color: var(--muted);
+    max-width: 500px;
+    margin-bottom: 3.5rem;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .feature-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.75rem;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(124,58,237,0.35);
+    transform: translateY(-2px);
+  }
+
+  .feature-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+  }
+
+  .icon-violet { background: rgba(124,58,237,0.15); }
+  .icon-pink { background: rgba(236,72,153,0.15); }
+  .icon-blue { background: rgba(59,130,246,0.15); }
+  .icon-orange { background: rgba(249,115,22,0.15); }
+  .icon-green { background: rgba(34,197,94,0.15); }
+  .icon-cyan { background: rgba(6,182,212,0.15); }
+
+  .feature-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .feature-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  /* HOW IT WORKS */
+  .how-section {
+    padding: 6rem 5%;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .how-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 2rem;
+    margin-top: 3.5rem;
+  }
+
+  .step {
+    position: relative;
+    padding-left: 1rem;
+  }
+
+  .step-num {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--violet-light);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.75rem;
+  }
+
+  .step-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .step-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  /* PLATFORMS */
+  .platforms {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 3.5rem;
+    justify-content: center;
+  }
+
+  .platform-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .platform-chip .p-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* STATS */
+  .stats-section {
+    padding: 5rem 5%;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2rem;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-size: 3rem;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #a78bfa, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-label {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  /* PRICING */
+  .pricing-section {
+    padding: 6rem 5%;
+    max-width: 1100px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 3.5rem;
+    text-align: left;
+  }
+
+  .price-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem;
+    position: relative;
+    transition: transform 0.2s;
+  }
+
+  .price-card:hover { transform: translateY(-3px); }
+
+  .price-card.featured {
+    border-color: var(--violet);
+    background: linear-gradient(145deg, rgba(124,58,237,0.1), var(--bg3));
+  }
+
+  .featured-badge {
+    position: absolute;
+    top: -12px; left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.85rem;
+    border-radius: 100px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .plan-name {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .plan-price {
+    font-size: 2.75rem;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .plan-price span {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
+  .plan-desc {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 1.75rem;
+  }
+
+  .plan-btn {
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    margin-bottom: 1.75rem;
+    border: none;
+  }
+
+  .plan-btn.outline {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+  }
+
+  .plan-btn.outline:hover { border-color: var(--violet-light); }
+
+  .plan-btn.filled {
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    color: white;
+  }
+
+  .plan-btn.filled:hover { opacity: 0.9; }
+
+  .plan-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .plan-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  .check {
+    color: #a78bfa;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* TESTIMONIALS */
+  .testimonials-section {
+    padding: 6rem 5%;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .testimonials-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .testimonials-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 3.5rem;
+  }
+
+  .testimonial {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.75rem;
+  }
+
+  .stars {
+    color: #f59e0b;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    letter-spacing: 0.05em;
+  }
+
+  .testimonial-text {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+  }
+
+  .testimonial-author {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .t-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .t-name { font-size: 0.875rem; font-weight: 600; }
+  .t-role { font-size: 0.775rem; color: var(--subtle); }
+
+  /* CTA */
+  .cta-section {
+    padding: 7rem 5%;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 700px; height: 400px;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.2) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-section h2 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    max-width: 620px;
+    margin: 0 auto 1.25rem;
+  }
+
+  .cta-section p {
+    font-size: 1.05rem;
+    color: var(--muted);
+    max-width: 440px;
+    margin: 0 auto 2.5rem;
+  }
+
+  .cta-email {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .email-input {
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+    width: 280px;
+    transition: border-color 0.2s;
+  }
+
+  .email-input:focus { border-color: var(--violet-light); }
+  .email-input::placeholder { color: var(--subtle); }
+
+  .trial-note {
+    font-size: 0.8rem;
+    color: var(--subtle);
+    margin-top: 1rem;
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 3rem 5%;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+  }
+
+  .footer-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+  }
+
+  .footer-left .logo { font-size: 1.1rem; }
+
+  .footer-left p {
+    font-size: 0.8rem;
+    color: var(--subtle);
+    margin-top: 0.4rem;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.75rem;
+    list-style: none;
+  }
+
+  .footer-links a {
+    font-size: 0.85rem;
+    color: var(--subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover { color: var(--muted); }
+
+  /* RESPONSIVE */
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+    .mockup-body { grid-template-columns: 1fr; }
+    .mockup-sidebar { display: none; }
+    .footer-inner { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Postly</div>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#testimonials">Reviews</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="#" class="btn-ghost">Sign in</a>
+    <a href="#cta" class="btn-primary">Start free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">
+    <span class="dot"></span>
+    Now with AI caption generation
+  </div>
+  <h1>Schedule once.<br><span>Grow everywhere.</span></h1>
+  <p class="hero-sub">One dashboard to plan, schedule, and publish your content across every platform. Stop context-switching, start compounding.</p>
+  <div class="hero-actions">
+    <a href="#cta" class="btn-primary btn-lg">Start free — no card needed</a>
+    <a href="#how" class="btn-outline-lg">See how it works</a>
+  </div>
+  <div class="social-proof">
+    <div class="avatars">
+      <div class="avatar">JK</div>
+      <div class="avatar">SM</div>
+      <div class="avatar">AT</div>
+      <div class="avatar">RN</div>
+      <div class="avatar">+</div>
+    </div>
+    <span>Trusted by <strong style="color:var(--text)">14,000+</strong> creators and teams</span>
+  </div>
+
+  <!-- Dashboard Mockup -->
+  <div class="mockup-wrap">
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="dot-red"></div>
+        <div class="dot-yellow"></div>
+        <div class="dot-green"></div>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-sidebar">
+          <div class="sidebar-label">Workspace</div>
+          <div class="sidebar-item active">
+            <div class="sidebar-icon" style="background:#a78bfa;opacity:1;border-radius:4px;"></div>
+            Calendar
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div>
+            Queue
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div>
+            Analytics
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div>
+            Drafts
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div>
+            Media
+          </div>
+          <br>
+          <div class="sidebar-label">Channels</div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon" style="background:#1da1f2;opacity:1;"></div>
+            Twitter / X
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon" style="background:#e1306c;opacity:1;"></div>
+            Instagram
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon" style="background:#0077b5;opacity:1;"></div>
+            LinkedIn
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon" style="background:#ff0000;opacity:1;"></div>
+            YouTube
+          </div>
+        </div>
+        <div class="mockup-main">
+          <div class="mock-header">
+            <span class="mock-title">September 2026</span>
+            <button class="mock-btn">+ New Post</button>
+          </div>
+          <div class="calendar-grid">
+            <div class="cal-day-label">Sun</div>
+            <div class="cal-day-label">Mon</div>
+            <div class="cal-day-label">Tue</div>
+            <div class="cal-day-label">Wed</div>
+            <div class="cal-day-label">Thu</div>
+            <div class="cal-day-label">Fri</div>
+            <div class="cal-day-label">Sat</div>
+
+            <!-- week 1 -->
+            <div class="cal-day"></div>
+            <div class="cal-day">1<div class="post-dot dot-tw"></div></div>
+            <div class="cal-day">2</div>
+            <div class="cal-day">3<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">4</div>
+            <div class="cal-day">5<div class="post-dot dot-li"></div></div>
+            <div class="cal-day">6<div class="post-dot dot-tw"></div></div>
+
+            <!-- week 2 -->
+            <div class="cal-day">7</div>
+            <div class="cal-day">8<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">9<div class="post-dot dot-tw"></div></div>
+            <div class="cal-day">10<div class="post-dot dot-li"></div></div>
+            <div class="cal-day">11</div>
+            <div class="cal-day">12<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">13</div>
+
+            <!-- week 3 -->
+            <div class="cal-day">14<div class="post-dot dot-tw"></div></div>
+            <div class="cal-day">15<div class="post-dot dot-li"></div></div>
+            <div class="cal-day">16<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">17<div class="post-dot dot-tw"></div></div>
+            <div class="cal-day">18<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">19<div class="post-dot dot-li"></div></div>
+            <div class="cal-day today">20<div class="post-dot dot-tw"></div></div>
+
+            <!-- week 4 -->
+            <div class="cal-day has-post">21<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day has-post">22<div class="post-dot dot-li"></div></div>
+            <div class="cal-day">23</div>
+            <div class="cal-day has-post">24<div class="post-dot dot-tw"></div></div>
+            <div class="cal-day">25</div>
+            <div class="cal-day has-post">26<div class="post-dot dot-ig"></div></div>
+            <div class="cal-day">27</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<section class="logos-section">
+  <p class="logos-label">Used by teams at</p>
+  <div class="logos-row">
+    <div class="logo-item">Vercel</div>
+    <div class="logo-item">Linear</div>
+    <div class="logo-item">Loom</div>
+    <div class="logo-item">Notion</div>
+    <div class="logo-item">Figma</div>
+    <div class="logo-item">Stripe</div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <span class="section-label">Features</span>
+  <h2 class="section-title">Everything your content<br>operation needs</h2>
+  <p class="section-sub">Built for the team that ships daily, not the one that ships when they remember to.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon icon-violet">📅</div>
+      <div class="feature-title">Visual Calendar</div>
+      <p class="feature-desc">Drag and drop posts across a week or month view. See gaps before they become missed days.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-pink">✨</div>
+      <div class="feature-title">AI Caption Writer</div>
+      <p class="feature-desc">Paste a URL or describe your post and get platform-native captions in your exact voice, not generic filler.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-blue">📊</div>
+      <div class="feature-title">Unified Analytics</div>
+      <p class="feature-desc">Reach, engagement, and follower growth across every channel in one view. No more tab-hopping between dashboards.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-orange">⚡</div>
+      <div class="feature-title">Best Time to Post</div>
+      <p class="feature-desc">Postly learns when your audience is actually online and suggests times that have historically driven more reach.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-green">👥</div>
+      <div class="feature-title">Team Collaboration</div>
+      <p class="feature-desc">Invite writers, designers, and approvers. Set roles, leave comments, and ship posts with one-click approval flows.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-cyan">🔁</div>
+      <div class="feature-title">Evergreen Recycling</div>
+      <p class="feature-desc">Tag your best posts as evergreen and Postly will automatically re-queue them when your schedule runs dry.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="how-inner">
+    <span class="section-label">How it works</span>
+    <h2 class="section-title">Live in minutes,<br>not weeks</h2>
+    <p class="section-sub">No onboarding calls. No 60-page setup guides. Connect your accounts and your first post is scheduled in five minutes.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">Step 01</div>
+        <div class="step-title">Connect your channels</div>
+        <p class="step-desc">OAuth in two clicks for every major platform. Postly never stores your passwords and never posts without your approval.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">Step 02</div>
+        <div class="step-title">Build your content queue</div>
+        <p class="step-desc">Write posts, upload assets, and use the AI writer to fill gaps. Drag the calendar until the week looks the way you want it to.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">Step 03</div>
+        <div class="step-title">Let Postly handle the clock</div>
+        <p class="step-desc">Your posts go out on time, automatically, while you are working on the next thing. Check analytics on Friday.</p>
+      </div>
+    </div>
+
+    <div class="platforms">
+      <div class="platform-chip"><div class="p-dot" style="background:#1da1f2"></div>Twitter / X</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#e1306c"></div>Instagram</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#0077b5"></div>LinkedIn</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#ff0000"></div>YouTube</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#ff4500"></div>Reddit</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#000000"></div>TikTok</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#3b5998"></div>Facebook</div>
+      <div class="platform-chip"><div class="p-dot" style="background:#bd081c"></div>Pinterest</div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-section">
+  <div class="stats-grid">
+    <div>
+      <div class="stat-num">14k+</div>
+      <div class="stat-label">Teams and creators</div>
+    </div>
+    <div>
+      <div class="stat-num">2.4M</div>
+      <div class="stat-label">Posts scheduled last month</div>
+    </div>
+    <div>
+      <div class="stat-num">8</div>
+      <div class="stat-label">Platforms connected</div>
+    </div>
+    <div>
+      <div class="stat-num">99.9%</div>
+      <div class="stat-label">Publishing uptime</div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <span class="section-label">Pricing</span>
+  <h2 class="section-title">Pay for what you use,<br>nothing else</h2>
+  <p class="section-sub" style="margin:0 auto 3.5rem">Every plan includes a 14-day free trial. Cancel in 30 seconds, no questions asked.</p>
+
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">$0<span>/mo</span></div>
+      <p class="plan-desc">For solo creators getting started. Free forever.</p>
+      <a href="#" class="plan-btn outline">Get started free</a>
+      <ul class="plan-features">
+        <li><span class="check">✓</span>3 social accounts</li>
+        <li><span class="check">✓</span>30 scheduled posts/mo</li>
+        <li><span class="check">✓</span>Basic analytics (7 days)</li>
+        <li><span class="check">✓</span>Visual calendar</li>
+        <li><span class="check">✓</span>Browser extension</li>
+      </ul>
+    </div>
+
+    <div class="price-card featured">
+      <div class="featured-badge">Most popular</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$19<span>/mo</span></div>
+      <p class="plan-desc">For serious creators and small teams shipping daily.</p>
+      <a href="#" class="plan-btn filled">Start free trial</a>
+      <ul class="plan-features">
+        <li><span class="check">✓</span>10 social accounts</li>
+        <li><span class="check">✓</span>Unlimited scheduled posts</li>
+        <li><span class="check">✓</span>Full analytics (90 days)</li>
+        <li><span class="check">✓</span>AI caption writer (100/mo)</li>
+        <li><span class="check">✓</span>Best time to post</li>
+        <li><span class="check">✓</span>Evergreen recycling</li>
+        <li><span class="check">✓</span>3 team seats</li>
+      </ul>
+    </div>
+
+    <div class="price-card">
+      <div class="plan-name">Business</div>
+      <div class="plan-price">$59<span>/mo</span></div>
+      <p class="plan-desc">For agencies and teams managing multiple brands.</p>
+      <a href="#" class="plan-btn outline">Start free trial</a>
+      <ul class="plan-features">
+        <li><span class="check">✓</span>Unlimited accounts</li>
+        <li><span class="check">✓</span>Unlimited posts</li>
+        <li><span class="check">✓</span>Full analytics (1 year)</li>
+        <li><span class="check">✓</span>Unlimited AI captions</li>
+        <li><span class="check">✓</span>Approval workflows</li>
+        <li><span class="check">✓</span>White-label reports</li>
+        <li><span class="check">✓</span>Unlimited seats</li>
+        <li><span class="check">✓</span>Priority support</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials-section" id="testimonials">
+  <div class="testimonials-inner">
+    <span class="section-label">Reviews</span>
+    <h2 class="section-title">The people who actually use it<br>every day</h2>
+
+    <div class="testimonials-grid">
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"I was spending 3 hours a week just on scheduling. That number is now 20 minutes. The calendar view alone is worth the subscription."</p>
+        <div class="testimonial-author">
+          <div class="t-avatar" style="background:linear-gradient(135deg,#7c3aed,#ec4899)">JK</div>
+          <div>
+            <div class="t-name">Jamie Kowalski</div>
+            <div class="t-role">Content lead at Loom</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"The AI writer actually sounds like our brand. I stopped dreading caption day. Our engagement went up 40% in the first month — I don't fully know why, but the consistency helped."</p>
+        <div class="testimonial-author">
+          <div class="t-avatar" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">SM</div>
+          <div>
+            <div class="t-name">Sofia Mendes</div>
+            <div class="t-role">Founder, Studio Mendes</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"We manage 12 client accounts. Postly replaced two tools and three Slack threads. The approval flow is the thing we didn't know we needed."</p>
+        <div class="testimonial-author">
+          <div class="t-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">AT</div>
+          <div>
+            <div class="t-name">Andre Thornton</div>
+            <div class="t-role">Operations, Bright Agency</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <h2>Ready to stop<br><span style="background:linear-gradient(135deg,#a78bfa,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">forgetting to post?</span></h2>
+  <p>Start free, no credit card. Cancel any time. Your first month of Pro is on us.</p>
+  <div class="cta-email">
+    <input class="email-input" type="email" placeholder="you@company.com">
+    <a href="#" class="btn-primary btn-lg">Get started free</a>
+  </div>
+  <p class="trial-note">14-day Pro trial included. No card required.</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="logo">Postly</div>
+      <p>Schedule once. Grow everywhere.</p>
+    </div>
+    <ul class="footer-links">
+      <li><a href="#">Product</a></li>
+      <li><a href="#">Pricing</a></li>
+      <li><a href="#">Blog</a></li>
+      <li><a href="#">Changelog</a></li>
+      <li><a href="#">Privacy</a></li>
+      <li><a href="#">Terms</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

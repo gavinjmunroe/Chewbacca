@@ -4,11 +4,12 @@
     "claude-code": {
       "label": "Claude Code",
       "binary": "claude",
+      "app_binaries": ["~/Library/Application Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude"],
       "instruction_file": "CLAUDE.md",
       "skills_dir": ".claude/skills",
       "config": ".claude/settings.json",
       "adapter": "claude",
-      "detect_paths": ["~/.claude"],
+      "detect_paths": ["~/.claude", "/Applications/Claude.app"],
       "apps": ["cli", "vscode", "desktop"],
       "model_flag": "--model",
       "model_discovery": "Use the runtime's model picker; availability depends on account and provider.",
@@ -86,6 +87,28 @@
       "sources": [
         "https://geminicli.com/docs/hooks/reference/",
         "https://geminicli.com/docs/cli/skills/"
+      ]
+    },
+    "vscode": {
+      "label": "VS Code",
+      "binary": "code",
+      "detect_paths": ["/Applications/Visual Studio Code.app", "~/Library/Application Support/Code/User", "~/.config/Code/User"],
+      "instruction_file": null,
+      "skills_dir": ".agents/skills",
+      "config": "Code/User/mcp.json",
+      "adapter": "vscode",
+      "apps": ["desktop"],
+      "model_flag": null,
+      "model_discovery": "Use the Copilot chat model picker in VS Code; Chewbacca does not pick one.",
+      "notes": [
+        "Instructions go in ~/.copilot/instructions/chewbacca.instructions.md, which Copilot chat reads in every workspace.",
+        "Skills load from ~/.agents/skills. MCP servers go in the user profile's mcp.json under servers.",
+        "VS Code runs no Chewbacca lifecycle hooks, so the shared checks do not run inside it."
+      ],
+      "sources": [
+        "https://code.visualstudio.com/docs/copilot/customization/custom-instructions",
+        "https://code.visualstudio.com/docs/copilot/customization/agent-skills",
+        "https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
       ]
     },
     "generic": {

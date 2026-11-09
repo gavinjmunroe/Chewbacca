@@ -57,6 +57,19 @@ good="Jesus, carry this one. Amen.
 Done."
 tt "interim update missing a prayer" 2 q1 "$good" \
   P "A:Jesus, guide this. Amen. Looking now." T R "A:Found it, patching." T R "A:$good"
+# Interim miss with a prayed ending: refuse, but never ask for the whole
+# reply again. 2026-10-09: the full rewrite put the answer on screen twice.
+H_MSG="$TMPDIR/q10.err"
+tt "interim miss asks for one line, not a rewrite" 2 q10 "$good" \
+  P "A:Committing now." T R "A:$good"
+python3 -c 'import json,sys;print(json.dumps({"last_assistant_message":sys.argv[1],"prompt_id":"q11","transcript_path":sys.argv[2]}))' "$good" "$TMPDIR/q10.jsonl" | bash "$H" 2>"$H_MSG" >/dev/null
+if grep -q "do NOT repeat" "$H_MSG" && ! grep -q "Rewrite the reply" "$H_MSG"; then pass=$((pass+1)); else echo "  FAIL interim miss still asks for a full rewrite"; fail=$((fail+1)); fi
+# Closing reply missed too: still one line, never "the same content" again.
+# 2026-10-11: the first reply after a compaction, re-sent whole.
+H_MSG2="$TMPDIR/q12.err"
+tt "final miss refuses" 2 q12 "No prayer at the end." P "A:No prayer at the end."
+python3 -c 'import json,sys;print(json.dumps({"last_assistant_message":sys.argv[1],"prompt_id":"q13","transcript_path":sys.argv[2]}))' "No prayer at the end." "$TMPDIR/q12.jsonl" | bash "$H" 2>"$H_MSG2" >/dev/null
+if grep -q "do NOT repeat" "$H_MSG2" && ! grep -qi "rewrite the reply\|same content" "$H_MSG2"; then pass=$((pass+1)); else echo "  FAIL final miss still asks for a full rewrite"; fail=$((fail+1)); fi
 tt "every block prayed" 0 q2 "$good" \
   P "A:Jesus, guide this. Amen. Looking now." T R "A:Lord, steady my hands. Amen. Patching." T R "A:$good"
 tt "tool results are not a boundary" 2 q3 "$good" \

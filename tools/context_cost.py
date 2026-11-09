@@ -113,14 +113,81 @@ def collect():
     # Skill descriptions load for routing even when the skill body does not.
     desc = 0
     n = 0
-    for f in (CLAUDE / "skills").glob("*/SKILL.md"):
-        m = re.search(r"^description:\s*(.+)$", read(f), re.M)
-        if m:
-            desc += est_tokens(m.group(1))
+    for f in list((CLAUDE / "skills").glob("*/SKILL.md")) + list((CLAUDE / "commands").glob("*.md")):
+        d = description(read(f))
+        if d:
+            desc += est_tokens(d)
             n += 1
     if n:
-        items.append((f"{n} skill descriptions", CLAUDE / "skills", desc, "every session"))
+        items.append((f"{n} skill and command descriptions", CLAUDE / "skills", desc, "every session"))
+    # Enabled plugins list their skills and commands in the same listing. This
+    # counted only ~/.claude/skills until 2026-10-11, when the real listing in a
+    # transcript held 392 entries against the 203 counted here.
+    pdesc = 0
+    pn = 0
+    for root in plugin_roots():
+        for f in list(root.glob("skills/*/SKILL.md")) + list(root.glob("commands/*.md")):
+            d = description(read(f))
+            if d:
+                pdesc += est_tokens(d)
+                pn += 1
+    if pn:
+        items.append((f"{pn} plugin skill descriptions", CLAUDE / "plugins", pdesc, "every session"))
     return items
+
+
+def description(text):
+    """The frontmatter description, folded onto one line when it is a YAML block."""
+    if not text.startswith("---"):
+        return ""
+    end = text.find("\n---", 3)
+    head = text[3:end] if end != -1 else ""
+    m = re.search(r"^description:[ \t]*(.*)$", head, re.M)
+    if not m:
+        return ""
+    first = m.group(1).strip()
+    if first and first not in (">", "|", ">-", "|-"):
+        return first.strip("\"'")
+    more = []
+    for line in head[m.end():].splitlines()[1:]:
+        if line and not line[0].isspace():
+            break
+        more.append(line.strip())
+    return " ".join(x for x in more if x)
+
+
+def plugin_roots():
+    """Install folders of every plugin settings.json enables, plus account-synced ones."""
+    try:
+        enabled = json.loads(read(CLAUDE / "settings.json") or "{}").get("enabledPlugins", {})
+        installed = json.loads(read(CLAUDE / "plugins/installed_plugins.json") or "{}").get("plugins", {})
+    except ValueError:
+        enabled, installed = {}, {}
+    roots, seen = [], set()
+    for key, on in enabled.items():
+        for entry in installed.get(key, [])[-1:] if on is True else []:
+            p = Path(entry.get("installPath", ""))
+            if p.is_dir():
+                roots.append(p)
+                seen.add(key.split("@")[0])
+    # Plugins synced from the claude.ai account (figma, cowork-plugin-management)
+    # sit in buckets with one folder per generation, `name~g4` beside `name`.
+    for manifest in sorted((CLAUDE / "plugins/synced").glob("*/manifest.json")):
+        try:
+            plugins = json.loads(read(manifest) or "{}").get("plugins", [])
+        except ValueError:
+            continue
+        for p in plugins:
+            name = p.get("name", "")
+            if not name or name in seen:
+                continue
+            for cand in (f"{name}~g{p.get('generation')}", name):
+                folder = manifest.parent / cand
+                if folder.is_dir():
+                    roots.append(folder)
+                    seen.add(name)
+                    break
+    return roots
 
 
 def main():
@@ -166,6 +233,13 @@ def main():
         print(f"\n  Over by {over:,} tokens. Every session pays this before it starts.")
         print("  The largest file is the first place to look.")
     print("\n  Estimate: characters divided by four.")
+    # Measured 2026-10-11: the transcript's skill listing held 392 entries, 56
+    # of them with a description, 29,974 characters. Past its own cap Claude
+    # Code drops descriptions and keeps names, so the skill rows above are an
+    # upper bound on tokens and a lower bound on what a long description costs
+    # in routing: the skill it crowds out is listed by name alone.
+    print("  Skill rows are an upper bound: Claude Code drops descriptions past its")
+    print("  listing cap. `context-budget` reads what one session was actually sent.")
     return 0
 
 

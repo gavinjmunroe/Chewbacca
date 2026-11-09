@@ -21,12 +21,15 @@ import argparse, os, re, shutil, subprocess, sys, tempfile, time
 try:
     import mlx_whisper  # noqa: F401
 except ImportError:
-    launcher = shutil.which("mlx_whisper")
-    if not launcher or os.environ.get("ROOM_LISTEN_REEXEC"):
-        sys.exit("room-listen: needs mlx-whisper (uv tool install mlx-whisper) and ffmpeg")
-    interp = open(launcher).readline()[2:].strip()
-    os.environ["ROOM_LISTEN_REEXEC"] = "1"
-    os.execv(interp, [interp] + sys.argv)
+    # Only as the script: an importer (a test) must never have its process
+    # replaced, which is how bin/hud-listen silenced a whole pytest run.
+    if __name__ == "__main__":
+        launcher = shutil.which("mlx_whisper")
+        if not launcher or os.environ.get("ROOM_LISTEN_REEXEC"):
+            sys.exit("room-listen: needs mlx-whisper (uv tool install mlx-whisper) and ffmpeg")
+        interp = open(launcher).readline()[2:].strip()
+        os.environ["ROOM_LISTEN_REEXEC"] = "1"
+        os.execv(interp, [interp] + sys.argv)
 
 MODEL = "mlx-community/whisper-small.en-mlx"
 
@@ -43,6 +46,14 @@ def main():
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="room-listen-")
 
+    # The consent line goes up before ffmpeg opens the mic (CHW-206): on the
+    # glass when Kyber answers, else on this terminal.
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+    import capture_consent
+
+    surface = capture_consent.surface_name(f"l{os.getpid()}")
+    capture_consent.announce(capture_consent.room_listen_line(), name=surface)
+
     # ffmpeg's segment muxer writes one wav per chunk; a chunk is finished once
     # the next one exists, so only ever transcribe all but the newest file.
     rec = subprocess.Popen(
@@ -50,6 +61,8 @@ def main():
          "-ac", "1", "-ar", "16000", "-f", "segment", "-segment_time", str(a.chunk),
          os.path.join(tmp, "c%06d.wav")],
         stdin=subprocess.DEVNULL)
+    glass = capture_consent.Glass(name=surface)
+    glass.own(capture_consent.room_listen_line(), rec.terminate)
 
     import mlx_whisper
 
@@ -76,9 +89,15 @@ def main():
                 done.add(f)
                 os.remove(path)
             time.sleep(1)
+        if glass.stopped.is_set():
+            print("room-listen: stopped from the glass.", file=sys.stderr)
+            return
         sys.exit(f"room-listen: ffmpeg exited {rec.returncode}; check mic permission for the host app")
     finally:
         rec.terminate()
+        glass.close()
+        # The newest segment never got transcribed; no audio outlives the run.
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -62,8 +62,17 @@ Measured 2026-09-27 with `edit-dna`. On-beat is the share of cuts within
   zero, with crushed blacks and grain.
 - **Tempo comes from the whole song.** The first 20 s of ELECTRIC's track, an
   ambient intro, read 112 BPM against 129 for the whole; a grid at the wrong
-  tempo was off the beat within four bars. Beats are moved back to where their
-  onset starts, about 50 ms earlier than the tracker puts them.
+  tempo was off the beat within four bars.
+- **Beats come from Beat This, not librosa.** On nine reference edits the
+  editors' cuts hit Beat This's beats 1.72 times as often as chance, against
+  1.21 for librosa moved back to the attack, and sat a median 6 ms from them.
+  librosa's moved beats wandered from 24 ms early to 50 ms late. librosa is
+  the fallback when the 81 MB of weights cannot be downloaded.
+- **Bar starts are logged, not obeyed.** Their long shots (a bar or more)
+  start on a bar start 15% of the time, three times chance, and the loudest
+  rise sits nowhere consistent against one. `NAME.edl.json` carries
+  `downbeats` and `tracker`; nothing plans on them yet. The measurements are
+  in `research/edits/BEATS.md`.
 
 ## What it does not do yet
 

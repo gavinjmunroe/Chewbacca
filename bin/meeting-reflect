@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""After a meeting, how faith answers it: flesh vs redeemed, Scripture, who to go to.
+
+    meeting-reflect latest              the newest recorded meeting
+    meeting-reflect <meeting-id>        one recorded meeting (rc-...)
+    meeting-reflect --file call.txt     a pasted transcript (a Granola or Otter paste)
+    meeting-reflect --file -            the same, from stdin
+    meeting-reflect ... --no-ledger     write the reflection, queue nothing
+    meeting-reflect ... --json          print the reflection as JSON
+
+Recorded meetings get this on their own when they close (meeting_capture's
+finish, after the summary). This command is for a meeting that closed before
+that existed, or a call he pasted. The reflection is written next to the
+meetings, 0600, and printed. Why and what it trusts: bin/lib/meeting_reflect.py.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import meeting_capture as MC  # noqa: E402
+import meeting_reflect as MR  # noqa: E402
+
+
+def pasted(text: str, title: str) -> dict:
+    lines = [{"clock": "", "text": MC.clean(t)} for t in text.splitlines() if MC.clean(t)]
+    digest = hashlib.sha256(text.encode()).hexdigest()[:10]
+    return {"id": f"paste-{digest}", "title": title or "Pasted call", "lines": lines, "participants": []}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="meeting-reflect", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("meeting", nargs="?", default="")
+    ap.add_argument("--file")
+    ap.add_argument("--title", default="")
+    ap.add_argument("--no-ledger", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+    home = Path(os.environ.get("CHEWBACCA_HOME_OVERRIDE") or Path.home())
+    env = dict(os.environ)
+    if args.no_ledger:
+        env["CHEWBACCA_MEETING_LEDGER"] = "0"
+    recorded = False
+    if args.file:
+        text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
+        meeting = pasted(text, args.title)
+    else:
+        files = MC.meeting_files(home)
+        if args.meeting in ("", "latest"):
+            path = max(files, key=lambda p: p.stat().st_mtime, default=None)
+        else:
+            path = next((p for p in files if p.stem == args.meeting), None)
+        meeting = MC.load(path) if path else None
+        if meeting is None:
+            print(f"meeting-reflect: no meeting {args.meeting or 'recorded yet'}", file=sys.stderr)
+            return 1
+        if not meeting.get("ended_at"):
+            # The watcher still owns an open meeting and rewrites it per chunk;
+            # it reflects on its own when the call closes.
+            print(f"meeting-reflect: {meeting.get('id')} is still open; it reflects on its own when it closes",
+                  file=sys.stderr)
+            return 1
+        recorded = True
+    MR.reflect(meeting, MC._run, env, home, datetime.now().astimezone())
+    if recorded:
+        # Reread before writing: the model took a while, and only the two
+        # reflection fields are ours to set.
+        target = MC.meetings_dir(home) / f"{meeting['id']}.json"
+        fresh = MC.load(target) or meeting
+        for key in ("reflection", "reflection_note"):
+            if key in meeting:
+                fresh[key] = meeting[key]
+        fresh["updated_at"] = MC.iso(datetime.now().astimezone())
+        MC.write_private(target, fresh)
+    r = meeting.get("reflection")
+    if r is None:
+        print(meeting.get("reflection_note") or "No reflection.", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(r, indent=1, ensure_ascii=False))
+    else:
+        print(Path(r["file"]).read_text())
+        print(f"Saved: {r['file']}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

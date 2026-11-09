@@ -1,0 +1,122 @@
+---
+name: platforms
+description: "Every outside account (Cloudflare, Railway, Vercel, Supabase, GitHub, Google, Porkbun, Twilio, WhatsApp): who is signed in, the fix, common jobs. Also buy domains and set up cold-email sending domains."
+triggers: >-
+  Use for anything that touches an outside platform account: is X connected, sign in to X, which account am I on, deploy or check a Railway or Vercel app, Supabase projects, Cloudflare DNS, buy or register a domain, domain price or availability, redirect a domain, set up a new sending domain or lookalike domain for cold email, MX SPF DKIM DMARC records, Google Workspace inboxes for outbound, Porkbun, Twilio keys, WhatsApp link. Replaces agent-scripts' cloudflare-registrar and domain-dns-ops, which are set up for another person's account.
+license: MIT
+requires: [chewbacca]
+---
+
+# Platforms
+
+One front door for every outside account Chewbacca, Dough and Anchored lean on.
+
+```bash
+chewbacca platforms                  # every platform: connected (as who), or the fix
+chewbacca platforms show cloudflare  # install, sign in, used by, common jobs, gotchas
+```
+
+Run the status line first whenever a task needs a platform. It's read-only, each check is that
+platform's own whoami with a 20 s timeout, and nothing it prints is a secret.
+
+## Rules
+
+- Secrets live in each CLI's own store (cf, gh, railway, vercel, supabase, gws, wacli) or the
+  macOS keychain under account `chewbacca` (`chewbacca platforms set-key porkbun`). Never in a repo,
+  a note, a memory file or chat.
+- A sign-in step is his: start the login yourself (`cf auth login` prints a device code and opens
+  the page), tell him the one click, and keep working on the rest.
+- Anything that costs money (a domain, a Workspace seat, a plan) gets the exact items and total
+  shown to him and his yes on that number before it runs. A domain registration can't be refunded.
+- A send under his name (email, WhatsApp, SMS) needs his ok every time.
+
+## Never
+
+- Never spend ten minutes reading before the first useful action. On 2026-11-03 this skill
+  didn't exist yet, a session read three repos silently before touching DNS, and Caleb asked
+  "What's taking so long?" and then "How much longer?". Run `chewbacca platforms`, do the job,
+  and say where it stands in one line within the first minute, with an honest estimate.
+- Never leave a lookalike sending domain pointing nowhere. Every one 301s to the client's real
+  site from the start (Caleb, 2026-11-03: "Also make them all redirect to the actual aurapath
+  site"), so `--redirect` is part of step 2, not an extra.
+
+- Never buy more sending domains than the volume needs. Run
+  `chewbacca platforms sending-size --sends-per-day N --have-domains K` first and buy only
+  the number it prints, with that number in the total he approves. On 2026-11-04 two FF
+  lookalikes were bought when one covered the volume, and Caleb said "we cant be wasteful!".
+  Add inboxes on a domain you already own (up to 3) before you buy another domain.
+
+## Buying a domain
+
+Buy new domains on Cloudflare (account caleb@firmfoundation.tech). Porkbun refused new orders on
+2026-11-03 ("This account is unable to place new orders (001)"). firmfoundation.tech stays on Porkbun.
+
+```bash
+cf registrar registrations check x --body '{"domains":["a.com","b.com"]}'   # authoritative price, read-only
+cf registrar registrations create a.com --years 1 --auto-renew --privacy-mode redaction --force \
+  --contacts-registrant-postal-info-name "..." --contacts-registrant-email ... --contacts-registrant-phone "+1.NNNNNNNNNN" \
+  --contacts-registrant-postal-info-address-street ... -city ... -state ... -postal-code ... -country-code US
+```
+
+Gotchas, all seen on 2026-11-03: `check` needs a dummy positional before `--body`; `create` fails
+with "No registrant contact provided" until you pass the contact flags (the name and address are
+in `cf billing profiles get`); `-z` takes a zone id, and a domain name there builds a broken URL.
+
+## New cold-email sending domain (tested end to end 2026-11-03)
+
+1. Register it on Cloudflare as above, and the zone shows up on Cloudflare nameservers right away.
+2. Mail records and the web redirect, in one command. Dry run first, then `--yes`:
+   ```bash
+   chewbacca platforms sending-domain plan  getaurapath.com --redirect https://aurapathai.com
+   chewbacca platforms sending-domain apply getaurapath.com --redirect https://aurapathai.com --yes
+   ```
+   That writes MX `smtp.google.com` (priority 1), SPF `v=spf1 include:_spf.google.com ~all`,
+   DMARC `v=DMARC1; p=none;` and a proxied placeholder plus a 301 of every path to the real site.
+   A rerun reports `exists` and writes nothing. It refuses to add a second SPF or MX, or to replace
+   another redirect rule.
+3. Google Workspace: a NEW tenant per client, never inside firmfoundation.tech, so a spam
+   suspension can't take FF's real mail down. One tenant holds all of a client's domains
+   (first one primary, the rest secondary), and every user is a paid seat, the admin
+   included: make the first sending inbox the admin, or the bill is one seat over what the
+   client was quoted (2026-11-04, AuraPath was quoted 6 seats). Sign-up and card are his
+   (https://workspace.google.com/business/signup/welcome). The first domain is primary, the
+   others are secondary domains. Workspace hands over a `google-site-verification=` token:
+   `apply <domain> --verify <token> --yes`.
+4. DKIM, once the domain is verified: Admin console > Apps > Google Workspace > Gmail >
+   Authenticate email, generate a 2048-bit key, then `apply <domain> --dkim '<v=DKIM1 value>' --yes`,
+   then press Start authentication in the console.
+5. Check from public DNS: `chewbacca platforms sending-domain check <domain>` (that's
+   `chewbacca gtme dns`). Ready means mx, spf, dkim, dmarc and site pass and the domain is past the
+   warmup minimum. Clay's own warmup doc says about 3 weeks to warm fully, so a 10 to 15 day
+   promise to a client is the optimistic end; say so when you quote a first-send date.
+6. Warmup runs on a warmup network driven by API (Instantly's v2 API has accounts, warmup
+   enable/disable and warmup-analytics routes), while Dough does the sending. Clay's warmup
+   has no documented API and needs a Clay sequencer workspace, so it is not the default
+   (Caleb, 2026-11-02: "We shouldnt be dependent on clay!"). A brand's own aged domain with
+   real inboxes (FF wave 1 on firmfoundation.tech) skips warmup and uses the 5/10/15/20 ramp.
+7. Connecting Workspace inboxes to Instantly, as run 2026-11-06. Check the real layout in Admin
+   first (Users, Domains): the AuraPath tenant had 3 inboxes on each of 2 domains, not the 2 on
+   each of 3 that Travis was told, and the third domain's "failing DKIM" was just it never being
+   added. The steps that need him, in order:
+   - Billing: send him to the Outbound tab. The page opens on Bundles, so "buy Growth $47" became
+     the $85 Starter Bundle. Read the plan on the billing page: the API's `plan_id` said
+     `pid_free` on a paid workspace.
+   - Trust: in Admin, API controls, Configure new app, search the client ID from Instantly's OAuth
+     screen. Searching the name only finds the phone apps. Pick the Web one and set Trusted.
+   - Sign-in: "This app is blocked" with Trusted set means the wrong account got picked. Trust covers
+     this tenant only, so tell him up front to use "Use another account".
+   - Code prompt: a new user's recovery email is its own inbox, so the code goes where he can't read
+     it. Before he signs in, have him open each user's Security page and turn off Login challenge
+     for 10 minutes. Only caleb@ had ever signed in, and no passwords were in Keychain.
+     Then enable warmup yourself: `POST /api/v2/accounts/warmup/enable` with `{"emails": [...]}`, only
+     for that client's domains, and read `warmup_status` back from `/api/v2/accounts`. Instantly can
+     also hold accounts nobody asked for (an AirMail one showed up), so never use include-all.
+
+## Who uses what
+
+- Chewbacca: GitHub, Google (gws), Clay through `chewbacca clay`, WhatsApp, Cloudflare for domains.
+- Dough: Clay, Google Workspace inboxes, Cloudflare sending domains (`chewbacca gtme dns` lives in Dough's engine).
+- Anchored: Railway (anchored.up.railway.app, deploys on push to main), GitHub, Twilio and WhatsApp for Gather texting.
+
+The Claude plugin `cloudflare@cloudflare` (marketplace cloudflare/skills) adds Cloudflare's own
+skills and its MCP server. The MCP needs `/mcp` authorization once; the `cf` CLI works without it.

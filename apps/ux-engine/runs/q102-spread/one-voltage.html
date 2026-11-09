@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification Preferences</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+        background: #f2f2f2;
+        color: #111111;
+        min-height: 100vh;
+        padding: 48px 16px 80px;
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: 580px;
+        margin: 0 auto;
+      }
+
+      /* Page header */
+      .page-header {
+        margin-bottom: 28px;
+      }
+
+      .page-header h1 {
+        font-size: 22px;
+        font-weight: 700;
+        color: #111111;
+        letter-spacing: -0.4px;
+      }
+
+      .page-header p {
+        color: #777777;
+        margin-top: 5px;
+        font-size: 14px;
+      }
+
+      /* Card */
+      .card {
+        background: #ffffff;
+        border: 1px solid #dedede;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 13px 20px;
+        border-bottom: 1px solid #ebebeb;
+      }
+
+      .card-header h2 {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: #999999;
+      }
+
+      /* Row */
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px 20px;
+        gap: 20px;
+      }
+
+      .row + .row {
+        border-top: 1px solid #f2f2f2;
+      }
+
+      .row-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .row-label {
+        font-size: 15px;
+        font-weight: 500;
+        color: #111111;
+      }
+
+      .row-desc {
+        font-size: 13px;
+        color: #999999;
+        margin-top: 1px;
+      }
+
+      /* Toggle */
+      .toggle {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 26px;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+
+      .toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+
+      .toggle-track {
+        position: absolute;
+        inset: 0;
+        background: #cccccc;
+        border-radius: 13px;
+        transition: background 0.16s ease;
+      }
+
+      .toggle-thumb {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        background: #ffffff;
+        border-radius: 50%;
+        border: 1px solid #bbbbbb;
+        transition:
+          transform 0.16s ease,
+          border-color 0.16s ease;
+      }
+
+      .toggle input:checked + .toggle-track {
+        background: #222222;
+      }
+
+      .toggle input:checked ~ .toggle-thumb {
+        transform: translateX(18px);
+        border-color: #444444;
+      }
+
+      .toggle input:focus-visible + .toggle-track {
+        outline: 2px solid #2563eb;
+        outline-offset: 2px;
+      }
+
+      /* Select */
+      .select-wrap {
+        flex-shrink: 0;
+      }
+
+      select {
+        appearance: none;
+        background: #f5f5f5;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        padding: 6px 28px 6px 10px;
+        font-size: 13px;
+        color: #111111;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 9px center;
+        font-family: inherit;
+      }
+
+      select:focus {
+        outline: 2px solid #2563eb;
+        outline-offset: 1px;
+      }
+
+      /* Channel pills */
+      .pill-row {
+        padding: 4px 20px 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 13px;
+        border: 1px solid #d0d0d0;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #555555;
+        background: #fafafa;
+        cursor: pointer;
+        user-select: none;
+        transition:
+          background 0.13s,
+          border-color 0.13s,
+          color 0.13s;
+      }
+
+      .pill input[type="checkbox"] {
+        display: none;
+      }
+
+      .pill-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #cccccc;
+        transition: background 0.13s;
+      }
+
+      .pill.on {
+        background: #111111;
+        border-color: #111111;
+        color: #ffffff;
+      }
+
+      .pill.on .pill-dot {
+        background: #ffffff;
+      }
+
+      /* Quiet hours */
+      .quiet-row {
+        padding: 16px 20px;
+        border-top: 1px solid #f2f2f2;
+      }
+
+      .quiet-label {
+        font-size: 15px;
+        font-weight: 500;
+        color: #111111;
+      }
+
+      .quiet-desc {
+        font-size: 13px;
+        color: #999999;
+        margin-top: 1px;
+        margin-bottom: 12px;
+      }
+
+      .time-inputs {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .time-inputs span {
+        font-size: 13px;
+        color: #999999;
+      }
+
+      input[type="time"] {
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 13px;
+        color: #111111;
+        background: #f5f5f5;
+        font-family: inherit;
+      }
+
+      input[type="time"]:focus {
+        outline: 2px solid #2563eb;
+        outline-offset: 1px;
+      }
+
+      /* Unsubscribe link area */
+      .card-footer {
+        padding: 12px 20px;
+        border-top: 1px solid #ebebeb;
+      }
+
+      .card-footer a {
+        font-size: 13px;
+        color: #888888;
+        text-decoration: none;
+        border-bottom: 1px solid #d8d8d8;
+      }
+
+      .card-footer a:hover {
+        color: #444444;
+        border-bottom-color: #999999;
+      }
+
+      /* Footer bar */
+      .page-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .footer-note {
+        font-size: 13px;
+        color: #aaaaaa;
+      }
+
+      /* THE ONE ACCENT: save button */
+      .btn-save {
+        background: #2563eb;
+        color: #ffffff;
+        border: none;
+        border-radius: 7px;
+        padding: 10px 22px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        letter-spacing: -0.15px;
+        transition: background 0.13s ease;
+      }
+
+      .btn-save:hover {
+        background: #1a50cc;
+      }
+
+      .btn-save:active {
+        background: #1740a8;
+      }
+
+      .btn-save:focus-visible {
+        outline: 2px solid #2563eb;
+        outline-offset: 3px;
+      }
+
+      /* Toast */
+      .toast {
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%) translateY(70px);
+        background: #111111;
+        color: #ffffff;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        opacity: 0;
+        transition:
+          transform 0.22s ease,
+          opacity 0.22s ease;
+        pointer-events: none;
+        white-space: nowrap;
+        font-family: inherit;
+      }
+
+      .toast.show {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="page-header">
+        <h1>Notification Preferences</h1>
+        <p>Choose what you hear about, and how.</p>
+      </div>
+
+      <!-- Activity -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Activity</h2>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Replies</div>
+            <div class="row-desc">
+              When someone responds to something you wrote
+            </div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Mentions</div>
+            <div class="row-desc">When your name appears in a thread</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Reactions</div>
+            <div class="row-desc">
+              Likes and other reactions to your content
+            </div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">New followers</div>
+            <div class="row-desc">When someone follows your account</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Direct messages</div>
+            <div class="row-desc">New messages in your inbox</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Updates -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Updates</h2>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Product changes</div>
+            <div class="row-desc">New features and service announcements</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Weekly digest</div>
+            <div class="row-desc">A summary of activity from the past week</div>
+          </div>
+          <div class="select-wrap">
+            <select aria-label="Digest frequency">
+              <option>Every day</option>
+              <option selected>Every week</option>
+              <option>Off</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Security alerts</div>
+            <div class="row-desc">Sign-ins from new devices or locations</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <div class="row-label">Billing</div>
+            <div class="row-desc">Receipts, renewals, and payment issues</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Delivery -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Delivery</h2>
+        </div>
+
+        <div class="row" style="padding-bottom: 10px">
+          <div class="row-text">
+            <div class="row-label">Channels</div>
+            <div class="row-desc">Where notifications are sent</div>
+          </div>
+        </div>
+        <div class="pill-row" id="channelPills">
+          <label class="pill on">
+            <input type="checkbox" checked />
+            <span class="pill-dot"></span>
+            Push
+          </label>
+          <label class="pill on">
+            <input type="checkbox" checked />
+            <span class="pill-dot"></span>
+            Email
+          </label>
+          <label class="pill">
+            <input type="checkbox" />
+            <span class="pill-dot"></span>
+            SMS
+          </label>
+          <label class="pill">
+            <input type="checkbox" />
+            <span class="pill-dot"></span>
+            Slack
+          </label>
+        </div>
+
+        <div class="quiet-row">
+          <div class="quiet-label">Quiet hours</div>
+          <div class="quiet-desc">
+            Push notifications are paused during this window
+          </div>
+          <div class="time-inputs">
+            <input
+              type="time"
+              value="22:00"
+              aria-label="Quiet hours start time"
+            />
+            <span>to</span>
+            <input
+              type="time"
+              value="07:30"
+              aria-label="Quiet hours end time"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Account-level opt-out -->
+      <div class="card">
+        <div class="card-footer">
+          <a href="#" onclick="return false;"
+            >Unsubscribe from all non-essential notifications</a
+          >
+        </div>
+      </div>
+
+      <div class="page-footer">
+        <span class="footer-note"
+          >Changes apply across all signed-in devices.</span
+        >
+        <button class="btn-save" id="saveBtn">Save preferences</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">Preferences saved</div>
+
+    <script>
+      // Channel pills
+      document
+        .getElementById("channelPills")
+        .addEventListener("click", function (e) {
+          const pill = e.target.closest(".pill");
+          if (!pill) return;
+          const cb = pill.querySelector('input[type="checkbox"]');
+          cb.checked = !cb.checked;
+          pill.classList.toggle("on", cb.checked);
+        });
+
+      // Save
+      document.getElementById("saveBtn").addEventListener("click", function () {
+        const toast = document.getElementById("toast");
+        toast.classList.add("show");
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(function () {
+          toast.classList.remove("show");
+        }, 2400);
+      });
+    </script>
+  </body>
+</html>

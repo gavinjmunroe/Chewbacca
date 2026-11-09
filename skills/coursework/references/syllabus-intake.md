@@ -87,13 +87,12 @@ project.
 
 ## Report the gaps, do not fill them
 
-Syllabi routinely omit: the AI policy, the room, whether the free absences cover
+Syllabi routinely omit: the room, whether the free absences cover
 presentation days, and the actual due dates for assignments handled through
 prompts posted later in the term. Leave those `null` with a note, and hand the
 user the list as questions to ask in class or on the course site. A guessed
 value is indistinguishable from a real one once it is in the file, which is why
-`coursework check` treats a missing source as an error and a missing AI policy
-as the loudest one.
+`coursework check` treats a missing source as an error.
 
 ## Then verify
 

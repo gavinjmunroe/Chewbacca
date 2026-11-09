@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>   queue it (starts now if there's room)
+  chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... [--once] -- <command...>
+                                                                       queue it (starts now if there's room
+                                                                       and every --after job has ended);
+                                                                       --writes names a folder it writes
+                                                                       in a repo tabs work in, so the
+                                                                       write-log never credits its files
+                                                                       to a tab's call; --once never runs
+                                                                       it again after a restart
   chewbacca jobs list [--all]                                          what's queued, running, paused, done
   chewbacca jobs log <id> [-n N]                                       tail a job's output
   chewbacca jobs kill <id>                                             stop it
+  chewbacca jobs retry <id>                                            queue an ended job again
   chewbacca jobs tick                                                  admit, pause, resume, reap (launchd runs this every 30 s)
 
 Not `jobs`: that's a zsh and bash builtin, so a bare `jobs submit` never
@@ -18,20 +26,57 @@ running after their tabs died. Guards that refuse heavy commands and a reaper
 that kills orphans clean up after that design. This replaces it: tabs submit
 work here, and this runner decides when the Mac has room.
 
-THE BUDGET.
+THE BUDGET. Every number comes from bin/lib/machine_profile.py, a share of
+the Mac this runs on (weighted cores, percent of RAM free, cut on battery,
+raised once nobody has touched the Mac for 10 minutes). `chewbacca machine`
+prints this Mac's. The figures below are the reference Mac's (10P + 4E, 24
+GB), present and on power, which is where they were measured.
   heavy  local inference, transcription, renders: one at a time, admitted only
-         while the 1-minute load is under 60% of cores and at least 20% of
-         memory is free, run at nice 19. A running heavy job is PAUSED
-         (SIGSTOP) when load passes 90% of cores or free memory drops under
-         10%, and resumed when there's room again. Thresholds are guessed,
-         never measured; the 2026-10-10 lag was load 80+ on 14 cores with
-         about 74 MB free.
+         while the 1-minute load is under 18.2 and at least 20% of memory is
+         free, run at nice 19. A running heavy job is PAUSED (SIGSTOP) when
+         load passes 35 or free memory drops under 10%, and resumed when
+         there's room again. Measured on that Mac: the 2026-10-10 lag was
+         load 80+ with about 74 MB free, and 177 while every tab restarted;
+         with a dozen idle agent tabs it was usable at load 14 to 17 with 48%
+         free. The first thresholds (8.4 and 12.6) sat under that idle
+         floor, so nothing heavy was ever admitted: a 2-minute Swift build
+         waited 50 minutes behind a transcription job paused at load 14.7.
+         Away, it admits to load 30 and pauses at 54 there, so overnight work
+         uses the machine nobody is on.
+  build  compiles and test runs that finish in minutes: one at a time, same
+         room check as heavy, nice 10, and a running heavy job is held
+         paused until the build ends, so a build never waits hours behind a
+         long transcription and the Mac still runs one heavy thing at a time.
+         Heavy jobs take turns: once the running one has had a 15-minute
+         turn, a waiting heavy job that has run less goes next, and the long
+         one is held paused until it's the least-run job again. So a short
+         heavy job waits at most one turn behind a long one, never its whole
+         run (2026-10-09: a 10-minute site encode sat queued for an hour
+         behind a transcription of 238 creators that held the one slot).
   net    downloads, API crawls: up to 4 at once, nice 10.
   light  everything else: no limit.
 
-State lives in ~/.chewbacca/jobs/<id>/ (job.json, out.log). A job's supervisor
+State lives in one SQLite file (bin/lib/statedb.py), and every change is a
+read-modify-write inside one transaction. ~/.chewbacca/jobs/<id>/ keeps out.log
+and a job.json mirror for readers. A job's supervisor
 is `chewbacca-jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
 it alone.
+
+AN AGENT JOB'S REPORT. A job that runs `claude -p "$(cat <dir>/<name>.md)"`
+writes its report to <dir>/REPORT-<name>.md; the decision inbox reads it. Every
+line there that hands Caleb a call ("ur call", "Caleb decides", BLOCKED:)
+carries the agent's take on it, "My take: ...", on the same line or the one
+under it, and two options. When the job ends, the runner lists any call
+without one at the end of out.log (`decision-inbox check` runs the same check).
+
+A RESTART. A job that was running or paused when the Mac went down goes back
+in the queue and runs again from the top; nothing reruns it from a checkpoint,
+so a job resumes where it was only if its command skips work it already did
+(the creator transcriber does). Its out.log says it was rerun. --once opts a
+job out (anything that must never run twice), and a job running at every
+boot stops being rerun after MAX_RESTARTS. 2026-10-12 22:21: the Mac failed
+to wake from hibernation and restarted, and the first tick after boot marked
+the transcription, 222 of 779 videos in, failed with "supervisor gone".
 """
 import fcntl
 import json
@@ -44,57 +89,164 @@ import sys
 import time
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import machine_profile  # noqa: E402
+import statedb  # noqa: E402
+
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
-CORES = os.cpu_count() or 8
 MAX_NET = 4
-NICE = {"heavy": 19, "net": 10, "light": 0}
+# A heavy job's turn before a waiting heavy job that has run less goes next.
+# Guessed, never measured: long enough that a 10-minute encode finishes in one
+# turn and turns don't thrash, short enough that it never waits an hour.
+SLICE = float(os.environ.get("JOBS_SLICE") or 15 * 60)
+CUT_OFF = ("yielded to a build", "machine busy")
+NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
+# Reruns after a restart before a job is left failed. Guessed, never measured:
+# one restart a night is what 10/12 saw; a job running at every boot because
+# it brings the Mac down itself must not get a fourth try.
+MAX_RESTARTS = 3
 
 
 # ------------------------------------------------------------ machine state
 
-def load1():
-    if os.environ.get("JOBS_LOAD"):
-        return float(os.environ["JOBS_LOAD"])
-    return os.getloadavg()[0]
-
-
-def mem_free_pct():
-    if os.environ.get("JOBS_MEMFREE"):
-        return float(os.environ["JOBS_MEMFREE"])
+def _env(name):
     try:
-        out = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=10).stdout
-        m = re.search(r"free percentage:\s*(\d+)%", out)
-        return float(m.group(1)) if m else 50.0
-    except (OSError, subprocess.TimeoutExpired):
-        return 50.0
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return None
 
 
-def room_for_heavy():
-    return load1() < 0.6 * CORES and mem_free_pct() >= 20
+def machine(load=None, mem=None):
+    """The profile and its budget. JOBS_LOAD and JOBS_MEMFREE are the tests'
+    seam for the live figures; MACHINE_PROFILE fakes the whole Mac."""
+    prof = machine_profile.read(load=_env("JOBS_LOAD") if load is None else load,
+                                mem_free=_env("JOBS_MEMFREE") if mem is None else mem)
+    return prof, machine_profile.budget(prof)
 
 
-def must_pause():
-    return load1() > 0.9 * CORES or mem_free_pct() < 10
+def room_for_heavy(load=None, mem=None):
+    return machine(load, mem)[1]["room"]
+
+
+def must_pause(load=None, mem=None):
+    return machine(load, mem)[1]["pause"]
 
 
 # ------------------------------------------------------------------ store
+#
+# 2026-10-12: each command read job.json, changed its copy and wrote it back,
+# so a kill that landed while a tick held an older copy came back as paused
+# (1 of 20 kills, 2 of 3 runs of the 10-tab stress test). Now every command
+# that changes a job reads it inside write() and the tick holds write() from
+# its first read to its last save.
+
+_DB = None
+
+
+def db():
+    global _DB
+    if _DB is None:
+        _DB = statedb.connect(statedb.path_for(DIR, "jobs"))
+        _import(_DB)
+    return _DB
+
+
+def _import(conn):
+    # Jobs written as job.json alone: the queue before this file, or a
+    # supervisor still running old code. Only folders the table lacks are
+    # parsed (1,534 folders here on 10/12).
+    known = {r[0] for r in conn.execute("SELECT id FROM jobs")}
+    try:
+        names = [n for n in os.listdir(DIR) if n not in known and not n.startswith(".")]
+    except OSError:
+        return
+    rows = []
+    for n in names:
+        try:
+            j = json.loads((DIR / n / "job.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(j, dict) and j.get("id") == n:
+            rows.append((n, json.dumps(j)))
+    if rows:
+        conn.executemany("INSERT OR IGNORE INTO jobs (id, body) VALUES (?, ?)", rows)
+
 
 def jobs():
-    out = []
-    for f in sorted(DIR.glob("*/job.json")):
-        try:
-            out.append(json.loads(f.read_text()))
-        except ValueError:
-            pass
-    return out
+    return [json.loads(r[0]) for r in db().execute("SELECT body FROM jobs ORDER BY id")]
+
+
+def get(job_id):
+    r = db().execute("SELECT body FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if r is None:
+        sys.exit(f"no job {job_id}")
+    return json.loads(r[0])
 
 
 def save(j):
+    """Call inside write(). The row is the truth; job.json is its mirror."""
     p = DIR / j["id"] / "job.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(j, indent=1))
-    tmp.replace(p)
+    # The mirror's mtime as written, so a later write by old code shows up.
+    stamp = statedb.mirror(p, json.dumps(j, indent=1))
+    db().execute("INSERT OR REPLACE INTO jobs (id, body, mirror_ns) VALUES (?, ?, ?)",
+                 (j["id"], json.dumps(j), stamp))
+
+
+def write():
+    return statedb.write(db())
+
+
+_BOOT = None
+
+
+def boot_time():
+    """When this Mac last booted, in epoch seconds, or 0 where that can't be
+    read. CHEWBACCA_BOOT_TIME is the tests' seam for a restart."""
+    global _BOOT
+    if _BOOT is None:
+        _BOOT = _env("CHEWBACCA_BOOT_TIME")
+        if _BOOT is None:
+            try:
+                out = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.boottime"],
+                                     capture_output=True, text=True, timeout=5).stdout
+                m = re.search(r"sec\s*=\s*(\d+)", out)
+                _BOOT = float(m.group(1)) if m else 0.0
+            except (OSError, subprocess.TimeoutExpired):
+                _BOOT = 0.0
+    return _BOOT
+
+
+_SESSION = None
+
+
+def boot_session():
+    """This boot's id (kern.bootsessionuuid), or "" where that can't be read.
+    CHEWBACCA_BOOT_SESSION is the tests' seam."""
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = os.environ.get("CHEWBACCA_BOOT_SESSION")
+        if _SESSION is None:
+            try:
+                _SESSION = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"],
+                                          capture_output=True, text=True, timeout=5).stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                _SESSION = ""
+    return _SESSION
+
+
+def before_boot(j):
+    """The job's supervisor was started before this boot, so it is gone and
+    its saved pid may now belong to anything. Pids wrapped all the way round
+    here in under three hours on 10/12 (the daemon was pid 2414 at 22:25 and
+    5668 at 00:58), so after a restart alive(pid) says nothing about the job.
+    The boot id decides, not the clock: a clock stepped forward after boot
+    moves kern.boottime with it and would make a job from this boot look
+    older (review, 10/13). Jobs started before the id was recorded fall back
+    to the start time."""
+    if j.get("boot") and boot_session():
+        return j["boot"] != boot_session()
+    return bool(j.get("started")) and j["started"] < boot_time()
 
 
 def alive(pid):
@@ -107,7 +259,21 @@ def alive(pid):
         return True
 
 
+def group_alive(pgid):
+    """Anything left in the job's process group. The supervisor leads it, and
+    a killed supervisor can leave its command still running in it."""
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except (ProcessLookupError, TypeError):
+        return False
+    except PermissionError:
+        return True
+
+
 def signal_group(j, sig):
+    if before_boot(j):
+        return
     try:
         os.killpg(j["pid"], sig)
     except (ProcessLookupError, PermissionError, TypeError):
@@ -117,93 +283,372 @@ def signal_group(j, sig):
 # --------------------------------------------------------------- commands
 
 def submit(argv):
-    cls, title = "light", None
+    cls, title, after, wrote, once = "light", None, [], [], False
     while argv and argv[0] != "--":
         a = argv.pop(0)
         if a == "--heavy":
             cls = "heavy"
         elif a == "--net":
             cls = "net"
+        elif a == "--build":
+            cls = "build"
+        elif a in ("--title", "--after", "--writes") and (not argv or argv[0] == "--"):
+            sys.exit(f"jobs submit: {a} needs a value")
         elif a == "--title":
             title = argv.pop(0)
+        elif a == "--after":
+            after.append(argv.pop(0))
+        elif a == "--writes":
+            wrote.append(os.path.realpath(os.path.expanduser(argv.pop(0))))
+        elif a == "--once":
+            once = True
+        else:
+            # `--heavvy` used to be dropped and the job ran at once as light,
+            # outside the load budget (break-it, 2026-10-19).
+            sys.exit(f"jobs submit: unknown option {a!r}; the class flags are --heavy, --build and --net")
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] [--after ID]... [--writes DIR]... [--once] -- <command...>")
+    for dep in after:
+        if db().execute("SELECT 1 FROM jobs WHERE id = ?", (dep,)).fetchone() is None:
+            sys.exit(f"no job {dep} to run after")
     cmd = argv[1:]
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
          "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
-         "created": time.time(), "pid": None, "exit": None}
-    save(j)
+         # The agent session that asked, for checks that run inside the job
+         # (bin/lib/suite-gate.sh). Not owner: that keys other behavior.
+         "session": os.environ.get("CHEWBACCA_AGENT_SESSION", os.environ.get("CLAUDE_CODE_SESSION_ID", "")),
+         "created": time.time(), "pid": None, "exit": None, "after": after, "writes": wrote}
+    if once:
+        j["once"] = True
+    with write():
+        save(j)
     tick(quiet=True)
-    j = json.loads((DIR / j["id"] / "job.json").read_text())
+    j = get(j["id"])
     print(f"{j['id']}  {j['status']}  {j['class']}  {j['title']}")
 
 
-def start(j):
+def start(j, started=None):
     # The supervisor runs in its own session, so closing the tab that
     # submitted the job doesn't take it down, and the whole job can be
     # paused, resumed or killed as one process group.
     p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_run", j["id"]],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True, cwd=j["cwd"] if os.path.isdir(j["cwd"]) else None)
-    j.update(status="running", pid=p.pid, started=time.time())
+    if started is not None:
+        started.append(p.pid)
+    j.update(status="running", pid=p.pid, started=time.time(), turn=time.time(), ran=0, boot=boot_session())
     save(j)
 
 
+def ran(j, now):
+    # Seconds a job has actually run. Jobs started before turns existed carry
+    # no count, so their wall time since start stands in for it.
+    base = j["ran"] if "ran" in j else now - (j.get("started") or now)
+    if j["status"] == "running" and j.get("turn"):
+        base += now - j["turn"]
+    return base
+
+
+def hold(j, note, now):
+    # A job cut off mid-turn keeps what it used of the turn, so resuming
+    # finishes that turn instead of starting a fresh one. 2026-10-09: with a
+    # dozen tabs the load crossed the pause line every few minutes, and a
+    # fresh turn on every resume let the long job keep the slot all night.
+    used = now - j["turn"] if j.get("turn") and note in CUT_OFF else 0
+    signal_group(j, signal.SIGSTOP)
+    j.update(ran=ran(j, now), turn=None, turn_used=used, status="paused", note=note)
+    save(j)
+
+
+def resume(j, now):
+    signal_group(j, signal.SIGCONT)
+    j.update(ran=ran(j, now), turn=now - j.get("turn_used", 0), turn_used=0, status="running", note=None)
+    save(j)
+
+
+def write_log():
+    """tools/write_log.py beside this file, or None: a job never fails over
+    the write-log's bookkeeping."""
+    path = pathlib.Path(__file__).resolve().parent.parent / "tools" / "write_log.py"
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("chewbacca_write_log", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001  any failure here only loses attribution
+        return None
+
+
+def writes(j):
+    """What the job writes, for the write-log: its --writes dirs, and for a
+    heavy or net job its cwd when that's a folder inside a repository.
+    2026-10-12: the creator-transcripts job (heavy) ran in
+    ~/second-brain/raw/creators, and every transcript it wrote was logged as a
+    write by whichever tab's call was open. A build or a light job claims
+    nothing on its own: run from crates/writelog, a cargo build writes only
+    the ignored target/, and claiming its cwd would drop a tab's real edits
+    there for the whole build (review, 10/12). Nor does a cwd at a repo's top."""
+    roots = [os.path.realpath(w) for w in j.get("writes") or []]
+    cwd = j.get("cwd") or ""
+    if cwd and os.path.isdir(cwd) and j.get("class") in ("heavy", "net"):
+        top = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+        here = os.path.realpath(cwd)
+        if top.returncode == 0 and os.path.realpath(top.stdout.strip()) != here:
+            roots.append(here)
+    return roots
+
+
 def _run(job_id):
-    j = json.loads((DIR / job_id / "job.json").read_text())
-    with open(DIR / job_id / "out.log", "ab") as log:
-        code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
-                               stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-    j = json.loads((DIR / job_id / "job.json").read_text())
-    if j["status"] != "killed":
-        j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
-        save(j)
+    j = get(job_id)
+    wl = write_log()
+    try:
+        roots = writes(j) if wl else []
+    except (OSError, subprocess.SubprocessError):
+        roots = []
+    if roots:
+        wl.background_mark("begin", os.getpid(), roots)
+        # `jobs kill` signals the whole group, this supervisor included. It
+        # waits for the command instead of dying, so the run gets its end row;
+        # raising here would make subprocess.call SIGKILL the command before
+        # its own TERM trap ran (review, 10/12).
+        signal.signal(signal.SIGTERM, lambda signum, frame: None)
+    try:
+        with open(DIR / job_id / "out.log", "ab") as log:
+            # The submitter's session, never whichever tab's tick started
+            # this supervisor: its environment belongs to that tab.
+            env = dict(os.environ, CHEWBACCA_AGENT_SESSION=j.get("session") or "",
+                       # Marks everything the job runs as queued work, so a
+                       # send code it asks for goes to a file, never the
+                       # screen (tools/send_approval.py show_code).
+                       CHEWBACCA_JOB=job_id)
+            code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
+                                   stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
+    finally:
+        if roots:
+            wl.background_mark("end", os.getpid(), roots)
+    with write():
+        j = get(job_id)
+        # Only this run's own supervisor writes its result: a job killed and
+        # retried while this one still waited on its command belongs to the
+        # new run now (review, 10/13).
+        if j["status"] != "killed" and j.get("pid") in (None, os.getpid()):
+            j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
+            save(j)
+    note_untaken_calls(j)
     tick(quiet=True)  # a slot just opened
+
+
+def note_untaken_calls(j):
+    """An agent job's report (REPORT-<prompt>.md) is where it hands Caleb its
+    calls, and each one needs "My take:" next to it. On 10/13, 7 of 11 calls
+    said "ur call" and stopped. The lines missing a take go to the end of the
+    job's log, where `jobs log` and the next agent read them; the decision
+    inbox holds those calls back until a take is written."""
+    try:
+        import decision_inbox
+        report = decision_inbox.job_report(j)
+        bad = decision_inbox.check_reports([report]) if report else []
+        if bad:
+            with open(DIR / j["id"] / "out.log", "a") as log:
+                log.write(f"\n[jobs] {len(bad)} call(s) in {report.name} with no take next to them; "
+                          "write \"My take: ...\" on the line or the one under it:\n")
+                for _path, n, line in bad:
+                    log.write(f"[jobs]   line {n}: {decision_inbox.clip(line, 160)}\n")
+    except Exception as e:  # noqa: BLE001  a note must never fail the job's own result
+        print(f"jobs: take check skipped for {j.get('id')}: {e}", file=sys.stderr)
 
 
 def tick(quiet=False):
     # One tick at a time: launchd, a submit and a finishing job can all tick
-    # together, and two of them must never start the same queued job.
+    # together, and two of them must never start the same queued job. The
+    # flock also keeps out a tick still running the code from before the
+    # state file, which knows only the flock (review, 10/12). The transaction
+    # keeps a kill or a finishing job from landing between the tick's read
+    # and its writes.
+    #
+    # The machine is read before the transaction: the profile's ioreg and
+    # pmset reads can each take up to their 3 s timeout, and a finishing job
+    # or a kill waiting on the lock behind three of those could run out its
+    # whole wait (review, 10/12).
+    b = machine()[1]
+    machine_now = {"room": b["room"], "pause": b["pause"]}
+    started = []
     with open(DIR / ".tick.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        _tick()
+        try:
+            with write():
+                _tick(machine_now, started)
+        except BaseException:
+            # The rows went back to queued, so the supervisors this tick
+            # started must not live on, or the next tick runs them again.
+            for pid in started:
+                signal_group({"pid": pid}, signal.SIGKILL)
+            raise
     if not quiet:
         list_jobs([])
 
 
-def _tick():
+def source(j):
+    # Who a job belongs to: the submitting session when the environment
+    # names one, else the folder it was submitted from.
+    return j.get("owner") or j.get("cwd") or ""
+
+
+def next_build(waiting, all_jobs):
+    """The next build to start: from the source served least recently, oldest
+    first within it. 2026-10-09: one tab queued 26 render builds and a
+    one-off test run from another tab sat behind all of them; first come
+    first served let a single tab own the lane for an hour."""
+    last = {}
+    for j in all_jobs:
+        if j["class"] == "build" and j.get("started"):
+            last[source(j)] = max(last.get(source(j), 0), j["started"])
+    return min(waiting, key=lambda j: (last.get(source(j), 0), j["created"]))
+
+
+# A job queued --after others starts only once each of them has ended, however
+# it ended. 2026-10-11: four overnight `claude -p` jobs were told in their
+# prompts to wait for the one before; two put the wait in the background, their
+# turn ended, the session exited, and they were marked done having done
+# nothing. A wait belongs to the queue, which outlives every turn.
+ENDED = ("done", "failed", "killed")
+
+
+def blocked(j, by_id):
+    return any(dep in by_id and by_id[dep]["status"] not in ENDED for dep in j.get("after") or [])
+
+
+def _adopt_old_writes():
+    """A supervisor or tick still running the code from before this table
+    writes job.json alone, and two of them running a queued job twice is the
+    risk. This code records the mtime of each job.json it writes, so a live
+    job whose job.json changed since was written by old code, and that write
+    is the newer one. Only matters while old processes outlive a kit update;
+    a stat of the few live jobs otherwise."""
+    for body, seen in db().execute("SELECT body, mirror_ns FROM jobs").fetchall():
+        j = json.loads(body)
+        if j["status"] in ENDED:
+            continue
+        p = DIR / j["id"] / "job.json"
+        try:
+            if p.stat().st_mtime_ns == seen:
+                continue
+            mirror = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(mirror, dict) and mirror.get("id") == j["id"]:
+            save(mirror)
+
+
+def note_in_log(j, line):
+    try:
+        with open(DIR / j["id"] / "out.log", "a") as f:
+            f.write(f"\n--- {line} ---\n")
+    except OSError:
+        pass
+
+
+def restarted(j):
+    when = time.strftime("%H:%M", time.localtime(boot_time()))
+    n = j.get("restarts", 0) + 1
+    j["restarts"] = n
+    if j.get("once") or n > MAX_RESTARTS:
+        why = "submitted --once" if j.get("once") else f"already rerun {MAX_RESTARTS} times"
+        j.update(status="failed", ended=time.time(), note=f"the Mac restarted at {when}; not rerun, {why}")
+    else:
+        j.update(status="queued", pid=None, turn=None, turn_used=0,
+                 note=f"the Mac restarted at {when}; rerun {n} of {MAX_RESTARTS}")
+    note_in_log(j, j["note"])
+    save(j)
+
+
+def _tick(machine, started):
+    _adopt_old_writes()
     all_jobs = jobs()
+    by_id = {j["id"]: j for j in all_jobs}
+    ready = lambda j: not (j["status"] == "queued" and blocked(j, by_id))
+    # A restart: every running or paused job was started before this boot,
+    # so its supervisor is gone whatever its saved pid says now. Each goes
+    # back in the queue, where --after and the budget treat it like new.
+    for j in all_jobs:
+        if j["status"] in ("running", "paused") and before_boot(j):
+            restarted(j)
     # Reap: a running job whose supervisor is gone without writing a result.
     for j in all_jobs:
         if j["status"] in ("running", "paused") and not alive(j["pid"]):
             j.update(status="failed", exit=j.get("exit"), ended=time.time(), note="supervisor gone")
             save(j)
-    heavy = [j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("running", "paused")]
-    # Pause or resume the heavy job against the machine, before admitting more.
-    for j in heavy:
-        if j["status"] == "running" and must_pause():
-            signal_group(j, signal.SIGSTOP)
-            j["status"] = "paused"
-            save(j)
-        elif j["status"] == "paused" and room_for_heavy():
-            signal_group(j, signal.SIGCONT)
-            j["status"] = "running"
-            save(j)
+    # Builds go first and take the machine from a long heavy job while they
+    # run. 2026-10-09: a 2-minute Swift build sat behind a 230-video
+    # transcription that had the one heavy slot for hours. A build is short,
+    # so the long job is held paused (SIGSTOP) until the build ends, which
+    # keeps one CPU-heavy thing running at a time.
+    building = [j for j in all_jobs if j["class"] == "build" and j["status"] == "running"]
+    waiting = [j for j in all_jobs if j["status"] == "queued" and j["class"] == "build" and ready(j)]
+    if waiting and not building and machine["room"]:
+        nxt = next_build(waiting, all_jobs)
+        start(nxt, started)
+        building = [nxt]
+    # Heavy jobs: one runs at a time, and they take turns. Pause everything
+    # for a running build or a swamped Mac; otherwise, once the running job's
+    # turn is up, the least-run waiting job goes next.
+    now = time.time()
+    running = [j for j in all_jobs if j["class"] == "heavy" and j["status"] == "running"]
+    # A job cut off mid-turn by a build or a swamped Mac finishes that turn
+    # first; after that, the least-run job goes next.
+    waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued") and ready(j)),
+                     key=lambda j: (not (j.get("note") in CUT_OFF and j.get("turn_used", 0) < SLICE), ran(j, now), j["created"]))
+    if building or machine["pause"]:
+        for j in running:
+            hold(j, "yielded to a build" if building else "machine busy", now)
+    elif machine["room"]:
+        current = running[0] if running else None
+        nxt = waiting[0] if waiting else None
+        if current and nxt and now - (current.get("turn") or current.get("started") or now) >= SLICE \
+                and ran(nxt, now) < ran(current, now):
+            hold(current, f"taking turns with {nxt['id']}", now)
+            current = None
+        if not current and nxt:
+            if nxt["status"] == "paused":
+                resume(nxt, now)
+            else:
+                start(nxt, started)
     running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
     for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
-        if j["class"] == "heavy":
-            if heavy or not room_for_heavy():
-                continue
-            start(j)
-            heavy = [j]
-        elif j["class"] == "net":
+        if j["class"] in ("build", "heavy") or not ready(j):
+            continue
+        if j["class"] == "net":
             if running_net >= MAX_NET:
                 continue
-            start(j)
+            start(j, started)
             running_net += 1
         else:
-            start(j)
+            start(j, started)
+
+
+# Guessed, never measured across jobs. The one case behind it: FF speed job
+# 1105-171813-9116 listed as running for 8 hours while its output stopped 4 minutes
+# in, at 20 of 1041 rows, with two renderers pinned. Nothing in the list showed it.
+QUIET_AFTER_S = int(os.environ.get("JOBS_QUIET_AFTER_S") or 2 * 3600)
+
+
+def quiet_for(j, now=None):
+    """Seconds since a running batch job last changed a file, or None. Top level of its
+    cwd only, so it stays cheap. A light job is often a server, quiet by design, so it's skipped."""
+    if j["status"] != "running" or j["class"] == "light":
+        return None
+    cwd = j.get("cwd") or ""
+    try:
+        newest = max((e.stat().st_mtime for e in os.scandir(cwd) if e.is_file()), default=0)
+    except OSError:
+        return None
+    now = time.time() if now is None else now
+    started = j.get("started") or 0
+    gap = now - max(newest, started)
+    return gap if newest and gap > QUIET_AFTER_S else None
 
 
 def list_jobs(argv):
@@ -212,8 +657,11 @@ def list_jobs(argv):
         cutoff = time.time() - 6 * 3600
         rows = [j for j in rows if j["status"] in ("queued", "running", "paused") or (j.get("ended") or 0) > cutoff]
     for j in rows:
-        print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}")
-    print(f"{len(rows)} job(s). load {load1():.1f} on {CORES} cores, {mem_free_pct():.0f}% memory free")
+        quiet = quiet_for(j)
+        note = f"  QUIET {quiet / 3600:.1f}h, may be wedged: nothing changed in {j['cwd']}" if quiet else ""
+        print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}{note}")
+    prof, b = machine()
+    print(f"{len(rows)} job(s). {machine_profile.describe(prof, b)}")
 
 
 def log(argv):
@@ -222,12 +670,32 @@ def log(argv):
     print("".join(p.read_text(errors="replace").splitlines(True)[-n:]).rstrip("\n") if p.exists() else "(no output yet)")
 
 
+def retry(argv):
+    with write():
+        j = get(argv[0])
+        if j["status"] not in ENDED:
+            sys.exit(f"{j['id']} is {j['status']}, not ended")
+        if j.get("pid") and not before_boot(j) and group_alive(j["pid"]):
+            sys.exit(f"{j['id']} is still stopping (pid {j['pid']}); retry once it has exited")
+        j.update(status="queued", pid=None, exit=None, turn=None, turn_used=0, restarts=0, note="retried")
+        note_in_log(j, f"retried at {time.strftime('%H:%M')}")
+        save(j)
+    tick(quiet=True)
+    print(f"{j['id']} {get(j['id'])['status']}")
+
+
 def kill(argv):
-    j = json.loads((DIR / argv[0] / "job.json").read_text())
-    if j["status"] == "paused":
-        signal_group(j, signal.SIGCONT)
-    j.update(status="killed", ended=time.time())
-    save(j)
+    with write():
+        j = get(argv[0])
+        # A finished job keeps its ending. Killing one rewrote "done" to
+        # "killed" and sent SIGTERM to a process group id that may now belong
+        # to something else (break-it, 2026-10-19).
+        if j["status"] in ENDED:
+            sys.exit(f"{j['id']} already {j['status']}, nothing to kill")
+        if j["status"] == "paused":
+            signal_group(j, signal.SIGCONT)
+        j.update(status="killed", ended=time.time())
+        save(j)
     signal_group(j, signal.SIGTERM)
     print(f"{j['id']} killed")
 
@@ -235,5 +703,5 @@ def kill(argv):
 if __name__ == "__main__":
     DIR.mkdir(parents=True, exist_ok=True)
     cmd, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("list", [])
-    {"submit": submit, "list": list_jobs, "log": log, "kill": kill,
+    {"submit": submit, "list": list_jobs, "log": log, "kill": kill, "retry": retry,
      "tick": lambda a: tick(), "_run": lambda a: _run(a[0])}.get(cmd, lambda a: sys.exit(__doc__))(rest)

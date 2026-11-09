@@ -45,7 +45,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
   BACKUP="$CLAUDE_DIR/settings.json.pre-uninstall"
   [ "$DRY" -eq 0 ] && cp "$CLAUDE_DIR/settings.json" "$BACKUP"
   [ "$DRY" -eq 0 ] && ok "current settings copied to $(basename "$BACKUP")"
-  DRY="$DRY" python3 - "$CLAUDE_DIR/settings.json" <<'PYEOF'
+  DRY="$DRY" KIT_HOOKS="$SCRIPT_DIR/.claude/hooks" python3 - "$CLAUDE_DIR/settings.json" <<'PYEOF'
 import json, os, sys
 
 path = sys.argv[1]
@@ -65,10 +65,17 @@ if perms.get("defaultMode") == "bypassPermissions":
     perms["defaultMode"] = "default"
     removed.append("permissions.defaultMode -> default (Claude asks again)")
 
-# Only hooks pointing at scripts this kit installed.
-OURS = ("slop-guard.sh", "prayer-guard.sh", "session-context.sh", "format-and-sync.sh",
-        "stop-check.sh", "env-guard.sh", "coursework-context.sh",
-        "sync-to-d1.sh", "statusline.sh")
+# Only hooks pointing at scripts this kit installed. The list was nine names,
+# so after setup then uninstall 89 of 90 registrations pointed at deleted
+# scripts (break-it, 2026-10-19). It's every hook the kit ships, plus hookd,
+# which dispatches the gated ones.
+_kit_hooks = os.environ.get("KIT_HOOKS", "")
+OURS = tuple(sorted({f for f in (os.listdir(_kit_hooks) if os.path.isdir(_kit_hooks) else [])
+                     if f.endswith(".sh")} | {"slop-guard.sh", "prayer-guard.sh", "session-context.sh",
+                     "format-and-sync.sh", "stop-check.sh", "env-guard.sh", "coursework-context.sh",
+                     "sync-to-d1.sh", "statusline.sh"}))
+# Matched as /<name>, so a kit hook called git.sh never claims a user's my-git.sh.
+OURS = tuple("/" + o for o in OURS) + ("/.local/bin/hookd",)
 hooks = s.get("hooks") or {}
 for event in list(hooks):
     kept = []
@@ -93,6 +100,11 @@ for entry in list(hooks.get("UserPromptSubmit") or []):
         removed.append("hooks.UserPromptSubmit -> session opener")
 if not hooks.get("UserPromptSubmit"):
     hooks.pop("UserPromptSubmit", None)
+
+# setup turns this on with bypass mode; left behind, Claude never warns again.
+if s.get("skipDangerousModePermissionPrompt") is True:
+    s.pop("skipDangerousModePermissionPrompt")
+    removed.append("skipDangerousModePermissionPrompt")
 
 if isinstance(s.get("statusLine"), dict) and "statusline.sh" in json.dumps(s["statusLine"]):
     s.pop("statusLine")
@@ -164,7 +176,16 @@ for kind in skills commands rules agents output-styles hooks; do
     name="$(basename "$item")"
     target="$CLAUDE_DIR/$kind/$name"
     [ -e "$target" ] || continue
-    if [ "$DRY" -eq 1 ]; then ok "would remove $kind/$name"; else rm -rf "$target" && ok "removed $kind/$name"; fi
+    # Only what is still the kit's copy. A user's own security.md or
+    # code-reviewer.md, or one they edited, shares a name with a shipped file
+    # and was deleted even on a machine that never ran setup (break-it,
+    # 2026-10-19). Those are kept and named.
+    if [ -L "$target" ] || { [ -d "$item" ] && diff -rq "$item" "$target" >/dev/null 2>&1; } \
+       || { [ -f "$item" ] && cmp -s "$item" "$target"; }; then
+      if [ "$DRY" -eq 1 ]; then ok "would remove $kind/$name"; else rm -rf "$target" && ok "removed $kind/$name"; fi
+    else
+      skip "kept $kind/$name: it differs from the kit's copy, so it's yours or you edited it"
+    fi
   done
 done
 # Pack skills are symlinks into a clone. Remove the links, keep the clone.
@@ -225,6 +246,44 @@ if [ -d "$STATE/people" ] || [ -d "$HOME/coursework" ]; then
   fi
 else
   skip "no local data store to export"
+fi
+
+step "Removing the Chewbacca background item"
+# One LaunchAgent, com.chewbacca, runs every background job; the jobs are
+# files in ~/.chewbacca/daemon/services, which go with ~/.chewbacca below.
+D_PLIST="$HOME/Library/LaunchAgents/com.chewbacca.plist"
+if [ -f "$D_PLIST" ]; then
+  if [ "$DRY" -eq 1 ]; then
+    ok "would remove $D_PLIST"
+  else
+    launchctl bootout "gui/$(id -u)/com.chewbacca" &>/dev/null || true
+    rm -f "$D_PLIST"
+    ok "removed the Chewbacca background item"
+  fi
+fi
+
+step "Removing the kit runtime"
+# ~/.chewbacca/kit holds locked git worktrees of origin/main that PATH tools
+# run from, plus a launchd job that refreshes them. Unlock and remove them
+# through git so the checkout does not keep worktree entries for deleted dirs.
+KIT_RT="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}"
+KIT_PLIST="$HOME/Library/LaunchAgents/com.chewbacca.kit-runtime.plist"
+if [ -d "$KIT_RT" ] || [ -f "$KIT_PLIST" ]; then
+  if [ "$DRY" -eq 1 ]; then
+    ok "would remove the kit runtime at $KIT_RT and its timer"
+  else
+    launchctl bootout "gui/$(id -u)/com.chewbacca.kit-runtime" &>/dev/null || true
+    rm -f "$KIT_PLIST"
+    for snap in "$KIT_RT"/snapshots/*/; do
+      [ -d "$snap" ] || continue
+      git -C "$SCRIPT_DIR" worktree remove -f -f "${snap%/}" &>/dev/null || true
+    done
+    rm -rf "$KIT_RT"
+    git -C "$SCRIPT_DIR" worktree prune &>/dev/null || true
+    ok "removed the kit runtime"
+  fi
+else
+  skip "no kit runtime"
 fi
 
 step "Verifying the machine is clean"

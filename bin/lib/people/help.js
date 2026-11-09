@@ -49,10 +49,13 @@ const HELP = `${c.b("people")} ${c.dim("- everything you know about the people i
 
   ${c.b("people dedupe")}                        likely duplicate records
   ${c.b("people merge <keep> <absorb>")}         fold one record into another
+  ${c.b("people merges")}                        merges so far, with what each one took
+  ${c.b("people unmerge <id|last>")}             take a merge back, rows and all
   ${c.b("people events scan")}                   log what happened, from your texts
 
   ${c.b("people texts sync")}                    pull new iMessage and WhatsApp in (local only)
-  ${c.b("people send")} maggie "text" [--via whatsapp] [--dry-run]   reply in the app the thread is in
+  ${c.b("people send")} maggie "text" [--via whatsapp|signal|telegram...] [--dry-run]   reply in the app the thread is in
+  ${c.b("people calls")} [sync | who]                   phone and FaceTime calls on the person card
   ${c.b("people send")} --room "Group Name" "text" [--via whatsapp]   a group chat, by its exact name
   ${c.b("people texts")} [--days 3] [--who maggie]   the running log
   ${c.b("people texts owed")} [--via slack] [--json]  who is waiting on a reply, every app

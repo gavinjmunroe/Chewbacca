@@ -591,9 +591,17 @@ def long_group_keeps_marker():
           WA.clean(label, WA.GROUP_LABEL_MAX).endswith("(group)"), label)
 
 
+def offsets_without_a_colon():
+    """Stock Python 3.9's fromisoformat refuses "-0700", and every row read
+    as undated, so a newer message stopped moving its chat up (10/13)."""
+    a, b = WA.when("2026-10-13T08:00:00-0700"), WA.when("2026-10-13T08:00:00-07:00")
+    check("a -0700 offset reads the same as -07:00", a is not None and a == b, (a, b))
+
+
 def main() -> int:
     helpers()
     long_group_keeps_marker()
+    offsets_without_a_colon()
     for fn in (reading, sending, unknown_group_sender, same_label_resort, through_the_daemon, ingesting):
         with tempfile.TemporaryDirectory() as d:
             fn(Path(d))

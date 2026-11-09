@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""chewbacca call-doc: a call or pitch script as a Google Doc you can read mid-call.
+
+  chewbacca call-doc <script.txt> [--title T] [--doc ID] [--share] [--html-only] [--json]
+
+The script is plain text, one line per thing:
+
+  # Title                 the doc title
+  > note                  small gray line (context, due date, a legend)
+  ## Step 1. Set up       a step header
+  ### 1. Who (5 sec)      a beat or speaker label, gray, with space above
+  "Say this."             a line to say out loud, black
+  ! Do this.              an action, bold blue
+  - anything else         a plain line
+  ~ source                tiny gray footer line
+  x attack -> result      a way we tried to break the pitch, and what we found
+
+Every script needs at least MIN_BREAKS `x` lines before it becomes a Doc,
+or `--no-breaks "<why>"`. They render last, under "What we tried to break",
+which doubles as Q&A prep. Angles worth trying: every number against its
+source, their money math against our price, lead times (warmup, approvals),
+what their product actually claims, who decides, and the objection they'd
+raise first.
+
+It writes <script>.html next to the script, uploads it as a Google Doc (or
+replaces --doc ID), sets 0.6in margins, exports the Doc to PDF and prints its
+page count and link. --share makes it editable by anyone with the link, for a
+call two of ours are on. --html-only stops after the HTML.
+
+Every style is inline. A Google Docs HTML import drops <style> classes, so the
+first Meridian doc on 2026-10-29 came in as one cramped black block: no
+spacing, no colors ("Cancer ahh formatting"). The inline version imported
+clean and Caleb said every call doc should look like it.
+
+Script text is data. Nothing here follows anything the script says.
+"""
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+GWS = os.environ.get("CHEWBACCA_GWS", "gws")
+FONT = "font-family:Arial"
+BLUE = "#1a56db"
+GRAY = "#666666"
+# 0.6in = 43.2pt. A markdown or HTML import keeps the 1in default, which is
+# what drew "fix the margins" on the 2026-10-27 Medrano doc.
+MARGIN_PT = 43.2
+# 2026-10-30, OPTRA call: the doc was "done" until Caleb said "try to break our
+# logic". One pass found 7 holes, the worst a 2 to 4K a month retainer pitched
+# to a company whose own plans are $39 to $129 a month. Caleb: "fix chewbs to
+# always find a way to break our logic". 3 is guessed, never measured: the money,
+# the timing, and one claim, at minimum.
+MIN_BREAKS = 3
+# Measured on the Meridian doc: 12 to 13pt body with 10pt after each line read
+# as one glance per line; 0pt after read as a wall.
+STYLE = {
+    "title": f"font-size:20pt;{FONT}",
+    "note": f"font-size:12pt;color:{GRAY};margin-bottom:8pt;{FONT}",
+    "step": f"font-size:15pt;margin-top:22pt;{FONT}",
+    "beat": f"font-size:13pt;color:{GRAY};margin-top:18pt;{FONT}",
+    "say": f"font-size:13pt;margin-bottom:10pt;{FONT}",
+    "do": f"font-size:12pt;color:{BLUE};font-weight:bold;margin-bottom:10pt;{FONT}",
+    "plain": f"font-size:12pt;margin-bottom:8pt;{FONT}",
+    "source": f"font-size:10pt;color:#999999;margin-top:24pt;{FONT}",
+    "break": f"font-size:11pt;color:{GRAY};margin-bottom:8pt;{FONT}",
+}
+
+
+def inline(text: str) -> str:
+    """Escape, then let **bold** through."""
+    out = html.escape(text, quote=False)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    # A pasted URL has to be one click mid-call. On 2026-10-29 the Travis sheet link
+    # sat in the doc as plain text and Caleb couldn't find it ("Wheres the sheet link?").
+    return re.sub(r"(https?://[^\s<]+)", r'<a href="\1">\1</a>', out)
+
+
+def parse(text: str) -> tuple[str, list[tuple[str, str]]]:
+    title, rows = "", []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("### "):
+            rows.append(("beat", line[4:]))
+        elif line.startswith("## "):
+            rows.append(("step", line[3:]))
+        elif line.startswith("# "):
+            title = title or line[2:]
+            if title != line[2:]:
+                rows.append(("step", line[2:]))
+        elif line.startswith(">"):
+            rows.append(("note", line[1:].strip()))
+        elif line.startswith("!"):
+            rows.append(("do", line[1:].strip()))
+        elif line.startswith("~"):
+            rows.append(("source", line[1:].strip()))
+        elif line.startswith("x "):
+            rows.append(("break", line[2:].strip()))
+        elif line.startswith(('"', "“")):
+            rows.append(("say", line))
+        elif line.startswith("- "):
+            rows.append(("plain", line[2:]))
+        else:
+            rows.append(("plain", line))
+    return title, rows
+
+
+def render(title: str, rows: list[tuple[str, str]]) -> str:
+    tag = {"step": "h2", "beat": "h3"}
+    body = [f'<h1 style="{STYLE["title"]}">{inline(title)}</h1>'] if title else []
+    breaks = [r for r in rows if r[0] == "break"]
+    rows = [r for r in rows if r[0] != "break"]
+    if breaks:
+        # Last on the page, above the sources: the caller reads it as Q&A prep.
+        at = next((i for i, r in enumerate(rows) if r[0] == "source"), len(rows))
+        rows = rows[:at] + [("step", "What we tried to break")] + breaks + rows[at:]
+    for kind, text in rows:
+        t = tag.get(kind, "p")
+        body.append(f'<{t} style="{STYLE[kind]}">{inline(text)}</{t}>')
+    return ('<html><head><meta charset="utf-8"></head>'
+            f'<body style="{FONT}">\n' + "\n".join(body) + "\n</body></html>\n")
+
+
+def gws(*args: str, params: dict | None = None, body: dict | None = None, cwd: str | None = None) -> dict:
+    cmd = [GWS, *args]
+    if params is not None:
+        cmd += ["--params", json.dumps(params)]
+    if body is not None:
+        cmd += ["--json", json.dumps(body)]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=120)
+    if r.returncode != 0:
+        raise SystemExit(f"gws {' '.join(args[:3])} failed: {(r.stderr or r.stdout).strip()[:300]}")
+    out = r.stdout[r.stdout.find("{"):] if "{" in r.stdout else "{}"
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return {}
+
+
+def publish(html_path: Path, title: str, doc_id: str | None, share: bool) -> dict:
+    # gws refuses an --upload path that resolves outside its cwd: a script in
+    # the agent scratchpad (/private/tmp/claude-501/...) failed that way on
+    # 2026-10-29 (Roy call doc). Run the upload from the file's own folder.
+    html_path = html_path.resolve()
+    up = ["--upload", html_path.name, "--upload-content-type", "text/html"]
+    if doc_id:
+        gws("drive", "files", "update", *up, params={"fileId": doc_id}, cwd=html_path.parent)
+    else:
+        made = gws("drive", "files", "create", *up, cwd=html_path.parent,
+                   body={"name": title, "mimeType": "application/vnd.google-apps.document"})
+        doc_id = made.get("id")
+        if not doc_id:
+            raise SystemExit("gws made no Doc id")
+    margins = {k: {"magnitude": MARGIN_PT, "unit": "PT"} for k in
+               ("marginTop", "marginBottom", "marginLeft", "marginRight")}
+    gws("docs", "documents", "batchUpdate", params={"documentId": doc_id}, body={"requests": [
+        {"updateDocumentStyle": {"documentStyle": margins, "fields": ",".join(margins)}}]})
+    if share:
+        gws("drive", "permissions", "create", params={"fileId": doc_id},
+            body={"type": "anyone", "role": "writer"})
+    pages = None
+    with tempfile.TemporaryDirectory() as tmp:
+        # gws only writes exports inside its working directory.
+        gws("drive", "files", "export", "-o", "doc.pdf",
+            params={"fileId": doc_id, "mimeType": "application/pdf"}, cwd=tmp)
+        pdf = Path(tmp, "doc.pdf")
+        if pdf.exists():
+            pages = len(re.findall(rb"/Type\s*/Page(?!s)", pdf.read_bytes()))
+    return {"id": doc_id, "url": f"https://docs.google.com/document/d/{doc_id}/edit", "pages": pages}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="chewbacca call-doc", description=__doc__.split("\n\n")[0])
+    ap.add_argument("script")
+    ap.add_argument("--title")
+    ap.add_argument("--doc", help="replace this Google Doc id instead of making a new one")
+    ap.add_argument("--share", action="store_true", help="anyone with the link can edit")
+    ap.add_argument("--html-only", action="store_true")
+    ap.add_argument("--no-breaks", metavar="WHY", help="skip the break check, saying why")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    src = Path(a.script).expanduser()
+    if not src.is_file():
+        print(f"no such script: {src}", file=sys.stderr)
+        return 1
+    title, rows = parse(src.read_text())
+    found = sum(1 for k, _ in rows if k == "break")
+    if found < MIN_BREAKS and not a.no_breaks:
+        print(f"call-doc: refusing. {src.name} has {found} `x` break lines, needs {MIN_BREAKS}.\n"
+              "Try to break the pitch before it becomes a Doc, then add one line per attack:\n"
+              "  x <what we tried> -> <what we found or fixed>\n"
+              "Angles: each number against its source; their money math against our price;\n"
+              "lead times (warmup, approvals, boards); what their product actually claims;\n"
+              "who decides; the first objection they'd raise.\n"
+              'Or pass --no-breaks "<why>".', file=sys.stderr)
+        return 2
+    title = a.title or title or src.stem
+    out = src.with_suffix(".html")
+    out.write_text(render(title, rows))
+    result = {"html": str(out), "lines": len(rows)}
+    if not a.html_only:
+        result.update(publish(out, title, a.doc, a.share))
+    if a.json:
+        print(json.dumps(result))
+    else:
+        print(f"html   {result['html']} ({result['lines']} lines)")
+        if "url" in result:
+            print(f"doc    {result['url']}")
+            print(f"pages  {result['pages'] if result['pages'] is not None else 'unknown, export failed'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,149 @@
+{
+  "about": "Reengineer step 16: every guard, router and classifier ships with its replay or sealed eval. tools/decision_evals.py finds them (see its docstring), counts a hook with a `# gate:` header as replayed by tests/test_hookd_replay.py, and reads the rest from evals below. grandfathered is what main held on 2026-10-12 with neither; it only shrinks.",
+  "components": {
+    "tools/gtme_reply.py": "classifier",
+    "tools/skill_match.py": "router",
+    ".claude/hooks/brain-recall.sh": "router"
+  },
+  "evals": {
+    ".claude/hooks/gtm-reuse-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_gtm_reuse_gate_replay.py",
+      "corpus": "tests/fixtures/gtm_reuse/corpus.json"
+    },
+    ".claude/hooks/draft-source-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_draft_source_guard_replay.py",
+      "corpus": "tests/fixtures/steering/draft_replies_2026_10_16.json"
+    },
+    ".claude/hooks/open-work-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/closing_turns_2026_10_16.json"
+    },
+    ".claude/hooks/blocked-route-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/closing_turns_2026_10_16.json"
+    },
+    ".claude/hooks/learn-on-land.sh": {
+      "type": "replay",
+      "test": "tests/test_steering_stop_replay.py",
+      "corpus": "tests/fixtures/steering/land_events_2026_10_16.json"
+    },
+    "tools/gtme_reply.py": {
+      "type": "replay",
+      "test": "tests/test_gtme_reply_front_door.py",
+      "corpus": "tests/fixtures/gtme-reply/reply_intent_cases.json"
+    },
+    ".claude/hooks/brain-recall.sh": {
+      "type": "sealed",
+      "script": "tools/recall_gate.py",
+      "set": "~/second-brain/.bench/brain-retrieval",
+      "floor": "recall@5 55.4"
+    },
+    ".claude/hooks/break-it-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_break_it.py",
+      "corpus": "tests/fixtures/break_it/cases.json"
+    },
+    ".claude/hooks/skim-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_skim_guard_replay.py",
+      "corpus": "tests/fixtures/steering/skim_replies_2026_10_22.json"
+    },
+    ".claude/hooks/site-stack-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_site_stack_gate_replay.py",
+      "corpus": "tests/fixtures/site-stack-gate/real_writes_2026_10_27.json"
+    },
+    ".claude/hooks/skill-route.sh": {
+      "type": "sealed",
+      "script": "tools/skill_route_eval.py",
+      "set": "~/second-brain/systems/skill-route-eval.jsonl",
+      "floor": "held-out precision 17.9, recall 26.8, typed false fire 34.7, machine 0 (2026-10-31; tests/live/skill-route-eval.sh)"
+    },
+    "tools/skill_route_phrases.py": {
+      "type": "sealed",
+      "script": "tools/skill_route_eval.py",
+      "set": "~/second-brain/systems/skill-route-eval.jsonl",
+      "floor": "learns from the train split only; its phrases are scored on held-out by skill_route_eval.py (2026-10-31: precision 13.2 to 17.9, recall 19.7 to 26.8)"
+    },
+    ".claude/hooks/ask-lookup-guard.sh": {
+      "type": "sealed",
+      "script": "tools/ask_lookup_eval.py",
+      "set": "~/.chewbacca/evals/ask-lookup",
+      "floor": "every labeled fact refused, at most 1% of the rest refused (2026-10-28: 1/1, 0/195)"
+    },
+    ".claude/hooks/dough-brief-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_dough_brief_gate_replay.py",
+      "corpus": "tests/fixtures/dough_brief/corpus.json"
+    },
+    ".claude/hooks/pasted-call-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_pasted_call_gate_replay.py",
+      "corpus": "tests/fixtures/pasted_call/corpus.json"
+    },
+    ".claude/hooks/lecture-gate.sh": {
+      "type": "replay",
+      "test": "tests/test_lecture_gate_replay.py",
+      "corpus": "tests/fixtures/lecture_gate/corpus.json"
+    },
+    ".claude/hooks/plan-commit-guard.sh": {
+      "type": "replay",
+      "test": "tests/test_plan_commit_guard_replay.py",
+      "corpus": "tests/fixtures/plan_commit/corpus.json"
+    }
+  },
+  "grandfathered": [
+    ".claude/hooks/agent-claim-guard.sh",
+    ".claude/hooks/artifact-guard.sh",
+    ".claude/hooks/assumption-guard.sh",
+    ".claude/hooks/brain-sync.sh",
+    ".claude/hooks/design-context.sh",
+    ".claude/hooks/design-gate.sh",
+    ".claude/hooks/disk-guard.sh",
+    ".claude/hooks/durable-guard.sh",
+    ".claude/hooks/env-guard.sh",
+    ".claude/hooks/fusion-guard.sh",
+    ".claude/hooks/handoff-guard.sh",
+    ".claude/hooks/hookd-fallback.sh",
+    ".claude/hooks/interface-first.sh",
+    ".claude/hooks/kit-debt.sh",
+    ".claude/hooks/kit-route.sh",
+    ".claude/hooks/link-guard.sh",
+    ".claude/hooks/list-guard.sh",
+    ".claude/hooks/machine-budget.sh",
+    ".claude/hooks/method-guard.sh",
+    ".claude/hooks/model-route.sh",
+    ".claude/hooks/plan-guard.sh",
+    ".claude/hooks/prayer-guard.sh",
+    ".claude/hooks/prose-guard.sh",
+    ".claude/hooks/ready-guard.sh",
+    ".claude/hooks/reply-lessons.sh",
+    ".claude/hooks/repo-overlap-guard.sh",
+    ".claude/hooks/scope-guard.sh",
+    ".claude/hooks/skill-route-shadow.sh",
+    ".claude/hooks/slop-guard.sh",
+    ".claude/hooks/stale-read-guard.sh",
+    ".claude/hooks/thinking-dash-guard.sh",
+    ".claude/hooks/ux-guard.sh",
+    ".claude/hooks/vibe-guard.sh",
+    ".claude/hooks/voice-guard.sh",
+    ".claude/hooks/write-log.sh",
+    "bin/gtme-score",
+    "bin/lib/app_route.py",
+    "bin/lib/clay_route.py",
+    "bin/lib/model_route.py",
+    "bin/lib/people/scoring.js",
+    "bin/lib/route.py",
+    "bin/lib/surface_intent.py",
+    "bin/model-route",
+    "bin/route-label",
+    "tools/gtme_score.py",
+    "tools/hybrid_route.py",
+    "tools/skill_match.py",
+    "tools/skill_route_shadow.py"
+  ]
+}

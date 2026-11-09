@@ -7,6 +7,43 @@ holding the replica to it. `web-ux.md` decides what a site should LOOK like
 right in a screenshot from a site that feels finished in a hand. Every rule
 below cost a day to learn. `site-gate` enforces the mechanical half.
 
+**Before any of this: `site-gate research <repo>`.** It refuses a site whose
+repo lacks `research/INDEX.md` (every page of the source, pulled with
+api-anything or the site's own API), `research/SOURCES.md` (naming
+api-anything, brand-grab, ux-pick or ux-gen, this file and site-gate),
+`research/STEAL.md` and `docs/COPY.md`. Added 2026-10-10 when a new site
+started from three hand-read pages and Caleb had to name the tools again.
+The `site-spec` skill has the step-zero list.
+
+**No walls of text, ever.** Caleb, 2026-10-10, on Erik Fish's draft: "Chewbacca
+should never make fat walls of text! Ever! ... IF ppl wanted to read a book they
+would open a book." One idea per beat, a block of 45 words at most, a section
+at 120 words of body copy at most. Long reading goes behind a link or inside
+an `<article>` page. `site-gate check` fails both limits.
+
+**No hard cutoffs.** Caleb, 2026-10-10, on a book mockup with a light wall
+behind it masked into an oval on a dark section: "Fix chewb to NEVER have ugly
+hard cutoffs!!!!!!" A picture whose own edge is bright on a dark ground draws a
+line round itself, and a radial mask only turns the box into an oval. Cut the
+subject out (Erik's cover was flattened from the mockup with a perspective
+warp), use an asset whose edge is already dark, or feather it into the ground.
+`site-gate check` fails a bright-edged image on a dark section.
+
+**No unintentional animation.** Caleb, 2026-10-10, on captions that faded up
+on every scroll step: "upfade upfade upfade bro it hurts my eyes" and "NEVER
+makes annoying unintentional animations". Every motion has a job you can name;
+the figure moves and the text holds. Text that changes in place swaps (or
+crossfades without moving), never replays an entrance keyed to state, and a
+page gets one rise entrance at most. `site-gate research` fails a keyed
+entrance and a component with three or more rises.
+
+**Ambient particles are light, not icons.** On Erik Fish's hero, drawn
+dandelion seeds (stem plus filaments) drifting across his face read as
+"tacky", and on every page they got "annoying". What worked: a dozen soft
+glowing flecks in the sunlit photo only, stopped once the hero scrolls away. An
+ambient layer stays in one place, never crosses a face, and reads as part of the
+photo's own light.
+
 ## A site is four layers, and a screenshot shows one
 
 1. Layout, meaning positions, sizes and type, the only layer a screenshot judges.
@@ -120,6 +157,7 @@ overrides this; restraint applies to colour and claims, not to the craft.
 
 **Spectacle is held by taste.** Caleb, the same night: "Be tasteful. Lemma had
 the most tasteful site ever." What made it tasteful is checkable:
+
 - one visual language, with every figure drawn from the same vocabulary and
   stroke family
 - one accent with one meaning, on a calm ground
@@ -194,6 +232,7 @@ over:
 
 **Steal like an artist, and write it down.** Gavin's method, from his
 `reference/STEAL.md`:
+
 - Before building, study the practitioners: an Awwwards juror's criteria (art
   direction, directed motion, 60fps) and The Pudding's scrollytelling rules
   (one step, one visible change; reversible; never hijack the scroll).
@@ -214,6 +253,7 @@ absolutely no sense to a yc company looking at this ... and it makes no
 sense to a USC student". The captions had narrated the animation ("Your
 neighborhood. 232", "One lit window") when they should have answered the
 reader. Before writing a caption:
+
 - Name each reader and the moment they arrive (here, a founder replying
   "more info" to a DM, and a student who heard about the club).
 - List the questions they have, in order.
@@ -328,6 +368,31 @@ page. Each rule names the measurement that would have caught it.
    reads as a leftover even when its copy is right. Give it the same sky,
    type and sharpness, one clear action and a deliberate layout; a missing
    link stays a visible, finished-looking state, never a gap.
+5. **Nothing over the film covers the thing it's about.** On usctts.com/way
+   (2026-10-11) caption clouds placed by eye at 1440 sat on the typewriter
+   at Caleb's window, twice: "Never block important things when they should
+   be shown!", then "Bro ur literally covering the typewriter lmao check all
+   placements". A camera that moves through a stage brings the subject into
+   any fixed corner. Map where the subject is in every frame (TTS-Dev
+   `scripts/caption-room.py`), place each overlay from that map at the
+   reader's own window size, and let it step aside as the camera arrives.
+   Check: read the film's own pixels under every overlay at 1100, 1280,
+   1440, 1680, 1920, 390 and 430 wide, at each stage's start, middle and
+   end, in Chromium and WebKit; subject pixels over 2% fail.
+6. **The texture adds life, never takes it.** "It seems to be making things
+   less vibrant, if anything it should be making them more", "looks like
+   it's on a dusty screen", "The clouds look dead inside" (2026-10-11). A
+   pastel render reads as dust, and grey grain laid over it greys it more.
+   Blend grain soft-light, grade the film (saturate 1.28 and contrast 1.08
+   held the grass and sand true; 1.4 went neon), and take rendered white
+   props most of the way to white with sky colour in their shade. Check:
+   mean saturation on screen never drops below the raw frame's.
+7. **A prop takes the shape he describes, not the literal words.** "Flat
+   bottom, flat front" meant gentle bumps, not a front cut flat: "I didn't
+   mean the clouds are literally flat... It looks like you chopped the
+   block". A set of props is a set of shapes: "Each cloud should be a
+   slightly diff shape! Some taller, some rounder, some wider". Render a
+   preview of every variant and look at it before wiring any in.
 
 ## Done means
 
@@ -354,3 +419,113 @@ numbers and curriculum diagrams were built for the builders, not the reader.
   whole bottom of that page while check, story and slop-check all passed;
   site-gate now fails a heading that paints nothing, and a reviewer that
   did not build the page looks at the screenshots before anything ships.
+
+## Reworking a client's live site (bluemodernadvisory.com, 2026-10-10)
+
+Caleb: "it looks so ai slop rn ... keep it professional maybe a little more
+tts/lemma/firm foundation finesse but ultimately just more professional." It
+was going to Sagar and Maggie, whose site it is.
+
+- Never touch their prod. Branch it, and deploy the branch as its own service
+  in their hosting project (`railway up --service <Name>` plus `railway domain`),
+  so the owners compare two live URLs and merging stays their call.
+- Leave prod secrets off the preview so test form submissions never reach the
+  client's real pipeline, and say so when handing it over.
+- The slop on a professional-services site was the template rather than any
+  single element: stock hero photo, serif plus italic accent, an uppercase
+  kicker over every heading, a logo marquee, three pillar cards, 01/02/03
+  numbers, a rotating quote, a sticky CTA. Removing them did most of the work.
+- Replace the stock photo with an object the buyer recognizes from the
+  service itself (for a data firm, a live record queue), labeled as sample data,
+  and build the scroll story from the client's own published case numbers,
+  with a caption naming which engagement each number came from.
+
+**Calm is not professional (BMA, 2026-10-10).** v1 cut every slop tell and
+landed as hairline rows on one off-white ground at one heading size. Caleb:
+"so chopped and boring and terrible visual heiarchy", "This is so shit lmao".
+What fixed it came from usctts.com and lemma-replica, not from removing more:
+a dark first screen with drawings of the client's own work in thin
+mono-labelled windows around a centered headline with one accent phrase, a
+paper sheet that rises over it and widens to the edges on scroll, tinted
+rounded panels for sections, a number as the headline of each case, and a
+type ladder with real jumps (88 / 48 / 72 figure / 17 body). Before a
+professional rework, open the team's own best recent sites and name what
+each does on its first screen.
+
+**A section of copy is a wall; a professional site still needs the story
+(BMA, 2026-10-10).** "So much of the site is just a fat wall of text no one is
+tryna read we gotta tell a MOG story just like lemma" and the other reference
+sites do. The fix was one pinned scene (640vh, canvas, one followed progress
+value) where the client's own records change state per beat: messy wall,
+flagged, gated into a grid, sprouting decision-makers, routed into lanes,
+landing on the result. One headline line and one sub-line per beat, every
+number from a case study with a footnote naming the engagement, and the
+testimonial moved into the final beat so the big number appears once.
+`src/story.jsx` in bluemodernadvisory/bma-website, branch Caleb-Rework, is the
+reference build.
+
+**Neighbouring sections never read as one (BMA, 2026-10-10).** The team row
+and the FAQ sat on the same ground with the same heading-left split, and the
+page read as one block that ran on. Caleb: "Never make sections that read as
+the same section connected" and "Each section feels like 1 connected blob".
+Each neighbour changes at least one of ground (paper, tint, navy) or layout
+(split, centred, full-bleed figure). `site-gate check` now fails "twin
+sections" mechanically.
+
+**No section is ever boring (TTS, 2026-10-10).** Caleb: "Make sure no section
+is ever boring. Chewb should ALWAYS ensure this", and "No more 3d stills
+right? They're all fun videos???". A still render, however big, is a poster.
+Every section moves on entry, at rest or with the scroll. `site-gate check`
+now fails a section where none of the three happens. Calibrated that day: the
+Lemma reference had 0 such sections, live usctts.com had 5.
+
+**Every space is filled on purpose (TTS, 2026-10-10, that evening).** Three
+more shipped past the first boring check: a still clay world in its card
+("they need to be 3d animated videos like the clay site!!!!!!!! ALL OF
+THEM"), a close that was one sentence on 1.3 screens of flat cardinal, and
+advisor bands whose right half sat empty ("Chewb should ALWAYS be
+intentional with how it chooses to fill EVERY space"). `site-gate check` now
+also fails a still image over 20% of a section, a band under 15% content that
+sits dead once it lands, and one empty block over 30% of a section. It is
+stricter than the Lemma reference on purpose: Lemma's trust and newsletter
+bands fail it too.
+
+**The TTS night, every mistake and where it is caught now (2026-10-10).**
+Caleb: "fix chewb to never make the mistakes we've made on this site ever
+again". Each one below is either a `site-gate check` failure or a rule here.
+
+- A section where nothing moves, a still 3D render, a dead slab of flat
+  color, an empty block over 30% of a band: `boring section` lines.
+- A progress point that bounces on every wheel notch, because it rode the page
+  but read a smoothed copy of the scroll: `jitter` lines. Anything meant to
+  hold still on screen reads the real scroll; the smoothed one is only for
+  things that live in a fixed or pinned layer.
+- A looping video whose baked background shows as a box on the paper:
+  `seam` lines. Match the page at the edges or render with alpha.
+- Logo pills louder than the person, a pill holding a bare number, the same
+  mark twice: the person leads, credentials sit one tone at one height.
+- A lone 3D object floating on paper: every loop comes with something, the
+  line and the action it belongs to, in one composed band (the reference is a
+  card whose video fills its whole half, edge to edge).
+- Cards inset far from the edges with the figure a fifth of the card: use the
+  width the content earns, and let the figure fill its half.
+- A headline masked by a vignette: text stays fully readable at every scroll
+  position of a scene.
+- A gray void behind a 3D scene: every scene gets a world, sky, ground,
+  props and small motion across the frame.
+- A stale number: a valuation carries its date and source, and the newest
+  confirmed figure wins; an unconfirmed round never goes on the page.
+
+## Gift sites and the two things he shouldn't have to say (Meet Mrs. Shen, 2026-10-26)
+
+- Before building, list the elements past sites already proved (Parker's ticket
+  tear and Academy leader, Anchored's pinned scroll stage, a curtain theater)
+  and say which ones fit this story and which don't. Caleb, mid-build: "Think of
+  dope elements/animations/styles weve done before and if they could add to
+  this, dont force anything tho. I should never have to ask this."
+- READY means the deployed URL, not localhost, went through a few rounds of
+  capture at 1440 and 390, site-gate, fix, redeploy. Nothing goes out to the
+  person waiting on it before that. Caleb: "READY means we've iterated at
+  least a few times on the deployed site and get it perfect."
+- Railway: a push to a repo deployed by `railway up` doesn't redeploy. Check the
+  live title after the push, and run `railway up --ci` if it's stale.

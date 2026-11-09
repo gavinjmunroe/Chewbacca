@@ -11,6 +11,10 @@ starts: 2026-08-24
 ends: 2026-12-04
 source: "registrar academic calendar, printed on the ACAD 324g syllabus p19"
 
+# Optional. Report a `todo` more than this many days past due as assumed-done
+# and drop it from OVERDUE. Off unless set.
+# assume_done_after_days: 2
+
 finals:
   starts: 2026-12-09
   ends: 2026-12-16

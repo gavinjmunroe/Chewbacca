@@ -3,10 +3,15 @@
 
     realm-engine build [--force]    clone realm if missing, filtered pnpm install + build
     realm-engine start              spawn the server detached, write engine.json (0600)
-    realm-engine run                the same in the foreground (what launchd runs)
+    realm-engine run                the same in the foreground (what launchd runs); when
+                                    the kit moves on, it hands over to the current
+                                    snapshot once no agent turn is running
     realm-engine stop               SIGTERM the engine named in engine.json
     realm-engine status [--json]    running, pid, port, built, reachable
     realm-engine plist              print the launchd plist filled for this Mac
+    realm-engine install            write that plist to ~/Library/LaunchAgents and load it,
+                                    so the engine starts at every login with no terminal
+    realm-engine uninstall          unload it and remove the file
 
 realm is Carlton Aikins' local-first agent control plane
 (github.com/31Carlton7/realm). Its checkout is read only here: this script
@@ -18,6 +23,7 @@ Paths, all overridable so a stranger's Mac works with no edits:
     CHEWBACCA_REALM_PORT   fixed port        (default 0, any free port)
     CHEWBACCA_NODE, CHEWBACCA_PNPM, CHEWBACCA_GIT   the binaries to use
     CHEWBACCA_PYTHON       the python the launch agent runs (default: python3 on PATH)
+    CHEWBACCA_LAUNCH_AGENTS_DIR, CHEWBACCA_LAUNCHCTL   where install writes, and what loads it
 
 Exit codes: 0 done, 1 failed or refused, 2 usage, 3 status says not running.
 `run` exits 0 when it refuses because an engine is already up, so launchd's
@@ -38,10 +44,12 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import kit_snapshot  # noqa: E402
 import realm_client  # noqa: E402
 
 REPO_URL = "https://github.com/31Carlton7/realm.git"
@@ -152,15 +160,46 @@ def clear_engine(pid: int | None = None) -> None:
 # Refuses every WebSocket upgrade that carries an Origin header, so a web page
 # cannot reach the engine (see the file's own comment).
 ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "config" / "data" / "realm" / "origin-guard.mjs"
-PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "0ae5b8b5739e6165360e4b0679302b7b5afdd4b1")
+# "latest" follows Carlton's main. On 2026-10-10 the engine sat 1,027
+# commits behind on 0ae5b8b5 and Caleb, asked whether to move it, said "YES
+# ALWAYS dont ask that". Carlton is a collaborator who gave the engine to the
+# kit in person (2026-10-05), so his main is code this kit trusts; a sha in
+# CHEWBACCA_REALM_REF still pins it for a rollback or a bisect.
+PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "latest")
+
+
+def target_ref(git: str | None) -> str:
+    """The commit to build: CHEWBACCA_REALM_REF's sha, or origin/main fetched now."""
+    if PINNED_REF != "latest":
+        return PINNED_REF
+    if not git:
+        return ""
+    subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", "main"])
+    got = subprocess.run([git, "-C", str(REALM_DIR), "rev-parse", "origin/main"], capture_output=True, text=True)
+    return got.stdout.strip() if got.returncode == 0 else ""
+
+
+def pnpm_argv() -> list[str] | None:
+    """pnpm, or corepack running the pnpm realm's packageManager pins. A new
+    Mac with brew's node has corepack and no pnpm, and `corepack enable`
+    writes into node's own folder, so corepack is run directly instead."""
+    pnpm = tool("CHEWBACCA_PNPM", "pnpm")
+    if pnpm:
+        return [pnpm]
+    corepack = tool("CHEWBACCA_COREPACK", "corepack")
+    if corepack:
+        return [corepack, "pnpm"]
+    return None
 
 
 def build(force: bool) -> int:
-    git, pnpm, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_PNPM", "pnpm"), tool("CHEWBACCA_NODE", "node")
+    git, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_NODE", "node")
+    pnpm = pnpm_argv()
     if not node:
         return die("node not found; realm needs Node 22.13 or newer (CHEWBACCA_NODE to point at one)")
     if not pnpm:
-        return die("pnpm not found; `corepack enable` or `npm i -g pnpm` installs it (CHEWBACCA_PNPM to point at one)")
+        return die("pnpm not found, and no corepack to run it; `npm i -g pnpm` installs it "
+                   "(CHEWBACCA_PNPM to point at one)")
     if not (REALM_DIR / "package.json").exists():
         if REALM_DIR.exists() and any(REALM_DIR.iterdir()):
             return die(f"{REALM_DIR} exists and is not a realm checkout; set CHEWBACCA_REALM_DIR")
@@ -170,30 +209,36 @@ def build(force: bool) -> int:
         print(f"cloning {REPO_URL} into {REALM_DIR}", file=sys.stderr)
         if subprocess.run([git, "clone", REPO_URL, str(REALM_DIR)]).returncode:
             return die("clone failed")
-    # Build only the commit this kit was verified against. `pnpm install` and
-    # the build run code from the checkout, so building whatever main holds
-    # today would run code nobody here has read (security review, 2026-10-05).
-    # Moving to a newer commit is a deliberate change to PINNED_REF.
+    # Build exactly one named commit, never whatever the working tree holds:
+    # `pnpm install` and the build run code from the checkout, so a stray local
+    # edit must not ride along (security review, 2026-10-05). The commit is
+    # Carlton's latest main unless CHEWBACCA_REALM_REF pins a sha.
+    ref = target_ref(git) if git and (REALM_DIR / ".git").exists() else PINNED_REF
+    if not ref or ref == "latest":
+        return die("could not resolve realm's origin/main; set CHEWBACCA_REALM_REF to a sha")
     if git and (REALM_DIR / ".git").exists():
-        if source_stamp(git) != PINNED_REF:
-            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", PINNED_REF])
-            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", PINNED_REF]).returncode:
-                return die(f"could not check out the pinned commit {PINNED_REF[:12]} in {REALM_DIR}")
-    if source_stamp(git) != PINNED_REF:
-        return die(f"{REALM_DIR} is not at the pinned commit {PINNED_REF[:12]}; refusing to run its build")
+        if source_stamp(git) != ref:
+            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", ref])
+            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", ref]).returncode:
+                return die(f"could not check out {ref[:12]} in {REALM_DIR}")
+    if source_stamp(git) != ref:
+        return die(f"{REALM_DIR} is not at {ref[:12]}; refusing to run its build")
     stamp = home() / "build.json"
     head = source_stamp(git)
     if not force and main_js().exists() and head and _read_json(stamp).get("source") == head:
         print(f"realm already built at {head[:12]}", file=sys.stderr)
         return 0
     steps = [
-        [pnpm, "install", "--filter", FILTER, "--frozen-lockfile"],
-        [pnpm, "--filter", FILTER, "build"],
+        ["install", "--filter", FILTER, "--frozen-lockfile"],
+        ["--filter", FILTER, "build"],
     ]
+    # corepack asks "download pnpm?" on a TTY and waits; a build pressed on
+    # the glass has nobody to answer.
+    env = dict(os.environ, COREPACK_ENABLE_DOWNLOAD_PROMPT="0")
     for cmd in steps:
-        print("$ " + " ".join(cmd[1:]), file=sys.stderr)
-        if subprocess.run(cmd, cwd=REALM_DIR).returncode:
-            return die(f"`pnpm {' '.join(cmd[1:])}` failed in {REALM_DIR}")
+        print("$ pnpm " + " ".join(cmd), file=sys.stderr)
+        if subprocess.run(pnpm + cmd, cwd=REALM_DIR, env=env).returncode:
+            return die(f"`pnpm {' '.join(cmd)}` failed in {REALM_DIR}")
     if not main_js().exists():
         return die(f"build finished but {main_js()} is missing")
     home().mkdir(parents=True, exist_ok=True)
@@ -218,6 +263,70 @@ def _read_json(path: Path) -> dict:
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+# handover
+
+# How often `run` looks for a kit update. The same number kyber-surfaces uses
+# (HANDOVER_CHECK_S, 9528874d): a move is noticed within 15 s. Guessed, never
+# measured; a check is one stat of `current` and, only after a move, one
+# sessions.listAll. CHEWBACCA_REALM_HANDOVER_S overrides it for the test.
+HANDOVER_CHECK_S = float(os.environ.get("CHEWBACCA_REALM_HANDOVER_S") or 15.0)
+# Session statuses that mean a turn is in flight (SessionStatusSchema in
+# realm's packages/contracts/src/entities.ts at 59afd9e4). Stopping the
+# server under either would kill the agent mid-edit or drop a permission
+# question Caleb has not answered yet.
+BUSY = frozenset({"running", "waiting_permission"})
+
+
+def turns_running(h: Path) -> bool | None:
+    """True when any session has a turn in flight, None when the engine can't
+    say. Nobody answering is never read as idle: a handover waits for a yes."""
+    try:
+        listed = realm_client.call("sessions.listAll", {"profileId": None}, timeout=5, home=h)
+    except realm_client.RealmError:
+        return None
+    if not isinstance(listed, list):
+        return None
+    return any(isinstance(s, dict) and s.get("status") in BUSY for s in listed)
+
+
+def handover_due(moved: bool, busy: bool | None) -> bool:
+    """The kit moved under this engine and the engine said no turn is running."""
+    return moved and busy is False
+
+
+def successor() -> Path | None:
+    """The current snapshot's realm-engine, or None outside a kit snapshot."""
+    code = kit_snapshot.snapshot_of(Path(__file__))
+    return None if code is None else code.parent.parent / "current" / "bin" / "realm-engine"
+
+
+# Set by run()'s signal handler. A SIGTERM from launchd (logout, or
+# `launchctl bootout`) that lands mid-handover is a stop, so the successor
+# is never exec'd over it (reviewer, 2026-10-11).
+STOPPING = False
+
+
+def hand_over(proc: subprocess.Popen, nxt: Path) -> None:
+    """Stop this snapshot's server, then become the current snapshot's `run`.
+
+    exec keeps the pid, so launchd still owns the job (KeepAlive would leave a
+    clean exit down until the next login). On 2026-10-11 kyber-surfaces ran a
+    pruned snapshot's code until it died and the agents icon opened a retired
+    card; a realm-engine started at login had the same shape, running the
+    bridge and origin guard of whatever snapshot was current at 9am."""
+    print(f"realm-engine: the kit moved; handing over to {nxt.resolve()}", file=sys.stderr, flush=True)
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=STOP_GRACE_S)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    clear_engine(proc.pid)
+    if STOPPING:
+        sys.exit(0)
+    os.execv(sys.executable, [sys.executable, str(nxt), "run"])
 
 
 # start / run / stop
@@ -314,13 +423,29 @@ def run() -> int:
     proc, data = got
 
     def forward(signum: int, _frame: object) -> None:
-        proc.send_signal(signum)
+        global STOPPING
+        STOPPING = True
+        if proc.poll() is None:
+            proc.send_signal(signum)
 
     signal.signal(signal.SIGTERM, forward)
     signal.signal(signal.SIGINT, forward)
     print(json.dumps(data), flush=True)
+    nxt = successor()
+    next_check = time.monotonic() + HANDOVER_CHECK_S
     try:
-        code = proc.wait()
+        while True:
+            try:
+                code = proc.wait(timeout=1.0)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            if nxt is None or time.monotonic() < next_check:
+                continue
+            next_check = time.monotonic() + HANDOVER_CHECK_S
+            moved = kit_snapshot.moved(Path(__file__))
+            if moved and nxt.exists() and not STOPPING and handover_due(moved, turns_running(home())):
+                hand_over(proc, nxt)
     finally:
         clear_engine(proc.pid)
     return code
@@ -377,8 +502,25 @@ def status(as_json: bool) -> int:
     return 0 if info["running"] else 3
 
 
+def engine_path() -> str:
+    """The ~/.local/bin link setup makes, when there is one. The resolved file
+    is under ~/.chewbacca/kit/snapshots/<sha> on a kit install, and the next
+    update prunes that folder, after which launchd would fail at every login
+    without a word."""
+    link = Path.home() / ".local" / "bin" / "realm-engine"
+    return str(link) if link.exists() else str(Path(__file__).resolve())
+
+
 def plist() -> int:
-    """The launchd template filled for this Mac. Printed, never installed.
+    text = render_plist()
+    if isinstance(text, int):
+        return text
+    sys.stdout.write(text)
+    return 0
+
+
+def render_plist() -> str | int:
+    """The launchd template filled for this Mac. `plist` prints it, `install` writes it.
 
     launchd starts jobs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and children
     of the engine (claude, codex, git) then fail to launch with no error in
@@ -399,7 +541,7 @@ def plist() -> int:
     subs = {
         "__LABEL__": LABEL,
         "__PYTHON__": os.environ.get("CHEWBACCA_PYTHON") or "python3",
-        "__ENGINE__": str(Path(__file__).resolve()),
+        "__ENGINE__": engine_path(),
         "__REALM_HOME__": str(home()),
         "__REALM_DIR__": str(REALM_DIR),
         "__NODE__": node,
@@ -409,7 +551,71 @@ def plist() -> int:
     text = PLIST_TEMPLATE.read_text()
     for key, value in subs.items():
         text = text.replace(key, _xml(value))
-    sys.stdout.write(text)
+    return text
+
+
+def agents_dir() -> Path:
+    return Path(os.environ.get("CHEWBACCA_LAUNCH_AGENTS_DIR")
+                or Path.home() / "Library" / "LaunchAgents").expanduser()
+
+
+def foreign_agents() -> Optional[str]:
+    """Why launchd must not be touched from here, or None: the rule is
+    daemon_register.agents_vs_own (a scratch-HOME install replaced the real
+    com.chewbacca on 2026-10-13). A fake launchctl (CHEWBACCA_LAUNCHCTL,
+    tests) is always called."""
+    if os.environ.get("CHEWBACCA_LAUNCHCTL"):
+        return None
+    import daemon_register  # noqa: PLC0415
+    return daemon_register.agents_vs_own(agents_dir())
+
+
+LAUNCHD_WRITES = {"bootstrap", "bootout", "kickstart", "enable", "disable", "load", "unload"}
+
+
+def launchctl(*args: str) -> subprocess.CompletedProcess:
+    if args and args[0] in LAUNCHD_WRITES:
+        foreign = foreign_agents()
+        if foreign:
+            return subprocess.CompletedProcess(["launchctl", *args], 0, "", "")
+    exe = os.environ.get("CHEWBACCA_LAUNCHCTL") or "/bin/launchctl"
+    return subprocess.run([exe, *args], capture_output=True, text=True, timeout=30)
+
+
+def install() -> int:
+    """Start at every login, under launchd, with nobody at a terminal. Loading
+    starts it now too (RunAtLoad); a `run` that finds an engine already up
+    exits 0, so one started by hand is left alone."""
+    if not main_js().exists():
+        return die(f"{main_js()} missing; run realm-engine build first")
+    text = render_plist()
+    if isinstance(text, int):
+        return text
+    folder = agents_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{LABEL}.plist"
+    tmp = path.with_suffix(".plist.tmp")
+    tmp.write_text(text)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    domain = f"gui/{os.getuid()}"
+    # An older copy may be loaded; bootstrap refuses a label already there.
+    launchctl("bootout", f"{domain}/{LABEL}")
+    got = launchctl("bootstrap", domain, str(path))
+    if got.returncode:
+        return die(f"launchctl bootstrap said {got.returncode}: {(got.stderr or got.stdout).strip()[:200]}")
+    out = {"installed": str(path), "label": LABEL}
+    if foreign_agents():
+        out["notLoaded"] = foreign_agents()
+    print(json.dumps(out))
+    return 0
+
+
+def uninstall() -> int:
+    launchctl("bootout", f"gui/{os.getuid()}/{LABEL}")
+    path = agents_dir() / f"{LABEL}.plist"
+    path.unlink(missing_ok=True)
+    print(json.dumps({"removed": str(path)}))
     return 0
 
 
@@ -434,6 +640,10 @@ def main(argv: list[str]) -> int:
         return status("--json" in rest)
     if cmd == "plist":
         return plist()
+    if cmd == "install":
+        return install()
+    if cmd == "uninstall":
+        return uninstall()
     return die(f"unknown command {cmd!r}; see realm-engine --help", 2)
 
 

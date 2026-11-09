@@ -1,5 +1,5 @@
 {
-  "about": "Graph walks kyber-genui may bind to (docs/GENUI.md, step 4). Each runs bin/kyber-surfaces with no shell and prints {\"rows\": [...]}: labels, networks, ages and node ids, never a message body.",
+  "about": "Graph walks kyber-genui may bind to (docs/reference/GENUI.md, step 4). Each runs bin/kyber-surfaces with no shell and prints {\"rows\": [...]}: labels, networks, ages and node ids, never a message body.",
   "queries": [
     {
       "name": "unreplied",
@@ -16,6 +16,15 @@
       "argv": ["kyber-surfaces", "walk", "needs-you", "--json"],
       "rename": { "label": "what", "app": "channel" },
       "fields": ["what", "channel", "waiting", "why", "tier"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    },
+    {
+      "name": "missing",
+      "description": "what is about to bite you, worst first: a meeting whose person is waiting on your reply, an assignment whose reading is not done, two commitments at once, your own promise gone quiet, an ask waiting a day or more, a group meeting not on your calendar",
+      "argv": ["kyber-surfaces", "walk", "missing", "--json"],
+      "rename": { "label": "what", "app": "channel" },
+      "fields": ["what", "channel", "waiting", "why"],
       "views": ["rows", "events", "list", "count", "note"],
       "provider": "graph"
     },

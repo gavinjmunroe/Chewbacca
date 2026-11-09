@@ -24,7 +24,7 @@ The feed list is real and large, which is why this note exists. Facts about it:
 ## What to do instead
 
 1. Ask Charles for permission to reuse the list (Caleb has the
-   whole profile listed in docs/LINKS-FROM-CALEB.md). A one-line "MIT the feed
+   whole profile listed in docs/plans/LINKS-FROM-CALEB.md). A one-line "MIT the feed
    list?" is enough. If he agrees, drop the URL list in this folder as
    `feeds.csv` (name, kind, url, category) and credit him here.
 2. Or rebuild a smaller list from public sources the kit already trusts. The

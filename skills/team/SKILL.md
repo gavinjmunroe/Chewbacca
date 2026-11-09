@@ -1,6 +1,8 @@
 ---
 name: team
-description: "The Chewbacca team's task board, stored in this repo and shared with a web board. Use when anyone asks what the team is working on, who owns something, what's due, what's assigned to them or to Gavin, Jake or Semyon, or asks to add, assign, move, comment on or finish a task. Also use to post the week's tasks after the Monday check-in and to collect proof on Friday. Also fires on: to-do, todo, tracker, task board, linear, backlog for the team, who's on what, assign this, mark done."
+description: "The Chewbacca team's task board, in this repo and on the web. Use for what the team is on, who owns what, what's due, Gavin, Jake or Semyon's tasks, or to add, assign, move or finish a task."
+triggers: >-
+  The Chewbacca team's task board, stored in this repo and shared with a web board. Use when anyone asks what the team is working on, who owns something, what's due, what's assigned to them or to Gavin, Jake or Semyon, or asks to add, assign, move, comment on or finish a task. Also use to post the week's tasks after the Monday check-in and to collect proof on Friday. Also fires on: to-do, todo, tracker, task board, linear, backlog for the team, who's on what, assign this, mark done.
 ---
 
 # Team board

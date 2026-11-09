@@ -6,8 +6,23 @@
 # caused it. "Why did it refuse to use an em dash" took a grep across four
 # directories.
 set -uo pipefail
+
+# What a hook, router or send actually decided, from the verdict log
+# (tools/verdicts.py). "Why was this refused" used to be a transcript dig.
+#   chewbacca why --refused [--all] [-n N]   the latest refusals, with the reason
+#   chewbacca why --verdicts [--kind K]      every decision, newest first
+#   chewbacca why --stats [--since HOURS]    refusals and cost per hook
+case "${1:-}" in
+  --refused|refused)
+    shift; exec python3 "$(dirname "$0")/../../tools/verdicts.py" refused "$@" ;;
+  --verdicts|verdicts)
+    shift; exec python3 "$(dirname "$0")/../../tools/verdicts.py" show "$@" ;;
+  --stats)
+    shift; exec python3 "$(dirname "$0")/../../tools/verdicts.py" stats "$@" ;;
+esac
+
 q="${*:-}"
-[ -z "$q" ] && { echo "usage: chewbacca why <word or phrase>" >&2; exit 2; }
+[ -z "$q" ] && { echo "usage: chewbacca why <word or phrase> | --refused | --verdicts | --stats" >&2; exit 2; }
 CLAUDE_DIR="$HOME/.claude"
 BLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
 

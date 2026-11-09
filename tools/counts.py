@@ -81,8 +81,14 @@ def lines():
             ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
         ).stdout.split("\0")
         files = sorted(set(files) - {""})
+        if not files:
+            raise FileNotFoundError("no tracked files here")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return 0
+        # Not a checkout: kit-autopush checks a `git archive HEAD` export, where
+        # every file is a tracked file. Returning 0 here made the README read
+        # "About 0 lines" and failed every push (2026-10-11).
+        files = sorted(str(f.relative_to(REPO)) for f in REPO.rglob("*")
+                       if f.is_file() and not f.is_symlink())
     total = 0
     for f in files:
         p = REPO / f
@@ -95,7 +101,7 @@ def lines():
 
 def sentence(c):
     return (
-        f"One command installs **{c['commands']} slash commands, {c['skills_total']} skills "
+        f"One command installs **{c['commands']} slash command{'' if c['commands'] == 1 else 's'}, {c['skills_total']} skills "
         f"({c['skills_own']} written here, {c['skills_upstream']} cloned from upstream, "
         f"{c['skills_packed']} from {'a skill pack' if c['packs'] == 1 else str(c['packs']) + ' skill packs'}), {c['mcp']} MCP servers, {c['hooks']} hooks, "
         f"{c['subagents']} subagents, {c['cli']} command-line tools and {c['rules']} always-on "
@@ -111,6 +117,11 @@ def region(readme):
 
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    # Anything but --json or --check used to mean "rewrite": --help, --dry-run
+    # and a typo all wrote the README (break-it, 2026-10-19).
+    if arg not in ("", "--json", "--check"):
+        print(__doc__)
+        return 0 if arg in ("-h", "--help") else 2
     c = counts()
     if arg == "--json":
         print(json.dumps(c, indent=2))

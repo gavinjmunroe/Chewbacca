@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The refund that ran twice, Sift Weekly 014</title>
+    <meta
+      name="description"
+      content="A support agent retried a payment tool after a timeout and reported one refund when two had gone out."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="weekly">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-frame-narrow">
+        <header class="pg-doc-head">
+          <a class="pg-back" href="../weekly.html"
+            ><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path
+                d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+              /></svg
+            >All issues</a
+          >
+          <p class="pg-eyebrow">
+            Sift Weekly<span class="pg-dot" aria-hidden="true">&middot;</span
+            >Issue 014
+          </p>
+          <h1>The refund that ran twice</h1>
+          <p class="pg-lead">
+            A support agent retried a payment tool after a timeout, got two
+            success responses back, and told the customer all was well. How the
+            duplicate surfaced nine days later, and the check that now catches
+            it on the first run.
+          </p>
+          <time datetime="2026-09-25">September 25, 2026</time>
+        </header>
+        <div class="pg-byline">
+          <div class="pg-byline-l">
+            <span class="pg-author"
+              ><svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.5"
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <path d="M4.5 9.5 9.5 4.5" stroke="currentColor" /></svg
+              >Mara Lindqvist</span
+            >
+            <span>Founding engineer</span>
+          </div>
+          <div class="pg-byline-r">
+            <span class="pg-read"
+              ><svg
+                width="13"
+                height="13"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.5"
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <path
+                  d="M7 4v3.2l2 1.3"
+                  fill="none"
+                  stroke="currentColor"
+                /></svg
+              >6 min read</span
+            >
+            <button class="pg-copy" type="button" data-copy-link>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.1"
+                /></svg
+              ><span data-label>Copy link</span>
+            </button>
+          </div>
+        </div>
+
+        <article class="pg-issue-body pg-prose pg-band">
+          <p>
+            On a Tuesday afternoon a customer asked a support agent for a refund
+            on a duplicate order. The agent looked up the order, confirmed the
+            amount, called the payment tool, and replied that the refund was on
+            its way.
+          </p>
+          <p>
+            Nine days later the finance team found two refunds against the same
+            order. The customer had been paid back twice, and the agent's reply
+            had been completely accurate about one of them.
+          </p>
+          <p>
+            Nobody had done anything wrong in the usual sense. The tool worked.
+            The agent's retry logic worked. The reply was polite and correct.
+            The failure was in the gap between those three things.
+          </p>
+
+          <p class="pg-eyebrow">The failure</p>
+          <h2>A retry after a timeout is a second request</h2>
+          <p>
+            The payment provider took eleven seconds to answer the first refund
+            call. The agent's tool wrapper gave up at ten, recorded a timeout,
+            and the agent did what it had been told to do with a failed tool
+            call: try once more.
+          </p>
+          <p>
+            The first request had not failed. It had been slow. It completed on
+            the provider's side a second after the wrapper stopped waiting, and
+            the retry went through as a fresh refund with its own ID.
+          </p>
+
+          <figure class="pg-figure">
+            <div class="pg-plate-w">
+              <svg
+                viewBox="0 0 700 170"
+                width="100%"
+                role="img"
+                aria-labelledby="t14"
+              >
+                <title id="t14">
+                  Timeline: the first refund call times out at ten seconds but
+                  completes at eleven; the retry starts at ten and completes at
+                  fourteen; the agent replies at fifteen reporting one refund.
+                </title>
+                <g
+                  font-family="IBM Plex Mono, monospace"
+                  font-size="10"
+                  fill="#6c6991"
+                  letter-spacing="1"
+                >
+                  <text x="40" y="150">0S</text>
+                  <text x="330" y="150">10S</text>
+                  <text x="368" y="150">11S</text>
+                  <text x="470" y="150">14S</text>
+                  <text x="505" y="150">15S</text>
+                </g>
+                <line x1="40" y1="130" x2="660" y2="130" stroke="#d4d4dd" />
+                <rect
+                  x="40"
+                  y="30"
+                  width="290"
+                  height="16"
+                  fill="#755cfe"
+                  fill-opacity=".25"
+                  stroke="#755cfe"
+                  stroke-width=".8"
+                />
+                <rect
+                  x="330"
+                  y="30"
+                  width="38"
+                  height="16"
+                  fill="none"
+                  stroke="#c2334d"
+                  stroke-dasharray="3 2"
+                />
+                <rect
+                  x="330"
+                  y="62"
+                  width="140"
+                  height="16"
+                  fill="#755cfe"
+                  fill-opacity=".25"
+                  stroke="#755cfe"
+                  stroke-width=".8"
+                />
+                <circle cx="510" cy="102" r="5" fill="#1d1956" />
+                <g
+                  font-family="Figtree, sans-serif"
+                  font-size="12"
+                  fill="#1d1956"
+                >
+                  <text x="48" y="42">refund call 1</text>
+                  <text x="376" y="42" fill="#c2334d">
+                    completed after timeout
+                  </text>
+                  <text x="338" y="74">refund call 2 (retry)</text>
+                  <text x="522" y="106">
+                    reply: "your refund is on its way"
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              Two refunds landed. The run recorded one timeout and one success.
+            </figcaption>
+          </figure>
+
+          <p class="pg-eyebrow">How it surfaced</p>
+          <h2>Nine days, one reconciliation report</h2>
+          <p>
+            Nothing in the agent's own telemetry looked unusual. One tool call
+            failed and one succeeded, which is exactly what a retry is supposed
+            to look like. The duplicate only appeared when the finance team ran
+            their monthly reconciliation and found two refund IDs pointing at
+            one order.
+          </p>
+          <p>
+            By then the same pattern had happened four more times, each one on a
+            day when the provider was slow.
+          </p>
+
+          <aside class="pg-note">
+            <h3>For your team</h3>
+            <p>
+              List every tool your agent can call that moves money, sends a
+              message, or changes a record someone else owns. For each one, ask
+              what happens if it is called twice with the same arguments.
+            </p>
+            <p>
+              If the honest answer is "it happens twice", the tool needs an
+              idempotency key before it needs a retry.
+            </p>
+          </aside>
+
+          <p class="pg-eyebrow">The check</p>
+          <h2>Compare actions against the reply, not against the log</h2>
+          <p>
+            The run's own record was fine. What was wrong was the relation
+            between the actions taken and the sentence the customer received:
+            two refunds out, one refund reported.
+          </p>
+          <p>
+            Sift now counts side-effecting calls by target. Two successful calls
+            that change the same order inside one run, where the final answer
+            describes one change, raise a flag that names both calls. It would
+            have fired on the first Tuesday.
+          </p>
+          <h3>What to change in the tool</h3>
+          <p>
+            Pass an idempotency key derived from the conversation and the order,
+            so a retry is recognised as the same request. Most payment providers
+            accept one, and it turns the retry from a risk into a safe default.
+          </p>
+
+          <p class="pg-eyebrow">Further reading</p>
+          <h2>From the Sift blog</h2>
+          <ul class="pg-sources">
+            <li>
+              <a href="../blog/reading-a-run-backwards.html"
+                >Read the run backwards</a
+              ><span
+                >Starting from the final answer and walking each claim back to
+                its source.</span
+              >
+            </li>
+            <li>
+              <a href="../blog/the-retry-that-looked-healthy.html"
+                >A retry loop that passed every health check</a
+              ><span
+                >The other way retries go wrong: the same call, over and over,
+                with every metric green.</span
+              >
+            </li>
+          </ul>
+        </article>
+
+        <section class="pg-sub pg-band" aria-labelledby="sub-h">
+          <h2 id="sub-h">Get the next one</h2>
+          <p>
+            Every past issue stays on this site. The next one goes to your inbox
+            on Friday morning.
+          </p>
+          <form class="lw-form" data-newsletter>
+            <label class="pg-sr" for="is-email">Email address</label>
+            <input
+              class="lw-input"
+              id="is-email"
+              type="email"
+              name="email"
+              placeholder="you@work.com"
+              autocomplete="email"
+            />
+            <button class="lw-submit" type="submit">Get Sift Weekly</button>
+          </form>
+          <p class="pg-status" data-status>
+            One email a week. Unsubscribe from any issue.
+          </p>
+        </section>
+
+        <a class="pg-prev" href="issue-013.html">
+          <p class="pg-eyebrow">Previous issue</p>
+          <h3>The tool that said yes to everything</h3>
+        </a>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

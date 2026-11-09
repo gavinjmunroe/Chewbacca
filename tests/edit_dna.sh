@@ -10,8 +10,8 @@
 # has to come out well below the measured one.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-command -v uv >/dev/null || { echo "SKIP edit_dna: uv not installed"; exit 0; }
-command -v ffmpeg >/dev/null || { echo "SKIP edit_dna: ffmpeg not installed"; exit 0; }
+command -v uv >/dev/null || { echo "SKIP edit_dna: uv not installed"; exit 77; }
+command -v ffmpeg >/dev/null || { echo "SKIP edit_dna: ffmpeg not installed"; exit 77; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

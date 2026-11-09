@@ -1,6 +1,8 @@
 ---
 name: reviewing-changes
-description: "Review code for real problems before it goes anywhere. Use when the user asks to review this, look over my code, check this for bugs, tell me if this is any good, find what is wrong with this, review my PR, or asks whether a change is safe to merge or ready for someone else to read. Also use before opening a pull request, after finishing a feature, or when a reviewer has called something sloppy."
+description: "Review code for real problems before it goes anywhere. Use for review this, check for bugs, is this safe to merge, review my PR, before opening a PR, after a feature, or when called sloppy."
+triggers: >-
+  Review code for real problems before it goes anywhere. Use when the user asks to review this, look over my code, check this for bugs, tell me if this is any good, find what is wrong with this, review my PR, or asks whether a change is safe to merge or ready for someone else to read. Also use before opening a pull request, after finishing a feature, or when a reviewer has called something sloppy.
 requires: [git]
 ---
 
@@ -14,6 +16,39 @@ required code-review step. Use a separate reviewer context, fix substantiated
 findings within scope, rerun affected checks, and review the changed result.
 Ask the user only for a genuine unresolved product decision or required authority.
 Independent automated review reduces risk; it does not guarantee bug-free code.
+
+## Step one: attack it before calling it done
+
+Caleb, 2026-10-16, 4:47pm: "I need you to see when a session is complete, bc
+often times it is a false positive there's more stuff to do and things that were
+broken that were missed". Then: "When they build something and say it's done,
+chewbs should attack it from every angle trying to break it before it concludes
+anything!!!!!!!!!".
+
+Reading the diff is step two. Step one is trying to break it:
+
+```bash
+chewbacca break-it attack -m "the real Sabo row" -- python3 tools/x.py run rows.json
+chewbacca break-it attack -m "garbage stdin is refused" --expect fail -- sh -c 'echo nope | python3 tools/x.py plan -'
+chewbacca break-it attack -m "a second client file" -- python3 tools/x.py run clients/other.json
+chewbacca break-it run --transcript "$TRANSCRIPT"     # Codex: --ask "<the prompt>"
+```
+
+`run` splits the ask into clauses and marks each delivered, partly or missing,
+reruns the touched tests (and again on a fresh origin/main once landed), feeds
+every touched command `--help`, garbage, a wrong-shaped JSON and a missing path,
+matches each claim in the draft recap to something that ran, greps added lines
+for TODO, client names and swallowed errors, flags files another tab changed
+after you, and writes a receipt bound to HEAD. Fix what broke, rerun, and put
+the receipt's open list in the reply.
+
+What it catches that green tests did not, from that day: next_move.py landed as
+done with 20 passing tests and crashed on `plan -` fed "not json" (2f97a007);
+a launch-guard fix passed its tests while the installed hook still refused the
+same `cd`; "Saved today's Sabo lessons" went out with none of it committed.
+The break-it Stop hook refuses a done claim over a change it can still break.
+
+## Step two: independent review
 
 For a local Git checkout, run independent review BEFORE composing the final reply.
 Use `review-gate run --repo PATH --session-id ID` for a natively observed Codex
@@ -63,6 +98,62 @@ own review. Removing a boundary brings ordinary files back into parent scope.
 Tracked submodules, special files and unmerged indexes still fail closed. Snapshot
 hashes read fresh content, including same-size edits with restored mtime. Stability
 checks detect ordinary concurrent writes; this is not an atomic filesystem snapshot.
+
+## A second model, and the human reads only the disagreements
+
+The model that wrote the code should not be its only reviewer, and rerunning the
+same model as a skeptic does not help: Ayush measured a skeptical second pass
+moving accuracy from 68 to 66.7 percent, while a human reading only the cells
+where two passes disagreed moved it from 63.3 to 88.3 percent and read 43 percent
+of them. So the second reviewer runs on a different model, and plain code, not a
+third model, decides what agrees.
+
+```sh
+review-cross detect                       # which reviewers would run; spends nothing
+review-cross run --repo PATH [--base REV] # two reviewers, merged
+review-cross run --repo PATH --a-report <review-gate receipt or failure JSON>
+review-cross merge a.json b.json          # merge two saved reports, no model call
+```
+
+Only `claude` is ever started on a diff, because it can run with zero tools.
+codex has no zero-tool mode: `--sandbox read-only` still lets its shell read
+`~/.ssh` or `chat.db`, and an injected diff can ask it to quote them back as a
+finding. So codex counts only as reviewer A through `--a-report`, which reuses
+the findings review-gate already produced, and claude is reviewer B on its own
+default model. Without a report, claude runs as two models (`opus` and `sonnet`
+by default, `CHEWBACCA_REVIEW_CLAUDE_MODEL_A` and `_B` override). `detect` lists
+codex under `excluded` when it is installed.
+
+A diff is attacker-controllable text, so the reviewer gets no way to act on it.
+`review-cross` builds the change itself (git with external diff, textconv and
+fsmonitor off) and sends it on stdin to claude started in an empty temp
+directory, so a repository's `.claude/settings.json` hooks, `AGENTS.md` and
+`.mcp.json` are never in reach. claude runs with no tools, user settings only,
+no MCP servers and an environment built from an allowlist (PATH, HOME, locale,
+its own auth variables), so tokens in the caller's environment are not there.
+The argv is one fixed template, never read from a config file, and a model name
+that could pass for a flag is refused. Every string a reviewer returns, and any
+`--a-report`, passes agent-history's redaction before it is printed, so a key
+that did get quoted prints as `[GITHUB_TOKEN]` or `[PRIVATE_KEY]`. Output is
+parsed as JSON data and printed, never executed.
+
+The merge matches findings on the same file by line proximity and word overlap
+of message plus scenario, one to one, best match first. Output has three parts:
+
+- **Agreed**: both models found it. Fix these yourself, as with any substantiated
+  finding. A severity mismatch is noted but is not a disagreement.
+- **Only A / only B**: the disagreements. These, and only these, go to the user,
+  each with the scenario, because one model's word against the other's is a
+  judgment the agent should not settle by picking the reviewer it likes.
+- **Single-model**: no second model was installed, or it failed or timed out.
+  The output says SINGLE-MODEL on its first line and every finding is labeled
+  unconfirmed. Never describe it as cross-checked.
+
+Exit 0 means neither reviewer found anything, 1 means findings to fix or
+arbitrate, 2 means the review could not run. `review-cross` is advisory and
+mints no receipt; the `review-gate` receipt above is still the gate. The match
+thresholds in `tools/review_cross.py` are guesses until calibrated against real
+paired reviews.
 
 ## Get the code first
 

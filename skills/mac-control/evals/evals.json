@@ -8,7 +8,7 @@
      "expect_tools": ["sqlite3"],
      "reject": ["opening the Messages window", "screenshot"]},
     {"prompt": "What URL is open in Safari?", "expect_layer": 2,
-     "expect_tools": ["osascript"],
+     "expect_tools": ["chewie run"],
      "reject": ["screenshot", "accessibility tree"]},
     {"prompt": "Save the file", "expect_layer": 4,
      "expect_tools": ["hotkey cmd+s"],

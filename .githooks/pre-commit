@@ -76,6 +76,13 @@ if [ -z "${SKIP_MANIFEST_GUARD:-}" ] && [ -f tools/manifest_guard.py ]; then
   python3 tools/manifest_guard.py || exit 1
 fi
 
+# A malformed SKILL.md is silently unregistered. Checked here, against the
+# staged bytes, so it's refused in the tab that wrote it instead of blocking
+# every tab's autopush once it reaches main (screen-time, 2026-10-09).
+if [ -f tools/frontmatter.py ] && printf '%s\n' "$STAGED" | grep -q 'SKILL\.md$'; then
+  python3 tools/frontmatter.py --staged || exit 1
+fi
+
 # ── Concurrent sessions ──────────────────────────────────────────────────────
 #
 # The mtime heuristic below CANNOT catch the case that keeps happening, and it
@@ -158,14 +165,23 @@ fi
 WINDOW=${STALE_STAGED_MINUTES:-45}
 NEWEST=0
 declare -a TIMES=() NAMES=()
-while IFS= read -r f; do
-  [ -f "$f" ] || continue
-  m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+# One stat call for the whole list, not one per file (a stat per path made a
+# 3,000-file commit take 27 s on 2026-10-20). Pick the flavour by probing,
+# never by whether output came back: GNU `stat -f` means filesystem status and
+# prints plenty, so an output test never reached the GNU fallback.
+if stat -c %Y . >/dev/null 2>&1; then STAT_FMT=(-c '%Y %n'); else STAT_FMT=(-f '%m %N'); fi
+MTIMES=$(printf '%s\n' "$STAGED" | while IFS= read -r f; do [ -f "$f" ] && printf '%s\0' "$f"; done \
+  | { xargs -0 stat "${STAT_FMT[@]}" 2>/dev/null || true; })
+while IFS= read -r line; do
+  m=${line%% *}; f=${line#* }
+  # Anything that isn't "<digits> <path>" is skipped, never compared.
+  case "$m" in ''|*[!0-9]*) continue ;; esac
   [ "$m" -gt "$NEWEST" ] && NEWEST=$m
   TIMES+=("$m"); NAMES+=("$f")
-done <<< "$STAGED"
+done <<< "$MTIMES"
 
-[ "$NEWEST" -gt 0 ] || exit 0
+# No early exit when no mtime came back: the authorship check below must
+# still run, and with no TIMES nothing can count as stale.
 CUTOFF=$(( NEWEST - WINDOW * 60 ))
 
 STALE=""
@@ -197,13 +213,17 @@ printf '%s\n' "$STAGED" | sed 's/^/  /' >&2
 # behaviour exactly as it was.
 WRITE_LOG="${CHEWBACCA_WRITE_LOG:-$HOME/.chewbacca/write-log.tsv}"
 if [ -s "$WRITE_LOG" ]; then
+  # One pass over the log. This used to grep the whole log once per staged
+  # file: the 5,217-file amber/ import (2026-10-20) against a 279,468-row log
+  # was still in this loop after 41 minutes. Column 3 is the absolute path,
+  # and the last row for a path names its author.
+  TOP=$(pwd)
   MIXED=$(
-    { printf '%s\n' "$STAGED"; } | while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      abs="$(cd "$(dirname "$f")" 2>/dev/null && pwd)/$(basename "$f")"
-      sid=$(grep -F "	$abs" "$WRITE_LOG" 2>/dev/null | tail -1 | cut -f2)
-      [ -n "$sid" ] && printf '%s\t%s\n' "$sid" "$f"
-    done
+    printf '%s\n' "$STAGED" | awk -F'\t' -v top="$TOP" '
+      NR == FNR { if ($0 != "") want[top "/" $0] = $0; next }
+      ($3 in want) { last[$3] = $2 }
+      END { for (p in last) printf "%s\t%s\n", last[p], want[p] }
+    ' - "$WRITE_LOG" 2>/dev/null
   )
   SESSIONS=$(printf '%s\n' "$MIXED" | cut -f1 | grep -v '^$' | sort -u | wc -l | tr -d ' ')
   if [ "${SESSIONS:-0}" -gt 1 ]; then

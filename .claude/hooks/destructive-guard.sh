@@ -1,0 +1,378 @@
+#!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words.
+# Every refusal below needs a git verb it judges (worktree remove, checkout,
+# switch, restore, reset, clean, stash) in the text. Proven by
+# tools/hookd_replay.py: 0.167 s of CPU on every Bash call before (2026-10-12).
+# gate: worktree checkout switch restore reset clean stash read-tree checkout-index
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
+# Timing, logging, a watchdog and an output cap. See lib.sh.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
+type hook_init >/dev/null 2>&1 && hook_init destructive-guard.sh 5
+# PreToolUse: refuse the git commands that destroy uncommitted work other tabs
+# may own, before they run.
+#
+# WHAT HAPPENED. 2026-10-09: a cleanup ran `git worktree list | grep
+# scratchpad | ... git worktree remove --force` and deleted another tab's
+# worktree along with its uncommitted edit. The creator distill (2026-10-10)
+# found the same failure elsewhere: Jeffrey Emanuel's destructive_command_guard
+# exists because an agent ran `git checkout --` and destroyed uncommitted work.
+# settings.json already denies rm -rf ~ and force pushes; nothing covered these.
+#
+# WHAT IT REFUSES, only when there's something to lose:
+#   1. `git worktree remove` of a path inside another Claude session's
+#      scratchpad (/private/tmp/claude-*/<project>/<session-id>/...).
+#   2. In a repo with uncommitted changes: `git checkout -- <path>` or
+#      `git checkout .`, `git restore` without --staged, `git reset --hard`,
+#      `git clean -f`, and a bare `git stash` / `stash drop` / `stash clear`
+#      (the stash stack is shared by every worktree of the repo).
+# DESTRUCTIVE_OK=1 in the command lets a deliberate one through.
+
+command -v jq >/dev/null 2>&1 || exit 0
+INPUT=$(cat)
+[ "$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')" = "Bash" ] || exit 0
+CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
+SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
+[ -n "$CMD" ] || exit 0
+# chewbacca-bashparse (crates/bashparse, tree-sitter-bash) blanks the words
+# handed to a command that only prints, searches or stores them (echo,
+# printf, grep, rg, work-ledger, a git commit -m message) when that output
+# goes nowhere but the screen: not piped on, not captured by $( ), not
+# written to a file. Everything below reads that text and is unchanged, so
+# it refuses a subset of what it did. No binary, a parse error, or anything
+# decided at run time (eval, source, alias, a command name that expands):
+# the raw command, exactly as before. Measured 2026-10-12: a work-ledger
+# note quoting `reset --hard origin/main` was refused as if it ran it.
+BP="${CHEWBACCA_BASHPARSE:-$HOME/.local/bin/chewbacca-bashparse}"
+if [ -x "$BP" ] && MASKED="$(printf '%s' "$CMD" | "$BP" --mask data 2>/dev/null)" && [ -n "$MASKED" ]; then
+  CMD="$MASKED"
+fi
+# DESTRUCTIVE_OK=1 counts only as a leading assignment on the very command
+# it lets through, decided per piece below. A substring check let "echo
+# DESTRUCTIVE_OK=1; git reset --hard" through (security review, 2026-10-10),
+# and a leading one on the whole line let "DESTRUCTIVE_OK=1 echo x; git reset
+# --hard" through until 2026-10-11.
+
+REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 -I - <<'PY'
+import os, re, shlex, subprocess, time
+cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
+
+# Split into simple commands. Heredoc bodies are data, unless a shell or an
+# eval reads them: 'bash <<EOF' runs its body (security review, 2026-10-11).
+# The opener line itself always stays: 'cat <<EOF; git reset --hard' runs the
+# reset, and the old regex dropped everything after the tag.
+SHELLS = ("bash", "sh", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "xargs")
+lines, kept, i = cmd.split("\n"), [], 0
+# Where each stripped line sits, built once. The old check rebuilt the tail of
+# the line list for every heredoc opener: 24,000 lines of `cat <<A` before a
+# `git reset --hard` (192 KB) took past the hook's timeout, the hook was
+# killed, and a killed hook lets the command run (break-it, 2026-10-19).
+import bisect
+where_line = {}
+for idx, l in enumerate(lines):
+    where_line.setdefault(l.strip(), []).append(idx)
+def tag_after(tag, start):
+    idxs = where_line.get(tag, [])
+    k = bisect.bisect_left(idxs, start)
+    return k < len(idxs)
+while i < len(lines):
+    line = lines[i]
+    kept.append(line)
+    i += 1
+    # Not a here-string (<<<) and not arithmetic: a heredoc only when its
+    # terminator line really follows. Otherwise nothing is dropped.
+    for tag in re.findall(r"(?<!<)<<(?!<)-?\s*['\"]?([A-Za-z_]\w*)['\"]?", line):
+        if not tag_after(tag, i):
+            continue
+        opener = re.split(r"&&|\|\||;|\|", line.split("<<", 1)[0])[-1].split()
+        # Fed to a shell directly or through a pipe: the body runs.
+        runs = (bool(opener) and os.path.basename(opener[0]) in SHELLS) or bool(
+            re.search(r"\|\s*(?:\S*/)?(?:sh|bash|zsh|dash|ksh|fish|python3?|node|perl|ruby)\b", line))
+        while i < len(lines) and lines[i].strip() != tag:
+            if runs:
+                kept.append(lines[i])
+            i += 1
+        i += 1
+body = "\n".join(kept)
+# A subshell, `cd -`, pushd/popd or a command substitution makes the working
+# directory after a piece unknowable from the text, so every directory the
+# command names is judged, not just the tracked one.
+uncertain = bool(re.search(r"[()\x60]|\bpopd\b|\bcd\s+-(\s|$)", body))
+# Only a simple command gets the precise reading below: one line, no heredoc,
+# here-string, substitution, background job, subshell, group, shell -c, eval,
+# source, xargs, pushd/popd, cd -, CDPATH, GIT_DIR or printf -v, and no
+# separator inside quotes. Anything else is also judged in the session's cwd,
+# exactly as before 2026-10-11. A review that night reproduced eight ways a
+# smarter reading of complex commands lost work the old rule had kept; the
+# guard is a net for accidents, and accidents live in the simple commands.
+SPECIAL = re.compile(r"\n|<<|\$\(|\x60|(?<![&>])&(?![&>])|[(){}]"
+                     r"|\b(?:eval|source|xargs|pushd|popd|CDPATH|GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|mapfile|readarray|exec|alias)\b"
+                     r"|printf\s+-v|\bcd\s+-(?:\s|$)|\b(?:sh|bash|zsh|dash|ksh|fish)\s+-c\b"
+                     r"|\|\s*(?:sh|bash|zsh|dash|ksh|fish|python3?|node|perl|ruby)\b")
+quotes_clean = not any(re.search(r"[;&|]", q) for q in re.findall(r"'[^']*'|\"[^\"]*\"", cmd))
+simple = not SPECIAL.search(cmd) and quotes_clean and not uncertain
+if not simple and re.match(r"\s*DESTRUCTIVE_OK=1\s", cmd):
+    raise SystemExit  # the old whole-command override, for a command too complex to read
+segments = re.split(r"&&|\|\||;|\n|\|", body)
+
+SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+        "-c", "core.attributesFile=/dev/null"]
+ENV = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+# One budget for every git call in a check. The hook is registered with a 5 s
+# timeout and a killed hook lets the command through, so three calls at 4 s
+# each (2026-10-09) could fail open. Past the budget, assume dirty.
+DEADLINE = time.monotonic() + 3.0
+
+def left():
+    remaining = DEADLINE - time.monotonic()
+    if remaining <= 0.05:
+        raise TimeoutError("destructive-guard: git budget spent")
+    return remaining
+
+def filter_guard(where):
+    # A repo's filter.<name>.clean runs on git status, and attributes can name
+    # it from .git/info/attributes, which no attr-source or flag skips (shown
+    # 2026-10-09). So blank every driver the repo's own config defines, as
+    # bin/lib/surfaces/code.py does. Reading config runs nothing. None means
+    # the config can't be read or names a driver a -c can't take back.
+    r = subprocess.run(SAFE + ["-C", where, "config", "--list", "--show-scope", "-z"],
+                       capture_output=True, text=True, timeout=left(), env=ENV)
+    if r.returncode != 0:
+        return None
+    tokens = r.stdout.split("\0")
+    names = set()
+    for scope, entry in zip(tokens[0::2], tokens[1::2]):
+        key = entry.split("\n", 1)[0]
+        if scope in ("global", "system") or not key.lower().startswith("filter."):
+            continue
+        rest = key[len("filter."):]
+        if "." not in rest:
+            continue
+        name = rest.rsplit(".", 1)[0]
+        if not name or any(ch in name for ch in "=\n\0"):
+            return None
+        names.add(name)
+    guard = []
+    for name in sorted(names):
+        for var in ("clean", "smudge", "process"):
+            guard += ["-c", f"filter.{name}.{var}="]
+        guard += ["-c", f"filter.{name}.required=false"]
+    return guard
+
+def repo_dirty(where, untracked=False):
+    # `where` comes from the command being checked, so the repo is untrusted:
+    # git status runs core.fsmonitor and filter drivers from repo config, which
+    # are arbitrary code. Turn them and hooks off. If git can't answer, or the
+    # config can't be neutralised, assume there's work to lose (fail closed),
+    # since that's the case this guard exists for.
+    try:
+        probe = subprocess.run(SAFE + ["-C", where, "rev-parse", "--git-dir"],
+                               capture_output=True, text=True, timeout=left(), env=ENV)
+        if probe.returncode != 0:
+            return "not a git repository" not in probe.stderr
+        guard = filter_guard(where)
+        if guard is None:
+            return True
+        r = subprocess.run(SAFE + guard + ["-C", where, "status", "--porcelain", "--ignore-submodules=all"],
+                           capture_output=True, text=True, timeout=left(), env=ENV)
+    except Exception:
+        return True
+    if r.returncode != 0:
+        return "not a git repository" not in r.stderr
+    return any(l and (untracked or not l.startswith("??")) for l in r.stdout.splitlines())
+
+where = cwd
+# Catch-all on the text itself, whatever names git: eval "...", x=git; $x,
+# $(which git), sh -c '...' (security reviews of f92c31af, 2026-10-10, and of
+# 2232e9d9, 2026-10-11). The word-level parser below can't see through those,
+# so a verb phrase in a piece it did not parse as that very git call decides
+# on every directory the text names, and on the session's cwd. Quotes are
+# removed first, so 'git reset --ha""rd' is still the phrase.
+# Widened 2026-10-19 after a break-it pass ran each of these through eval,
+# sh -c, $x, find -exec and python os.system and got rc 0 in a dirty repo:
+# restore without --staged, clean --force, reset --merge/--keep, switch -f,
+# checkout <tree> <path>, checkout-index -f, read-tree --reset, stash -u.
+# The new verbs need git (or a $var, or a closing paren) right before them:
+# replayed over 800 real commands, the bare phrases refused `npm cache clean
+# --force` and a team comment saying "the fixed checkout this morning".
+PHRASE = re.compile(r"(\breset\s+(?:\S+\s+)*--hard|\bcheckout\s+(?:--(?=\s)|\.(?=\s|$|[;)])|-f\b|--force\b)|\bclean\s+-\w*f|\bstash\s+(?:drop|clear)"
+                    r"|(?:\bgit|\$\{?\w+\}?|\))(?:\s+-[cC]\s+\S+)*\s+"
+                    r"(?:reset\s+(?:\S+\s+)*--(?:merge|keep)"
+                    r"|checkout\s+(?!-)[^\s;&|]+\s+(?:--\s+)?(?!-)[^\s;&|]+"
+                    r"|restore\b(?![^;&|\n]*--staged)"
+                    r"|clean\s+(?:\S+\s+)*--force"
+                    r"|switch\s+(?:\S+\s+)*(?:-f\b|--force|--discard-changes)"
+                    r"|checkout-index\s+(?:\S+\s+)*(?:-\w*f|--force)"
+                    r"|read-tree\s+(?:\S+\s+)*--reset"
+                    r"|stash\s+(?:-u\b|--include-untracked|-a\b|--all)))")
+dequote = lambda text: re.sub(r"[\"'\\]", "", text)
+hidden = 0  # verb phrases no parsed git call accounts for
+# Variables: `W=/tmp/wt; git -C "$W" reset --hard` judges /tmp/wt. On
+# 2026-10-11 that shape was refused as "uncommitted work in
+# /Users/joelnewton/$WT": the session's dirty checkout was judged instead, and
+# a week of real refusals held 30 like it. Only a name assigned exactly once,
+# as a plain NAME=value piece, resolves. Anything else that touches a name
+# (a second assignment, export, read, for, declare) leaves it unresolved, and
+# an unresolved path is judged dirty.
+names = {"HOME": os.path.expanduser("~"), "TMPDIR": os.environ.get("TMPDIR", "/tmp")}
+counts = {}
+for n in re.findall(r"(?<![\w$])([A-Za-z_]\w*)\+?=", cmd):
+    counts[n] = counts.get(n, 0) + 1
+tainted = {n for n, c in counts.items() if c > 1}
+tainted |= set(re.findall(r"\b(?:export|declare|typeset|local|readonly|read|for|select|unset|getopts)\s+(?:-\S+\s+)*([A-Za-z_]\w*)", cmd))
+tainted |= {"PWD", "OLDPWD", "GIT_DIR", "GIT_WORK_TREE"}
+
+def expand(word):
+    out = re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: names.get(m.group(1) or m.group(2), m.group(0)), word)
+    return os.path.expanduser(out)
+
+def resolve(path, base):
+    path = expand(path)
+    return path if os.path.isabs(path) else os.path.join(base, path)
+
+targets = {cwd}  # every directory the command names, for the catch-all
+for seg in segments:
+    try:
+        w = shlex.split(seg)
+    except ValueError:
+        w = seg.split()
+    # A subshell or group: `( cd x && git reset --hard )` runs inside.
+    while w and w[0] in ("(", "{", "!", "then", "do", "else", "elif", "if", "while", "until"):
+        w = w[1:]
+    assigned = []
+    while w and ("=" in w[0] and not w[0].startswith("-") or w[0] in ("nice", "-n", "19", "10", "env")):
+        assigned.append(w[0])
+        w = w[1:]
+    if not w:
+        for a in assigned:
+            key, _, value = a.partition("=")
+            if re.fullmatch(r"[A-Za-z_]\w*", key) and key not in tainted:
+                value = expand(value)
+                if "$" not in value and chr(96) not in value:
+                    names[key] = value
+        continue
+    ok_here = simple and "DESTRUCTIVE_OK=1" in assigned
+    if ok_here:
+        continue  # the override names this command, and only this one
+    found = len(PHRASE.findall(dequote(seg)))
+    if w[0] in ("cd", "pushd") and len(w) > 1:
+        where = resolve(w[1], where)
+        targets.add(where)
+        hidden += found
+        continue
+    # `command git`, `exec git`, `/usr/bin/git`, `xargs git` all run git.
+    while w and w[0] in ("command", "exec", "xargs", "sudo", "time"):
+        w = w[1:]
+    if not w or os.path.basename(w[0]) != "git":
+        hidden += found
+        continue
+    here = where
+    aliases = {}
+    # GIT_DIR / GIT_WORK_TREE in front of git move it somewhere else.
+    for a in assigned:
+        key, _, value = a.partition("=")
+        if key in ("GIT_WORK_TREE", "GIT_DIR"):
+            here = resolve(value[:-5] if key == "GIT_DIR" and value.rstrip("/").endswith(".git") else value, where)
+    a = w[1:]
+    # Global options before the verb: -C <dir>, -c k=v, --git-dir, --work-tree
+    while a and a[0].startswith("-"):
+        if a[0] == "-C" and len(a) > 1:
+            here, a = resolve(a[1], here), a[2:]
+        elif a[0] in ("-c", "--git-dir", "--work-tree", "--namespace", "--exec-path") and len(a) > 1:
+            if a[0] == "--work-tree":
+                here = resolve(a[1], here)
+            # `git -c alias.c=clean c -fdx` ran clean under the name c and
+            # deleted an untracked file (break-it, 2026-10-19).
+            m = re.match(r"alias\.([^=]+)=(.*)", a[1], re.S) if a[0] == "-c" else None
+            if m:
+                aliases[m.group(1)] = m.group(2)
+            a = a[2:]
+        elif a[0].startswith("--work-tree="):
+            here, a = resolve(a[0].split("=", 1)[1], here), a[1:]
+        else:
+            a = a[1:]
+    targets.add(here)
+    if not a:
+        hidden += found
+        continue
+    if a[0] in aliases:
+        expansion = aliases[a[0]].lstrip("!")
+        try:
+            exp = shlex.split(expansion)
+        except ValueError:
+            exp = expansion.split()
+        if exp and os.path.basename(exp[0]) == "git":
+            exp = exp[1:]
+        a = exp + a[1:]
+        # A shell alias (!...) can run anything; its phrases count as hidden.
+        hidden += len(PHRASE.findall(dequote(expansion)))
+    if not a:
+        continue
+    verb = a[0]
+    # 1. another session's worktree
+    if verb == "worktree" and a[1:2] == ["remove"]:
+        for p in a[2:]:
+            m = re.search(r"/claude-\d+/[^/]+/([0-9a-f-]{36})/", p + "/")
+            if m and sid and m.group(1) != sid:
+                print(f"`git worktree remove {p}` targets another Claude session's worktree ({m.group(1)[:8]}), not this one's ({sid[:8]}).")
+                raise SystemExit
+        hidden += found
+        continue
+    plain = [x for x in a[1:] if not x.startswith("-")]
+    destroys = (
+        (verb == "checkout" and ("--" in a or "." in a[1:] or "-f" in a or "--force" in a
+                                 or (len(plain) >= 2 and not {"-b", "-B", "--orphan"} & set(a))))
+        or (verb == "switch" and bool({"-f", "--force", "--discard-changes"} & set(a)))
+        or (verb == "restore" and "--staged" not in a)
+        or (verb == "reset" and ("--hard" in a or "--merge" in a or "--keep" in a))
+        or (verb == "clean" and any(x.startswith("-") and "f" in x for x in a[1:]))
+        or (verb == "stash" and (len(a) == 1 or a[1] in ("drop", "clear")
+                                 or ((a[1] == "push" or a[1].startswith("-")) and "-m" not in a and "--message" not in a)))
+        or (verb == "checkout-index" and any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a[1:]))
+        or (verb == "read-tree" and "--reset" in a)
+    )
+    # This call accounts for at most one phrase in its own text; any other
+    # phrase in the piece ($(...), an alias) is hidden.
+    hidden += max(0, found - (1 if destroys and PHRASE.search(" ".join(a)) else 0))
+    if destroys:
+        # The session's cwd is always judged too. Judging only a resolved
+        # target let six one-line shapes through on 2026-10-11 (a branch that
+        # never ran, W[0]=, a symlink, option order, zsh's two-argument cd):
+        # a parse can be wrong, and the cwd check is what the baseline never
+        # lost. A clean target reached from a dirty cwd takes DESTRUCTIVE_OK=1
+        # on that one command.
+        for d in [here] + sorted(({cwd} | (set() if simple else targets)) - {here}):
+            if repo_dirty(d, untracked=(verb == "clean")):
+                print(f"`git {' '.join(a)}` would throw away uncommitted work in {d}, and other tabs share this checkout.")
+                raise SystemExit
+# A phrase no parsed git call accounts for: something the parser can't see
+# runs it (eval, sh -c, $x). Judge the cwd and every directory the text names.
+if hidden or (not simple and PHRASE.search(dequote(body))):
+    for m in re.finditer(r"(?:-C|cd|pushd|--work-tree=?|GIT_WORK_TREE=)\s*(\S+)", dequote(body)):
+        targets.add(resolve(m.group(1).rstrip(";)&|"), cwd))
+    first = PHRASE.search(dequote(body))
+    for t in sorted(targets):
+        if repo_dirty(t, untracked=True):
+            print(f"this runs `{first.group(1) if first else 'a destructive git verb'}`, which would throw away uncommitted work in {t}.")
+            raise SystemExit
+PY
+)
+RC=$?
+# A crash in the reader used to print nothing, and nothing means allow. A
+# reader that can't finish on a command naming one of the gate verbs refuses
+# instead (break-it, 2026-10-19).
+if [ "$RC" -ne 0 ] && [ -z "$REASON" ] \
+   && printf '%s' "$CMD" | grep -qE '(^|[^[:alnum:]_-])(worktree|checkout|switch|restore|reset|clean|stash|read-tree|checkout-index)([^[:alnum:]_-]|$)'; then
+  REASON="the guard couldn't read this command (exit $RC), and it names a git verb that can throw away work."
+fi
+[ -n "$REASON" ] || exit 0
+{
+  echo "destructive-guard: refusing. $REASON"
+  echo
+  echo "On 2026-10-09 a worktree cleanup deleted another tab's uncommitted edit,"
+  echo "and the same shape (git checkout --) is how agents elsewhere lose work."
+  echo "Commit or copy what you need first, touch only paths you created, or put"
+  echo "DESTRUCTIVE_OK=1 in the command if you've checked it's yours to discard."
+} >&2
+exit 2

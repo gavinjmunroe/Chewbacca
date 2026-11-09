@@ -1,0 +1,8 @@
+{
+  "name": "nomic+mxbai 0.5",
+  "weight": 0.5,
+  "model2": "mxbai-embed-large",
+  "chosen_by": "net queries gained over dev (24), dev2 (46), dev3 (70) against shipped rrf3+feedback on the same frozen index: 0.3 and 0.5 both +5 net; 0.5 picked on MRR (dev3 0.463 vs 0.447), the stated tie-break. Ship rule written before the run: ship only if sealed clears 55.4% or gains 3+ net queries, because it costs a second model resident and a second embed per prompt.",
+  "index": "frozen copy of ~/second-brain/.brain at 2026-10-12 22:50, 839 files, 4006 chunks",
+  "frozen_at": "2026-10-13T00:42:07-0700"
+}

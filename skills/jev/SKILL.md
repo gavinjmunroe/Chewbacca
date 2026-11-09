@@ -1,6 +1,8 @@
 ---
 name: jev
-description: "Use Chewbacca's Jev integration for cheap typed decisions, semantic skill selection, classification, scoring, and yes/no judgments with TypeSafe. Use when routing or evaluating supplied text can replace a generative-model parsing step."
+description: "Chewbacca's Jev integration for cheap typed decisions: skill selection, classification, scoring and yes/no judgments with TypeSafe. Use when supplied text can be routed without a generative model."
+triggers: >-
+  Use Chewbacca's Jev integration for cheap typed decisions, semantic skill selection, classification, scoring, and yes/no judgments with TypeSafe. Use when routing or evaluating supplied text can replace a generative-model parsing step.
 ---
 
 # Jev in Chewbacca
@@ -67,6 +69,60 @@ Service token limits still apply. Errors exit 2 without returning a decision.
 There are no automatic retries or automatic actions. Handle failures explicitly
 with the existing deterministic path or the agent's reasoning.
 
+## Inside a hook
+
+A guard asks with `hook_judge <name> "<question>"` from `.claude/hooks/lib.sh`, text
+on stdin, then `hook_judge_yes "$P" <line>`. Facts first in code, Jev only when the
+fact holds, and no judgment means no refusal. Only the agent's own replies and briefs
+go: his typed prompts stay on the Mac, and go to the model reading them as a short
+note. `tests/eval_reply_judges_jev.py` scores new questions and
+`tests/eval_intent_notes.py` scores notes. `docs/reference/INTENT-INVENTORY.md` has
+the sort of what reads what.
+
+Before a question ships, run it over real ordinary turns
+(`tests/fixtures/steering/closing_turns_2026_10_16.json`) and compare with the rule it
+replaces. On 2026-11-05 three questions scored clean on incident cases and fired far
+past their word lists on real turns, so they didn't ship.
+
+## Plan expensive, build cheap
+
+`model-route` tells a prompt which tier it wants. For work big enough to plan,
+plan on the expensive tier, save the plan, and build it in a fresh session on a
+cheaper one:
+
+- `model-route handoff PLAN.md --save` turns a plan with `## Goal`,
+  `## Files`, `## Steps` and `## Acceptance` into a self-contained page. Jev
+  picks the build tier: mechanical builds on haiku, implementation and
+  debugging on sonnet. Architecture or extreme stays on opus and the page warns
+  that design is still open. `## Tier` in the plan or `--tier` pins it, and
+  with Jev unavailable the default is sonnet. `--json` returns the model and
+  the prompt for an Agent call. Pages land only as new files in
+  `~/.chewbacca/handoffs`: `--save` names one from the title, `--out NAME`
+  takes a plain basename, and a path, `..`, a symlink or an existing file is
+  refused.
+- `model-route check FILE` refuses a plan whose acceptance lines are prose,
+  placeholders, shell syntax, or anything that does not fit one of these
+  templates exactly: `pytest [-q|-x]... <path>...`,
+  `python3 -m pytest [-q|-x]... <path>...`, `python3 <path>`, `bash <path>`,
+  `sh <path>`, `node <path>`, `test -f|-d|-e <path>`,
+  `grep -q|-qF|-qE <word> <path>`, `git diff --quiet|--exit-code [<path>...]`,
+  `git status --porcelain`, `true`, `false`. No other flag is accepted, a word
+  is `[A-Za-z0-9_.-]` and never starts with `-`, and every path is resolved
+  with realpath, planned ones too, so a symlinked directory cannot carry a
+  check outside the repo. A denylist of options lost three review rounds in a
+  row, so there is none. A check that needs npm, cargo, go, tsc or a direct
+  `./script` goes in a repo script and runs as `bash <path>`. A plan is
+  model-written, so treat a planted one as hostile. `handoff` refuses the same
+  plans and writes nothing, and never runs a check.
+- `model-route accept HANDOFF.md --yes` prints every argv, then runs them with
+  no shell from the repo root, re-validating each one with the same function
+  immediately before it runs, and exits 1 if any fails. Without `--yes` it
+  prints the argv list and runs nothing. **Use it only in a repo you trust**:
+  a test is repo code, so pytest's conftest or a script the plan names
+  executes as written. The build session is done when this
+  passes, never when it says so itself. The browser bridge can call `check`
+  and `handoff` but never `accept`, `--out` or `--save`.
+
 ## Verify before relying on it
 
 `chewbacca jev smoke` makes one paid call using synthetic text and all three
@@ -80,7 +136,7 @@ messages, credentials, or background prompts into evaluation calls.
 
 ## Orchestrate and measure
 
-Read [the orchestration playbook](../../docs/JEV-ORCHESTRATION.md) before designing
+Read [the orchestration playbook](../../docs/reference/JEV-ORCHESTRATION.md) before designing
 new decision points. These practices apply across user-selected models and hosts;
 they do not establish that every host or integration has been tested. Preserve the
 selected runtime/model and disabled lifecycle hooks. This CLI's pinned default is

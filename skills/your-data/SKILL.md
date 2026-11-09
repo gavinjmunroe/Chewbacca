@@ -1,6 +1,8 @@
 ---
 name: your-data
-description: "Decide what Chewbacca is allowed to read, then get it in. Use when somebody has just installed this and does not know where to start, asks what it can see or read, asks how to get their life into it, asks which permissions it needs or why macOS is prompting, wants to import messages, contacts, LinkedIn, email, calendar, notes or files, or asks what to do with a Google Drive or Takeout export. Also use when a question could not be answered because the data was never imported, and when deciding what to import next."
+description: "Decide what Chewbacca may read, then get it in. Use after install, for what can you see, which permissions and why, importing messages, contacts, LinkedIn, email, calendar, notes, files or Takeout."
+triggers: >-
+  Decide what Chewbacca is allowed to read, then get it in. Use when somebody has just installed this and does not know where to start, asks what it can see or read, asks how to get their life into it, asks which permissions it needs or why macOS is prompting, wants to import messages, contacts, LinkedIn, email, calendar, notes or files, or asks what to do with a Google Drive or Takeout export. Also use when a question could not be answered because the data was never imported, and when deciding what to import next.
 ---
 
 # Getting somebody's life into this
@@ -21,7 +23,7 @@ Offer only sources relevant to the person's goal: selected texts, contacts,
 calendar entries, notes, email, files or a LinkedIn export. They can use Chewbacca
 without importing any of these.
 
-Read `docs/PRIVACY.md` before describing a data flow. A local database does not
+Read `docs/guide/PRIVACY.md` before describing a data flow. A local database does not
 mean local-only processing: content placed in a hosted agent's context goes to
 that provider. `people distill` sends selected message content through its model
 backend; connected APIs and MCP services receive their tool inputs. Explain the
@@ -46,6 +48,11 @@ Say what will appear before it appears.
   being replaced by an update and losing its grant.
 
 Run `mac doctor` and read it to them in plain language. Do not paste the table.
+
+`mac-db stores` shows every local Apple database at once (Messages, calls,
+contacts, Mail, Notes, Calendar, Reminders, Safari, Chrome, Photos, Voice
+Memos, Podcasts, downloads, interactions, Screen Time, Biome): readable or
+not, row count, newest entry. `--fix` opens the Full Disk Access pane.
 
 ## 3. Then actually pull it in
 

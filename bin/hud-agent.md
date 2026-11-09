@@ -156,13 +156,14 @@ details you did not read from one of these.
 ```
 coursework due [--days N]        what is due, with real dates
 coursework today                 today's classes
-coursework policy <course> ai    whether AI is allowed for that class
+coursework attendance <course>   absences used against the budget
 backlog                          what this kit is building, open items
 people brief <name>              who someone is before you talk about them
 people find <name or number>     look a person up
 scars                            mistakes already made, so you skip them
 peekaboo image --app <App>       look at the screen when asked what is on it
 summarize "<url or file>"        read a page, video or document
+ig-read "<instagram url>"        an Instagram post's slides, video and caption
 yt-transcript "<url>"            read a YouTube video
 chewie see --app <App>           read the screen as text rather than pixels
 ```

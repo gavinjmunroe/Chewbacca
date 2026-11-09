@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification preferences</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --font:
+          system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --ink: #111111;
+        --dim: #5a5a5a;
+        --mute: #9a9a9a;
+        --faint: #e4e4e4;
+        --canvas: #f8f8f8;
+      }
+
+      html {
+        font-size: 16px;
+      }
+
+      body {
+        font-family: var(--font);
+        background: var(--canvas);
+        color: var(--ink);
+        min-height: 100vh;
+        padding: 88px 24px 120px;
+      }
+
+      .page {
+        max-width: 640px;
+        margin: 0 auto;
+      }
+
+      /* ---- Page heading ---- */
+
+      .page-title {
+        font-size: 2.25rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1.05;
+      }
+
+      .page-sub {
+        margin-top: 10px;
+        font-size: 1rem;
+        font-weight: 400;
+        color: var(--dim);
+        line-height: 1.55;
+      }
+
+      /* ---- Section ---- */
+
+      .section {
+        margin-top: 72px;
+      }
+
+      .section-label {
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--mute);
+        margin-bottom: 32px;
+      }
+
+      /* ---- Row ---- */
+
+      .row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 32px;
+        padding: 14px 0;
+      }
+
+      .row + .row {
+        margin-top: 8px;
+      }
+
+      .row-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .row-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.3;
+      }
+
+      .row-desc {
+        margin-top: 3px;
+        font-size: 0.8125rem;
+        font-weight: 400;
+        color: var(--dim);
+        line-height: 1.5;
+      }
+
+      .row-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        padding-top: 1px;
+      }
+
+      /* ---- Toggle ---- */
+
+      .toggle {
+        position: relative;
+        display: block;
+        width: 44px;
+        height: 26px;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+
+      .toggle input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-track {
+        position: absolute;
+        inset: 0;
+        background: var(--faint);
+        border-radius: 13px;
+        transition: background 0.18s ease;
+      }
+
+      .toggle-thumb {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.18s ease;
+        pointer-events: none;
+      }
+
+      .toggle input:checked ~ .toggle-track {
+        background: var(--ink);
+      }
+      .toggle input:checked ~ .toggle-thumb {
+        transform: translateX(18px);
+      }
+
+      .toggle input:focus-visible ~ .toggle-track {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+
+      /* locked toggle: always on */
+      .toggle--locked {
+        cursor: default;
+        opacity: 0.38;
+      }
+
+      .toggle--locked input {
+        cursor: not-allowed;
+      }
+
+      /* ---- Frequency select ---- */
+
+      .freq {
+        font-family: var(--font);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--ink);
+        background: white;
+        border: 1px solid var(--faint);
+        border-radius: 7px;
+        padding: 5px 26px 5px 10px;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' viewBox='0 0 9 5'%3E%3Cpath d='M1 1l3.5 3L8 1' stroke='%239a9a9a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 9px center;
+        transition: border-color 0.15s;
+      }
+
+      .freq:focus {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+
+      .freq:hover:not(:disabled) {
+        border-color: #c0c0c0;
+      }
+
+      .freq:disabled {
+        opacity: 0.32;
+        cursor: not-allowed;
+      }
+
+      /* ---- Locked label ---- */
+
+      .locked-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--mute);
+      }
+
+      /* ---- Channel strip (below sections) ---- */
+
+      .channel-strip {
+        margin-top: 72px;
+      }
+
+      .channel-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 14px 0;
+      }
+
+      .channel-row + .channel-row {
+        margin-top: 8px;
+      }
+
+      .channel-left {
+        flex: 1;
+      }
+
+      .channel-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .channel-address {
+        margin-top: 2px;
+        font-size: 0.8125rem;
+        color: var(--mute);
+      }
+
+      /* ---- Footer ---- */
+
+      .footer {
+        margin-top: 80px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .save-btn {
+        font-family: var(--font);
+        font-size: 0.9375rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: white;
+        background: var(--ink);
+        border: none;
+        border-radius: 9px;
+        padding: 13px 30px;
+        cursor: pointer;
+        transition:
+          opacity 0.15s,
+          transform 0.1s;
+      }
+
+      .save-btn:hover {
+        opacity: 0.82;
+      }
+      .save-btn:active {
+        transform: scale(0.975);
+      }
+
+      .save-btn:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 3px;
+      }
+
+      .save-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .save-msg {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--mute);
+        opacity: 0;
+        transition: opacity 0.25s;
+      }
+
+      .save-msg.show {
+        opacity: 1;
+      }
+
+      /* ---- Responsive ---- */
+
+      @media (max-width: 520px) {
+        body {
+          padding: 56px 20px 96px;
+        }
+
+        .page-title {
+          font-size: 1.75rem;
+        }
+
+        .row {
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .row-controls {
+          padding-top: 0;
+        }
+
+        .channel-row {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <h1 class="page-title">Notification preferences</h1>
+      <p class="page-sub">
+        Choose what we send, when we send it, and how you get it.
+      </p>
+
+      <!-- Activity -->
+      <section class="section" aria-labelledby="lbl-activity">
+        <div class="section-label" id="lbl-activity">Activity</div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Comments</div>
+            <div class="row-desc">
+              When someone replies to your posts or threads
+            </div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-comments"
+              aria-label="Comments notification frequency"
+            >
+              <option value="instant">Instantly</option>
+              <option value="daily">Daily digest</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <label class="toggle" aria-label="Enable comments notifications">
+              <input
+                type="checkbox"
+                id="tog-comments"
+                checked
+                onchange="syncFreq(this,'freq-comments')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Mentions</div>
+            <div class="row-desc">
+              When someone uses your @handle in a post or comment
+            </div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-mentions"
+              aria-label="Mentions notification frequency"
+            >
+              <option value="instant">Instantly</option>
+              <option value="daily">Daily digest</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <label class="toggle" aria-label="Enable mentions notifications">
+              <input
+                type="checkbox"
+                id="tog-mentions"
+                checked
+                onchange="syncFreq(this,'freq-mentions')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Reactions</div>
+            <div class="row-desc">Likes and upvotes on your content</div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-reactions"
+              disabled
+              aria-label="Reactions notification frequency"
+            >
+              <option value="daily">Daily digest</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <label class="toggle" aria-label="Enable reactions notifications">
+              <input
+                type="checkbox"
+                id="tog-reactions"
+                onchange="syncFreq(this,'freq-reactions')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">New followers</div>
+            <div class="row-desc">When someone follows your account</div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-follows"
+              disabled
+              aria-label="New followers notification frequency"
+            >
+              <option value="daily">Daily digest</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <label
+              class="toggle"
+              aria-label="Enable new follower notifications"
+            >
+              <input
+                type="checkbox"
+                id="tog-follows"
+                onchange="syncFreq(this,'freq-follows')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Messages -->
+      <section class="section" aria-labelledby="lbl-messages">
+        <div class="section-label" id="lbl-messages">Messages</div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Direct messages</div>
+            <div class="row-desc">Private messages from people you follow</div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-dm"
+              aria-label="Direct messages notification frequency"
+            >
+              <option value="instant">Instantly</option>
+              <option value="daily">Daily digest</option>
+            </select>
+            <label
+              class="toggle"
+              aria-label="Enable direct message notifications"
+            >
+              <input
+                type="checkbox"
+                id="tog-dm"
+                checked
+                onchange="syncFreq(this,'freq-dm')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Group messages</div>
+            <div class="row-desc">
+              Activity in shared spaces and group threads
+            </div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-groups"
+              aria-label="Group messages notification frequency"
+            >
+              <option value="instant">Instantly</option>
+              <option value="daily">Daily digest</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <label
+              class="toggle"
+              aria-label="Enable group message notifications"
+            >
+              <input
+                type="checkbox"
+                id="tog-groups"
+                checked
+                onchange="syncFreq(this,'freq-groups')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Account and security -->
+      <section class="section" aria-labelledby="lbl-security">
+        <div class="section-label" id="lbl-security">Account and security</div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Security alerts</div>
+            <div class="row-desc">
+              New sign-ins and changes to your password or email
+            </div>
+          </div>
+          <div class="row-controls">
+            <span class="locked-label">Always on</span>
+            <label
+              class="toggle toggle--locked"
+              aria-label="Security alerts cannot be turned off"
+            >
+              <input type="checkbox" checked disabled />
+              <div class="toggle-track" style="background: var(--ink)"></div>
+              <div
+                class="toggle-thumb"
+                style="transform: translateX(18px)"
+              ></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Login reminders</div>
+            <div class="row-desc">
+              Periodic prompts to review active sessions
+            </div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-login"
+              aria-label="Login reminder frequency"
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+            </select>
+            <label
+              class="toggle"
+              aria-label="Enable login reminder notifications"
+            >
+              <input
+                type="checkbox"
+                id="tog-login"
+                checked
+                onchange="syncFreq(this,'freq-login')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Updates -->
+      <section class="section" aria-labelledby="lbl-updates">
+        <div class="section-label" id="lbl-updates">Updates</div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Product updates</div>
+            <div class="row-desc">
+              New features and changes to how things work
+            </div>
+          </div>
+          <div class="row-controls">
+            <select
+              class="freq"
+              id="freq-product"
+              disabled
+              aria-label="Product updates notification frequency"
+            >
+              <option value="instant">As they ship</option>
+              <option value="weekly">Weekly roundup</option>
+            </select>
+            <label
+              class="toggle"
+              aria-label="Enable product update notifications"
+            >
+              <input
+                type="checkbox"
+                id="tog-product"
+                onchange="syncFreq(this,'freq-product')"
+              />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-body">
+            <div class="row-name">Newsletter</div>
+            <div class="row-desc">
+              Occasional longer reads from the team, no more than twice a month
+            </div>
+          </div>
+          <div class="row-controls">
+            <label class="toggle" aria-label="Subscribe to newsletter">
+              <input type="checkbox" id="tog-newsletter" />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Delivery channels -->
+      <div class="channel-strip" role="group" aria-labelledby="lbl-channels">
+        <div class="section-label" id="lbl-channels">Delivery</div>
+
+        <div class="channel-row">
+          <div class="channel-left">
+            <div class="channel-name">Email</div>
+            <div class="channel-address">m.chen@example.com</div>
+          </div>
+          <label class="toggle" aria-label="Enable email notifications">
+            <input type="checkbox" checked />
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <div class="channel-row">
+          <div class="channel-left">
+            <div class="channel-name">Push notifications</div>
+            <div class="channel-address">This browser</div>
+          </div>
+          <label class="toggle" aria-label="Enable push notifications">
+            <input type="checkbox" checked />
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <div class="channel-row">
+          <div class="channel-left">
+            <div class="channel-name">SMS</div>
+            <div class="channel-address">+1 (555) 019-2847</div>
+          </div>
+          <label class="toggle" aria-label="Enable SMS notifications">
+            <input type="checkbox" />
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button class="save-btn" id="save-btn" onclick="save()">
+          Save preferences
+        </button>
+        <span class="save-msg" id="save-msg" aria-live="polite"
+          >Preferences saved</span
+        >
+      </div>
+    </main>
+
+    <script>
+      function syncFreq(checkbox, freqId) {
+        const sel = document.getElementById(freqId);
+        if (sel) sel.disabled = !checkbox.checked;
+      }
+
+      function save() {
+        const btn = document.getElementById("save-btn");
+        const msg = document.getElementById("save-msg");
+
+        btn.disabled = true;
+        btn.textContent = "Saving...";
+
+        setTimeout(function () {
+          btn.disabled = false;
+          btn.textContent = "Save preferences";
+          msg.classList.add("show");
+          setTimeout(function () {
+            msg.classList.remove("show");
+          }, 2800);
+        }, 550);
+      }
+    </script>
+  </body>
+</html>

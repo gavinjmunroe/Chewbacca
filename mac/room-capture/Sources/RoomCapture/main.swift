@@ -3,6 +3,9 @@
 //   room-capture --out DIR [--chunk 15] [--status FILE] [--no-mic] [--no-system]
 //   room-capture --probe            permission state and the app macOS charges it to, one JSON line, no prompt
 //   room-capture --request          ask macOS for both permissions, then probe
+//   room-capture --mic-users        which apps hold the mic, one JSON line (MicUsers.swift)
+//   room-capture --watch-mic [--interval 2]   the same, a line on every change
+//   room-capture --signature PID    that process's signature fields, one lookup
 //
 // Why this exists: bin/room-listen hears only the mic, so on a call it records
 // one side. Anarlog (MIT, github.com/fastrepl/anarlog) hears both, but it is a
@@ -40,6 +43,10 @@ struct Options {
     var useSystem = true
     var probe = false
     var request = false
+    var micUsers = false
+    var watchMic = false
+    var interval = 2.0
+    var signaturePid: Int32 = 0
 }
 
 func parseOptions() -> Options {
@@ -55,6 +62,10 @@ func parseOptions() -> Options {
         case "--no-system": opts.useSystem = false
         case "--probe": opts.probe = true
         case "--request": opts.request = true
+        case "--mic-users": opts.micUsers = true
+        case "--watch-mic": opts.watchMic = true
+        case "--interval": opts.interval = Double(args.isEmpty ? "" : args.removeFirst()) ?? 2
+        case "--signature": opts.signaturePid = Int32(args.isEmpty ? "" : args.removeFirst()) ?? 0
         default:
             FileHandle.standardError.write("room-capture: unknown argument \(arg)\n".data(using: .utf8)!)
             exit(64)
@@ -212,7 +223,12 @@ final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
     init(mixer: Mixer) { self.mixer = mixer }
 
     func start(completion: @escaping (String?) -> Void) {
-        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
+        // onScreenWindowsOnly: false. With true, a display that is asleep
+        // (lid open, nobody at the Mac, a call on speaker) lists no displays
+        // at all: on 2026-10-10 at 22:21 the helper got "none listed" with
+        // System Profiler saying Display Asleep: Yes, and recorded nothing.
+        // The filter is a whole display, so which windows are on it is moot.
+        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { content, error in
             guard let content, let display = content.displays.first else {
                 completion("no shareable display: \(error?.localizedDescription ?? "none listed")")
                 return
@@ -315,6 +331,9 @@ final class Recorder {
     var timer: DispatchSourceTimer?
     let clock = DispatchQueue(label: "room-capture.clock")
     lazy var system = SystemAudio(mixer: mixer)
+    // TapAudio when ScreenCaptureKit had no display; Any so this file keeps
+    // macOS 13 as its floor.
+    var tap: AnyObject?
     lazy var mic = Microphone(mixer: mixer)
 
     init(opts: Options) { self.opts = opts }
@@ -360,7 +379,24 @@ final class Recorder {
         if opts.useSystem {
             system.onStop = { [weak self] why in self?.setStatus("system", "stopped: \(why)") }
             system.start { [weak self] problem in
-                self?.setStatus("system", problem.map { "off: \($0)" } ?? "on")
+                guard let self else { return }
+                guard let problem else {
+                    self.setStatus("system", "on")
+                    return
+                }
+                // No display (asleep, or none attached): Anarlog's process
+                // tap hears the same output without one.
+                if #available(macOS 14.2, *), problem.hasPrefix("no shareable display") {
+                    let tap = TapAudio(mixer: self.mixer)
+                    if let failed = tap.start() {
+                        self.setStatus("system", "off: \(problem); tap: \(failed)")
+                    } else {
+                        self.tap = tap
+                        self.setStatus("system", "on: Core Audio tap (\(problem))")
+                    }
+                } else {
+                    self.setStatus("system", "off: \(problem)")
+                }
             }
         } else {
             setStatus("system", "off: --no-system")
@@ -408,6 +444,7 @@ final class Recorder {
         clock.sync { cut(final: true) }
         mic.stop()
         system.stop()
+        if #available(macOS 14.2, *) { (tap as? TapAudio)?.stop() }
         setStatus("state", "stopped")
     }
 }
@@ -422,6 +459,25 @@ if opts.request {
     AVCaptureDevice.requestAccess(for: .audio) { _ in asked.signal() }
     _ = asked.wait(timeout: .now() + 120)
     _ = CGRequestScreenCaptureAccess()
+}
+if opts.signaturePid > 0 {
+    // The same one-lookup read the mic watcher uses, for any pid: how its
+    // fields are checked from ground truth without a call on.
+    let sig = signature(of: opts.signaturePid)
+    emitJSON(["pid": Int(opts.signaturePid), "signed": sig.valid, "path": sig.path, "signing_id": sig.identifier,
+              "team": sig.team, "app_id": sig.appIdentifier, "app_team": sig.appTeam])
+    exit(0)
+}
+if opts.micUsers {
+    emitJSON(micSnapshot(playing: true))
+    exit(0)
+}
+if opts.watchMic {
+    // Anarlog polls nothing: it listens for Core Audio property changes. A
+    // 2 s poll is simpler and its cost is one property read per audio
+    // process; the floor keeps a typo from spinning a core. Both guessed,
+    // never measured.
+    watchMic(interval: max(opts.interval, 0.5))
 }
 if opts.probe || opts.request {
     emitJSON(["mic": micState(), "screen": screenState(), "responsible_app": responsibleApp()])

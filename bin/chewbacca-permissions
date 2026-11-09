@@ -2,6 +2,7 @@
 """What macOS has to allow before Chewbacca works, and a guide through each grant.
 
     chewbacca-permissions plan                 JSON: every grant, and which are missing
+    chewbacca-permissions walk                 the same, on Kyber's glass: a ring on each switch
     chewbacca-permissions guide                walk each missing grant, one at a time
     chewbacca-permissions guide --only microphone
     chewbacca-permissions plan --for capture   meeting capture's two grants, for the app running it
@@ -24,11 +25,18 @@ Swift helper in mac/permission-guide, built on first use) and moves on by
 itself as soon as the grant is detected. Nothing here can grant anything:
 `tccutil` only resets and TCC.db is SIP protected, so every grant is a person
 dropping an app into a list or flipping a switch. This file only reads.
+
+`walk` is the on-screen version (bin/lib/permission_walk.py): Kyber's guide
+ring and bubble go on the app's own switch, found through the Settings
+accessibility tree, with Skip and Stop on the glass. The voice reaches it with
+"set up my permissions" or "fix my permissions". Without Kyber running it
+falls back to `guide`.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -381,12 +389,15 @@ def pick_host() -> Path | None:
 
 def guide(args: argparse.Namespace) -> int:
     known = [need[1] for need in SETS[args.for_]]
-    if args.only and args.only not in known:
-        print(f"--only takes one of: {', '.join(known)}", file=sys.stderr)
+    # A comma list, so the welcome step can ask for exactly the grants the
+    # person's chosen goals need and nothing else.
+    only = [o.strip() for o in (args.only or "").split(",") if o.strip()]
+    if any(o not in known for o in only):
+        print(f"--only takes one or more (comma separated) of: {', '.join(known)}", file=sys.stderr)
         return 2
     report = plan(args.host_app, args.for_)
     steps = [n for n in report["needs"]
-             if (not args.only or n["permission"] == args.only)
+             if (not only or n["permission"] in only)
              and (args.include_granted or n["status"] != "granted")]
     if any(n["status"] == "host-unknown" for n in steps):
         picked = pick_host()
@@ -396,7 +407,7 @@ def guide(args: argparse.Namespace) -> int:
             return 2
         report = plan(str(picked), args.for_)
         steps = [n for n in report["needs"]
-                 if (not args.only or n["permission"] == args.only)
+                 if (not only or n["permission"] in only)
                  and (args.include_granted or n["status"] != "granted")]
     if not steps:
         print("Everything Chewbacca needs is already allowed.")
@@ -461,6 +472,100 @@ def guide(args: argparse.Namespace) -> int:
     return 0 if all(outcome == "granted" for _, outcome in results) else 1
 
 
+def walk_steps(report: dict, only: list[str]) -> tuple[list[dict], list[dict]]:
+    """(missing, already on) for the walk, honouring --only."""
+    chosen = [n for n in report["needs"] if not only or n["permission"] in only]
+    return ([n for n in chosen if n["status"] != "granted"], [n for n in chosen if n["status"] == "granted"])
+
+
+def walk(args: argparse.Namespace) -> int:
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import permission_walk as pw  # noqa: PLC0415  only the walk needs the HUD client
+
+    known = [need[1] for need in SETS[args.for_]]
+    only = [o.strip() for o in (args.only or "").split(",") if o.strip()]
+    if any(o not in known for o in only):
+        print(f"--only takes one or more (comma separated) of: {', '.join(known)}", file=sys.stderr)
+        return 2
+    report = plan(args.host_app, args.for_)
+    if any(n["status"] == "host-unknown" for n in report["needs"]) and sys.stdin.isatty():
+        picked = pick_host()
+        if picked is not None:
+            report = plan(str(picked), args.for_)
+    missing, already = walk_steps(report, only)
+    if not missing:
+        print("Everything Chewbacca needs is already allowed.")
+        return 0
+
+    bob = Path(os.environ.get("BOB_DIR") or Path.home() / ".bob")
+    display = pw.HudDisplay(os.environ.get("BOB_HUD_SOCKET") or str(bob / "hud.sock"))
+    if not display.open():
+        print("Kyber isn't running, so the walk can't draw on the screen. Using the cards instead.",
+              file=sys.stderr)
+        return guide(argparse.Namespace(only=args.only, host_app=args.host_app, for_=args.for_,
+                                        include_granted=False, hold=False, timeout=args.timeout))
+    if not build_helper():
+        display.close()
+        return 1
+
+    guide_tool = _load_hud_guide()
+    is_chain_host = report["host"]["detected_by"] == "process-chain"
+    look = bob / "perm-walk-look.json"
+
+    def detect(step: dict) -> str:
+        status, _ = status_for(Path(step["app"]), step["permission"],
+                               step["target"] == "host" and is_chain_host, step.get("automates"))
+        return status
+
+    def drag_card(step: dict):
+        command = [str(HELPER), "guide", "--app", step["app"], "--permission", step["permission"],
+                   "--timeout", str(args.timeout), "--check-command", " ".join(shlex.quote(part) for part in [
+                       sys.executable, str(Path(__file__).resolve()), "check",
+                       "--app", step["app"], "--permission", step["permission"]])]
+        try:
+            return pw.HelperCard(subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        except OSError:
+            return None
+
+    def open_pane(url: str) -> bool:
+        try:
+            return subprocess.run(["/usr/bin/open", url], capture_output=True, timeout=15).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    deps = pw.Deps(
+        open_pane=open_pane,
+        snapshot=lambda: pw.helper_snapshot(HELPER, look),
+        detect=detect,
+        display=display,
+        matches=guide_tool.matches,
+        mark_line=guide_tool.mark_line,
+        drag_card=drag_card,
+        prompt_automation=lambda step: probe_automation(step["automates"], prompt=True) == "granted",
+        log=lambda line: print(line, flush=True),
+    )
+    try:
+        results = pw.Walk(missing, deps, timeout_s=args.timeout, already_on=already).run()
+    finally:
+        display.close()
+    for result in results:
+        print(f"  {result.step['pane']} for {result.step.get('app_name')}: {result.outcome}")
+    turned_on = [r.step for r in results if r.outcome == "on"]
+    if any(step["target"] == "host" for step in turned_on):
+        print("Quit and reopen the app running this session so Full Disk Access takes effect.")
+    if any(step["target"] == "kyber" and step["permission"] == "accessibility" for step in turned_on):
+        print("Quit and reopen Kyber so Accessibility takes effect.")
+    return 0 if all(r.outcome == "on" for r in results) else 1
+
+
+def _load_hud_guide():
+    loader = importlib.machinery.SourceFileLoader("hud_guide", str(ROOT / "bin" / "hud-guide"))
+    spec = importlib.util.spec_from_loader("hud_guide", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
 def check(args: argparse.Namespace) -> int:
     if args.permission not in PERMISSIONS:
         print(f"unknown permission {args.permission}", file=sys.stderr)
@@ -483,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
                              help="which grants: Chewbacca's (default) or meeting capture's")
     guide_parser = sub.add_parser("guide", help="walk each missing grant with the card over System Settings")
-    guide_parser.add_argument("--only", help="just this permission")
+    guide_parser.add_argument("--only", help="just these permissions, comma separated")
     guide_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
     guide_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
                               help="which grants: Chewbacca's (default) or meeting capture's")
@@ -493,6 +598,13 @@ def main(argv: list[str] | None = None) -> int:
                               help="keep each card up until it is closed, even once granted")
     guide_parser.add_argument("--timeout", type=float, default=600,
                               help="seconds before a card gives up (default 600)")
+    walk_parser = sub.add_parser("walk", help="walk each missing grant on Kyber's glass: a ring on the switch")
+    walk_parser.add_argument("--only", help="just these permissions, comma separated")
+    walk_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
+    walk_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
+                             help="which grants: Chewbacca's (default) or meeting capture's")
+    walk_parser.add_argument("--timeout", type=float, default=600,
+                             help="seconds before a step gives up (default 600)")
     check_parser = sub.add_parser("check", help="exit 0 granted, 1 not, 2 cannot tell")
     check_parser.add_argument("--app", required=True)
     check_parser.add_argument("--permission", required=True)
@@ -502,11 +614,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "plan":
         print(json.dumps(plan(args.host_app, args.for_), indent=2))
         return 0
-    if args.command == "guide":
+    if args.command in ("guide", "walk"):
         if args.timeout <= 0:
             print("--timeout must be positive", file=sys.stderr)
             return 2
-        return guide(args)
+        return guide(args) if args.command == "guide" else walk(args)
     return check(args)
 
 

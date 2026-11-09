@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
 #
 # The first line only prints the plan. There is no short domain yet, see
-# docs/ONBOARDING.md, so the raw GitHub URL is the one that works.
+# docs/plans/ONBOARDING.md, so the raw GitHub URL is the one that works.
 #
 # Written for someone who just put Claude on a laptop, has no GitHub account,
 # has never opened Terminal before today, and should not have to care about any
@@ -34,6 +34,8 @@ PROFILE="personal"
 DRY_RUN=0
 FAST=0
 PERSON_NAME=""
+TARBALL_FILE=""
+AGENTS_ONLY=0
 
 # Normalize harmless convenience flags. Permission changes require the exact
 # documented flag; a typo must not change the scope of an installation.
@@ -84,6 +86,13 @@ while [ $# -gt 0 ]; do
     --profile)   require_value "$@"; PROFILE="$2"; shift 2 ;;
     --name)      require_value "$@"; PERSON_NAME="$2"; shift 2 ;;
     --dry-run)   DRY_RUN=1; shift ;;
+    # A payload already on disk instead of the GitHub download: what the
+    # double-click Chewbacca Setup app carries, so it installs with the repo
+    # private and with no Terminal (tools/build_setup_app.sh).
+    --tarball)   require_value "$@"; TARBALL_FILE="$2"; shift 2 ;;
+    # Only wire the agents already on this Mac (setup.sh --every-agent): no
+    # Homebrew, no password, seconds. The Setup app's path.
+    --every-agent) AGENTS_ONLY=1; shift ;;
     --help)
       cat <<'HELP'
 Chewbacca full macOS installer
@@ -92,6 +101,8 @@ Chewbacca full macOS installer
   --fast            Install the smaller configuration set
   --dry-run         Preview before installing
   --pin REF         Install a specific version
+  --tarball FILE    Install from a downloaded payload instead of GitHub
+  --every-agent     Only set up the agents already here: no Homebrew, no password
   --full-send       Explicitly disable the supported agent permission prompts
   --help            Show this help
 
@@ -130,6 +141,23 @@ TOTAL=5
 step() { STEP=$((STEP + 1)); echo; say "[$STEP/$TOTAL] $1"; }
 
 # ── Introduce yourself before doing anything ─────────────────────────────────
+if [ "$AGENTS_ONLY" -eq 1 ]; then
+  # The full intro promises Homebrew, a password and ten minutes, none of
+  # which this path does. Say what it actually does.
+  cat <<INTRO
+
+  ${B}Chewbacca${N}
+  Sets up the assistant you already have so it knows your Mac and your week.
+
+  This copies Chewbacca into your own account (~/.chewbacca, ~/.claude,
+  ~/.local/bin) and wires it into each agent app already on this Mac. It asks
+  for no password, installs no Homebrew, and sends nothing about you anywhere.
+  Every agent file it changes is backed up beside itself first.
+
+  To remove it later: chewbacca uninstall
+
+INTRO
+else
 cat <<INTRO
 
   ${B}Chewbacca${N}
@@ -163,6 +191,7 @@ cat <<INTRO
   that makes the agent know you, which takes seconds instead.
 
 INTRO
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   # A dry run that only says "nothing was changed" answers the wrong
@@ -215,7 +244,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   echo "    cd Chewbacca && ./setup.sh --profile portable"
   echo
   echo "  That writes ~/.claude and nothing else. No Homebrew, no Mac tools, no"
-  echo "  permissions. Tracked as items 671-675 in docs/1000.md."
+  echo "  permissions. Tracked as items 671-675 in docs/plans/1000.md."
   exit 1
 fi
 ok "macOS $(sw_vers -productVersion)"
@@ -228,18 +257,24 @@ fi
 
 # Homebrew plus Apple's tools plus Node is a few gigabytes. Finding that out
 # halfway through, on a full laptop, is a bad ending to an install.
+# The agents-only path is the kit itself, about 100MB.
+NEED_GB=8; [ "$AGENTS_ONLY" -eq 1 ] && NEED_GB=1
 FREE_GB=$(df -g "$HOME" | awk 'NR==2 {print $4}')
-if [ "${FREE_GB:-99}" -lt 8 ]; then
-  bad "Only ${FREE_GB}GB free. This needs about 8GB. Free some space and re-run."
+if [ "${FREE_GB:-99}" -lt "$NEED_GB" ]; then
+  bad "Only ${FREE_GB}GB free. This needs about ${NEED_GB}GB. Free some space and re-run."
   exit 1
 fi
 ok "${FREE_GB}GB free"
 
-if ! curl -fsS --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
+if [ -n "$TARBALL_FILE" ]; then
+  [ -f "$TARBALL_FILE" ] || { bad "No payload at $TARBALL_FILE."; exit 1; }
+  ok "installing from the copy that came with the app"
+elif ! curl -fsS --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
   bad "Cannot reach github.com. Check your wifi and re-run."
   exit 1
+else
+  ok "online"
 fi
-ok "online"
 
 # ── 2. Apple's developer tools ───────────────────────────────────────────────
 step "Apple's developer tools"
@@ -283,11 +318,22 @@ step "Downloading Chewbacca"
 # any top-level entry the new tree lacks, and the voice log, which is
 # gitignored inside a repo folder.
 carry_state() {
-  local prev="$1" new="$2" entry
+  local prev="$1" new="$2" entry name
   [ -d "$prev" ] || return 0
   for entry in "$prev"/* "$prev"/.[!.]*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
-    [ -e "$new/${entry##*/}" ] || [ -L "$new/${entry##*/}" ] || mv "$entry" "$new/"
+    name="${entry##*/}"
+    if [ ! -e "$new/$name" ] && [ ! -L "$new/$name" ]; then
+      mv "$entry" "$new/"
+    elif [ -d "$entry" ] && [ ! -L "$entry" ] && [ -d "$new/$name" ] && [ ! -L "$new/$name" ] \
+      && [ "$name" != ".git" ]; then
+      # Both trees have this directory: keep everything the payload doesn't
+      # ship. Moving back only top-level names dropped every skill and tool
+      # the user had added under skills/ and bin/, and ~/.chewbacca/skills is
+      # the shared skill library: 215 entries on the author's Mac against 74
+      # shipped (break-it, 2026-10-19).
+      carry_state "$entry" "$new/$name"
+    fi
   done
   for entry in "$prev"/superassistant/*.jsonl; do
     [ -e "$entry" ] || continue
@@ -319,7 +365,13 @@ if [ -n "$REF" ]; then
 else
   TARBALL="https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH"
 fi
-if ! curl -fsSL --max-time 120 "$TARBALL" | tar -xz -C "$HOME_DIR" --strip-components=1; then
+if [ -n "$TARBALL_FILE" ]; then
+  if ! tar -xzf "$TARBALL_FILE" -C "$HOME_DIR" --strip-components=1; then
+    bad "The payload that came with the app could not be unpacked."
+    restore_previous
+    exit 1
+  fi
+elif ! curl -fsSL --max-time 120 "$TARBALL" | tar -xz -C "$HOME_DIR" --strip-components=1; then
   bad "Download failed.${REF:+ Is $REF a real tag?}"
   restore_previous
   exit 1
@@ -330,8 +382,17 @@ chmod +x "$HOME_DIR"/*.sh "$HOME_DIR"/bin/* 2>/dev/null || true
 # It does not defend against a compromised repo, and it is not pretending to:
 # it catches a truncated download, a proxy that rewrote something, and a
 # mirror that is not what it claims. What it actually buys is written down in
-# docs/THREAT-MODEL.md.
-if [ -f "$HOME_DIR/SHA256SUMS.txt" ] && command -v shasum >/dev/null 2>&1; then
+# docs/reference/THREAT-MODEL.md.
+# A payload with no manifest is the truncated download this gate exists for.
+# It used to skip verification and install whatever came (break-it,
+# 2026-10-19).
+if [ ! -f "$HOME_DIR/SHA256SUMS.txt" ]; then
+  bad "The download has no SHA256SUMS.txt, so nothing in it can be checked."
+  echo "      Stopping. Try again, or report this: https://github.com/$REPO/issues"
+  restore_previous
+  exit 1
+fi
+if command -v shasum >/dev/null 2>&1; then
   MISMATCH=0
   VERIFIED=0
   while IFS= read -r line; do
@@ -368,6 +429,9 @@ ok "$HOME_DIR"
 # `chewbacca` on PATH, so update, doctor, and uninstall are one word each and
 # nobody has to remember a path or the word "repo".
 mkdir -p "$BIN_DIR"
+# setup.sh links the real CLI here, so on a rerun this path is a symlink into
+# the kit, and `cat >` would write the stub through it over bin/chewbacca.
+rm -f "$BIN_DIR/chewbacca"
 cat > "$BIN_DIR/chewbacca" <<'LAUNCHER'
 #!/bin/bash
 # Chewbacca control. Installed by start.sh.
@@ -405,7 +469,9 @@ ok "chewbacca command installed"
 # ── 4. Everything else ───────────────────────────────────────────────────────
 step "Installing the tools Claude will use"
 
-if [ -x "$HOME_DIR/bin/bootstrap.sh" ]; then
+# --every-agent asks for nothing outside the person's account, so it never
+# reaches Homebrew, which is the one step that wants their password.
+if [ "$AGENTS_ONLY" -eq 0 ] && [ -x "$HOME_DIR/bin/bootstrap.sh" ]; then
   # The profile decides whether GitHub is part of this install at all. Without
   # it, bootstrap demanded a GitHub account and a git identity from someone
   # installing the personal profile, which creates no repos and needs neither.
@@ -421,6 +487,7 @@ SETUP_ARGS=(--profile "$PROFILE")
 step "Setting up Claude"
 echo "      Name: ${PERSON_NAME:-not provided; your agent can ask later}."
 echo
+[ "$AGENTS_ONLY" -eq 1 ] && SETUP_ARGS=(--every-agent)
 bash "$HOME_DIR/setup.sh" "${SETUP_ARGS[@]}" || {
   bad "Setup stopped after a failure. Some changes may already be installed; chewbacca doctor can inspect them."
   exit 1
@@ -466,7 +533,20 @@ for candidate in "claude:Claude Code" "codex:Codex" "gemini:Gemini CLI"; do
   fi
 done
 
-if [ -n "$AGENT_CMD" ]; then
+# The Claude app's Code tab runs Claude Code with the same ~/.claude setup and
+# needs no Terminal (code.claude.com/docs/en/desktop, checked 2026-10-13). The
+# person this install is for has the app and a subscription and has never
+# opened Terminal, and the last screen used to send them there anyway.
+CLAUDE_APP=""
+for apps_dir in "${CHEWBACCA_APPLICATIONS_DIR:-/Applications}" "$HOME/Applications"; do
+  if [ -d "$apps_dir/Claude.app" ]; then CLAUDE_APP="$apps_dir/Claude.app"; break; fi
+done
+
+if [ -n "$CLAUDE_APP" ]; then
+  START_LINE="  To start it any time: open the Claude app, click ${B}Code${N}, choose Local,
+  and say hi. No Terminal needed."
+  SUBJECT="Claude"
+elif [ -n "$AGENT_CMD" ]; then
   START_LINE="  To start it any time: open Terminal and type ${B}${AGENT_CMD}${N}"
   SUBJECT="$AGENT_NAME"
 else
@@ -501,21 +581,25 @@ DONE
 # ends at a shell prompt, which is the single highest-abandonment moment in the
 # whole flow: ten minutes of work and then a blinking cursor. Needs a real
 # terminal, so this is skipped when the output is piped somewhere.
-if [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
+if [ -n "$CLAUDE_APP" ] && [ -t 0 ] && [ -t 1 ]; then
+  # A person at a terminal who has the app: hand them to the app, where they
+  # will actually come back, rather than to a prompt in this window.
+  say "Opening the Claude app..."
+  open -a "$CLAUDE_APP" >/dev/null 2>&1 || true  # opens-window: a person ran this at a terminal
+elif [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
   say "Starting $AGENT_NAME..."
   sleep 1
-  exec "$AGENT_CMD" "Introduce yourself in three sentences. The person supplied this name: ${PERSON_NAME:-no name provided; do not infer it from the computer account}. You were just
-installed on their Mac. Say what you can now do that you could not before,
-Ask what they want help with today. Do not read their calendar, contacts or
-other private sources until they authorize the relevant access. Record only
-what they choose to share. Do not list your features."
+  # The welcome step asks five tappable questions and saves what they mean,
+  # so the first real reply is already in the style the person picked. The
+  # old prompt said "ask what they want help with today", which is the blank
+  # page life-context warns about, aimed at someone who just installed this.
+  exec "$AGENT_CMD" "You were just installed on this person's Mac. Run the welcome: load the welcome skill and follow it, starting with chewbacca welcome questions. The person supplied this name: ${PERSON_NAME:-none; ask, and do not infer it from the computer account}. Do not read their calendar, contacts or messages before they pick a goal that needs it. Do not list your features."
 else
   # No TTY means this is running inside an agent's shell, which is the common
   # case: someone pasted the repo link at Claude and Claude ran this. Claude is
   # already here, so telling them to go open Claude is nonsense. Tell the agent
   # what to do next instead.
-  echo "  Setup is done. Ask what the person wants help with today."
+  echo "  Setup is done. Now welcome the person: load the welcome skill and"
+  echo "  follow it, starting with: chewbacca welcome questions"
   echo "  Read personal sources only within the access they authorize."
-  echo "  Then load the life-context skill and follow it. Do not ask them to"
-  echo "  describe themselves."
 fi

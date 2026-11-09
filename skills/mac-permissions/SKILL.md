@@ -1,6 +1,8 @@
 ---
 name: mac-permissions
-description: Diagnose and fix macOS permission problems for automation - Accessibility, Screen Recording, Automation/Apple Events, Full Disk Access, TCC. Use when a Mac automation fails silently, when the user gets "not authorized" errors, when setting up Mac control for the first time, or when something worked before and stopped.
+description: "Diagnose and fix macOS automation permissions: Accessibility, Screen Recording, Automation, Full Disk Access, TCC. Use for silent failures, not authorized errors, first-time setup, or it stopped working."
+triggers: >-
+  Diagnose and fix macOS permission problems for automation - Accessibility, Screen Recording, Automation/Apple Events, Full Disk Access, TCC. Use when a Mac automation fails silently, when the user gets "not authorized" errors, when setting up Mac control for the first time, or when something worked before and stopped.
 requires: [chewie]
 ---
 
@@ -113,10 +115,14 @@ keeps the grant). Every launchd job runs that path as `ProgramArguments[0]`, nev
 
 One toggle at a time. Do not list all five.
 
-For Chewbacca's own grants, run `chewbacca-permissions guide` instead of
-reciting the steps: it opens each pane and floats a card over System Settings
-with the app as a row to drag into the list, and moves on by itself once the
-grant lands. `chewbacca-permissions plan` prints what is still missing as JSON.
+For Chewbacca's own grants, run `chewbacca permissions walk` instead of
+reciting the steps (the voice phrase is "set up my permissions" or "fix my
+permissions"). It opens each pane, puts Kyber's guide ring and a one-line
+bubble on the app's own switch, shows the drag card when the app is not in the
+list yet, and moves on by itself once the grant lands, with Skip and Stop on
+the glass. Without Kyber running it falls back to `chewbacca-permissions
+guide`, the card alone. `chewbacca-permissions plan` prints what is still
+missing as JSON. Neither ever flips a switch or runs `tccutil`.
 
 1. Open System Settings > Privacy & Security > Accessibility
 2. Click +, add the app `chewie doctor` named

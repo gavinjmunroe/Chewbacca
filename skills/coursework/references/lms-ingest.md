@@ -12,11 +12,11 @@ This procedure already exists. Run it rather than rebuilding it.
 course-ingest --school acc --signin                      # once, a human signs in
 course-ingest --school example --calendar "Fall 2026"    # every time after
 course-ingest --school example --calendar "Fall 2026" --dry-run
-node ~/Chewbacca/library/procedures/course-ingest/verify.mjs acc
+node "$(chewbacca where)/library/procedures/course-ingest/verify.mjs" acc
 ```
 
 Full doctrine, the endpoint map, and the four routes into a signed-in session
-that do not work, in `~/Chewbacca/library/procedures/course-ingest/PROCEDURE.md`. Read
+that do not work, in `library/procedures/course-ingest/PROCEDURE.md` in the kit (`chewbacca where` prints where it lives). Read
 it before touching any of this.
 
 ## What the LMS cannot tell you
@@ -33,17 +33,15 @@ more than it sounds. A discussion whose column is dated to its Sunday close can
 have an initial post due Wednesday, worth half credit after. The date on the
 card is the one that is already too late.
 
-## The four questions
+## The three questions
 
 Reading the files is the part that looks like the work. These are the work.
 
-1. **What does this course allow?** Quote it into `policies.ai`, do not
-   summarize a ban into "be careful". An unrecorded policy is a ban.
-2. **Where is work actually submitted?** A language course can grade almost
+1. **Where is work actually submitted?** A language course can grade almost
    nothing on the LMS and mirror only the dates from the publisher's platform.
    Submitting in the wrong system costs the grade.
-3. **Is the deadline on the card the real deadline?** See above.
-4. **What does the syllabus have that the gradebook does not?**
+2. **Is the deadline on the card the real deadline?** See above.
+3. **What does the syllabus have that the gradebook does not?**
 
 ## When the two sources disagree
 

@@ -1,0 +1,139 @@
+{
+  "name": "usc-fees",
+  "baseUrl": "https://atweb.usc.edu",
+  "description": "USC Registration and Fee Summary (atweb.usc.edu/registrationfeesummary), read only: the terms a student is registered for, and one term's charges, awards and credits, pending aid, net charges and units. Needs login from whichever Chrome profile is signed in to USC: USC Shibboleth plus Microsoft Entra cookies.",
+  "operations": [
+    {
+      "name": "registeredTerms",
+      "request": {
+        "method": "GET",
+        "url": "https://atweb.usc.edu/registrationfeesummary/api/students/getregisteredterms",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "accept-language": "en-US,en;q=0.9",
+          "referer": "https://atweb.usc.edu/registrationfeesummary/",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [],
+      "volatile": [],
+      "trigger": {
+        "url": "https://atweb.usc.edu/registrationfeesummary/",
+        "steps": [
+          {
+            "action": "wait",
+            "ms": 5000
+          }
+        ]
+      },
+      "match": {
+        "path": "/registrationfeesummary/api/students/getregisteredterms"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "data",
+        "pick": [
+          "termCode",
+          "description",
+          "termBeginDate",
+          "termEndDate",
+          "isCurrentTerm"
+        ]
+      },
+      "params": [],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-10T07:02:21.941Z"
+    },
+    {
+      "name": "termSummary",
+      "request": {
+        "method": "GET",
+        "url": "https://atweb.usc.edu/registrationfeesummary/api/students/getstudentdatasummary/term/%7Bterm%7D",
+        "headers": {
+          "accept": "application/json, text/plain, */*",
+          "accept-language": "en-US,en;q=0.9",
+          "referer": "https://atweb.usc.edu/registrationfeesummary/",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "term",
+          "at": [
+            "path:5"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://atweb.usc.edu/registrationfeesummary/",
+        "steps": [
+          {
+            "action": "wait",
+            "ms": 4000
+          },
+          {
+            "action": "goto",
+            "value": "https://atweb.usc.edu/registrationfeesummary/api/students/getstudentdatasummary/term/{term}"
+          },
+          {
+            "action": "wait",
+            "ms": 2000
+          }
+        ]
+      },
+      "match": {
+        "method": "GET",
+        "host": "atweb.usc.edu",
+        "path": "/registrationfeesummary/api/students/getstudentdatasummary/term/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "data",
+        "pick": [
+          "termCode=term.termCode",
+          "term=term.description",
+          "totalCharges",
+          "totalAwardsAndCredits",
+          "totalPending",
+          "netCharges",
+          "academicUnits",
+          "tuitionUnits",
+          "charges",
+          "awardsAndCredits",
+          "pending"
+        ]
+      },
+      "params": [
+        {
+          "name": "term",
+          "type": "string",
+          "required": true,
+          "example": "20263",
+          "pattern": "^20[0-9]{2}[123]$",
+          "hint": "USC term code: the year, then 1 spring, 2 summer, 3 fall (20263 = Fall 2026, 20271 = Spring 2027)"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-10T07:02:43.347Z"
+    }
+  ]
+}

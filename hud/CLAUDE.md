@@ -43,6 +43,24 @@ Several surfaces can be open at once and that is the normal case. Put the thing
 being asked about where the eye already is and the standing context in a corner.
 Two or three panels is a workspace; six is a mess.
 
+The display keeps panels off the window in front, which is usually the thing
+being asked about. Leave `at=` off and the surface goes to whichever corner
+covers least of that window (top right when nothing is in the way). Give `at=`
+and the corner is yours, with one exception: a surface that would cover the
+whole of the front window, a small dialog under a big card, is drawn beside
+it instead. The window comes from the window server's bounds, read before each
+`@`; no permission is involved. Source: `Occlusion.swift`, tests in
+`OcclusionTests.swift`.
+
+The whole layer hides itself during a screen share and over apps you name,
+and comes back as it was afterwards (a layer you had hidden stays hidden). A
+share is Zoom's share bar, Chromium's "is sharing your screen" or "is sharing
+a window" bar (English only), or macOS Screen Sharing; those strings were read
+out of the apps' own bundles and have not been seen on a live share yet.
+`~/.bob/hud-deny.txt` takes one app name or bundle id per line, `#` comments,
+and the word `fullscreen` to hide over any app filling the screen. Checked
+every two seconds and on every app switch. Source: `ScreenShare.swift`.
+
 ## How loud to be
 
 `urgency=` is `ambient`, `normal` (the default), `alert`, or `critical`.
@@ -54,7 +72,7 @@ a meeting starting in one minute. A system that cries wolf gets switched off.
 
 ## How much of a window to be
 
-`chrome=` is `card` (the default), `bare`, `bracket`, or `window`.
+`chrome=` is `card` (the default), `bare`, `bracket`, `window`, or `glass`.
 
 `bare` draws no panel at all. The content sits directly on the screen with a
 halo behind it, which is what a heads-up display is actually for and what a
@@ -66,10 +84,104 @@ language on Kyber's glass. Square corners, a black title strip with the title
 in pixel caps (Departure Mono, shipped in `Fonts/`), a hard offset drop and a
 halftone wash. It is drawn in black and white. Untoned parts are ink, never
 cyan; `good`, `warn` and `bad` turn into full-strength green, yellow and red,
-and they are the only colour on the panel, so spend them on what changed.
-Headings and captions become inverted chips, Diagram nodes become square
-tiles with a tone pip in the corner, and `fill:true` inverts the one node that
-matters. Sentences are set in the system mono.
+and apart from the system's own Checkbox they are the only colour on the
+panel, so spend them on what changed. Headings and captions become inverted
+chips, Diagram nodes become square tiles with a tone pip in the corner, and
+`fill:true` inverts the one node that matters. Buttons, Fields, Selects, row
+buttons and Segmented tabs are square with a one-point rim and pixel caps; a
+primary Button and the picked tab are inverted, white with black type.
+Sentences are set in the system mono. The title is one line, because the strip
+is a fixed 37 points: keep it under about 35 characters at `w=300`.
+
+`glass` is a glance with no window at all: no card, no title bar, no pill
+buttons, no edge. The content sits on an edgeless frosted field that fades
+out before it can read as a box, a press lands on the content itself, and
+state is light on the thing that has it. The meetings glance draws this way
+(`KYBER_GLASS=0` brings its card back, kept as the fallback); the rules are
+below. On glass a Button is a lit word, a Metric is a figure in the text
+("6 calls this week"), Events is a time rail, and any part with nothing in
+it draws nothing. An older Kyber reads `glass` as `card`.
+
+## Past the window
+
+Caleb, 2026-10-11 01:17: "The future of UX does not look like macos", after
+"Ts does not look like the future lmao" and "Death to panels one day"; at
+01:56, on the meetings card: "1 dimesnional af bro". Researched the same
+night, under 30 minutes, from the sources named on each rule. Each rule is
+something a person can check on a screenshot.
+
+1. **No chrome on a glance.** No frame, no title bar, no fill with an edge,
+   no shadow pool. Dead Space's UI lead (Dino Ignacio, GDC 2013, "Crafting
+   Destruction") moved every readout onto Isaac's suit to keep the screen
+   clear, and Fagerholt and Lorentzon's "Beyond the HUD" (Chalmers, 2009)
+   names the axis: an element is diegetic when it lives in the world the
+   player is looking at. On the glass the world is the person's screen, so
+   a glance is content on it, never an object on it. Check: nothing in the
+   screenshot has a corner or a border.
+2. **The content is the press.** A name opens its thing; there is no "Open"
+   capsule beside it. Bret Victor, "Magic Ink" (2006): "for information
+   software, all interaction is essentially navigation around a data space",
+   and interaction "should be used judiciously and sparingly". A press that
+   only navigates is the words themselves, with a 44-point target kept
+   invisible. Check: no row on a glance repeats a verb.
+3. **A verb that changes something stays a word, and only where it acts.**
+   Go, Record, Show are lit text, not pills, and they appear on the opened
+   thing or the one live state, never on every row. Arc's Command Bar put
+   pin, duplicate and history behind one bar instead of buttons on each tab
+   (The Browser Company; Wikipedia's Arc article). Check: at most one verb on
+   the glance before anything is opened.
+4. **Space carries meaning.** When the data has a dimension, the layout
+   draws it instead of a uniform list: the meetings rail spaces each call by
+   the time since the one before it (log scale, three days fills the step)
+   and draws its length as a line of light under its name. Victor again:
+   information software design "is the design of context-sensitive
+   information graphics", "approached initially and primarily as a graphic
+   design project". Check: two rows the same distance apart mean the same
+   gap.
+5. **Colour is light, on the thing that has the state.** A state is a glow
+   on that item's own node or number, in its meaning's hue (needs you amber,
+   working cyan, done green, recording red), never a badge, a tinted box or
+   a coloured panel. Dead Space's health is the light along Isaac's spine
+   going from green to red. Nothing glows at rest that does not need the
+   person. Check: every coloured pixel answers "what state is this thing in".
+6. **Say nothing when there is nothing.** No zero counts, no empty lists,
+   no "No turns yet", no label on an empty button. A meeting with nothing in
+   it is one quiet line. Victor: "each interaction can and should result in
+   a discernible change". Check: every part on the screenshot has content.
+7. **Controls hang off the edge of the content, not inside a header.**
+   visionOS keeps a window's primary actions in a toolbar ornament anchored
+   to its bottom edge and its tab bar as an ornament on its leading edge, so
+   the content area stays unobstructed (Apple HIG, Ornaments; WWDC23
+   "Design for spatial user interfaces"). On the glass the one live state
+   and its verb are a single lit line at the top edge. Check: the state and
+   its verb are one line.
+8. **Legible over anything, with no box.** visionOS glass adapts to its
+   surroundings to keep content readable instead of going opaque (HIG,
+   Materials). Here an edgeless frosted field holds 4.5:1 for faint text
+   over a white page with no blur behind it (`GlassGlanceTests`). Humane's
+   Ai Pin is the warning: its laser-projected display was near illegible in
+   daylight (CNET, Fast Company and the WSJ's reviews, April 2024), and a
+   new surface that cannot be read is worse than the window it replaced.
+   Check: read every line over a white page.
+9. **Answer in place, at once, from what is already here.** Humane's pin
+   waited "and waits, and fails" (David Pierce, The Verge) and the Rabbit
+   R1's "large action model" missed or ignored requests (Gizmodo, Android
+   Authority). Both took the screen away and put a slow round trip where
+   the state used to be. A glance draws from local data, a press answers on
+   the way down (it scales to 0.96 before anything comes back), and the
+   answer redraws in place. Check: a press changes something on the next
+   frame.
+10. **Assume someone else can see the glass.** A meeting whose title names
+    health care (psychiatry, therapy, medication, a doctor, a clinic) is
+    "Private" in the list, and its detail opens only on a second press.
+    Check: no screenshot of a glance shows a medical title.
+11. **The light morph carries a name into its detail.** Pressing a name
+    sends light from that row, the frame it had when pressed, into the
+    detail below (motion rule 11). It stretches, the edge on the row
+    letting go late, so it never sits row-sized on a neighbour (the
+    2026-10-11 recording, where a sliding box framed the next row exactly
+    and read as the wrong row lifting). Check: the first lit frame is on
+    the row that was pressed.
 
 ## Saying it again
 
@@ -148,6 +260,73 @@ reference only). The renderer enforces these; a sender should know them.
     title and reopening with no empty frame. Same lesson for transitions: a
     card's insertion must not carry its own animation on top of the overlay's
     spring, which held a new card blurred for about 600 ms before it snapped.
+11. **A card opens out of the row that asked for it, and closes back into
+    it** (Material's container transform). Read from
+    `MaterialContainerTransform.java` on 2026-10-11: one container
+    interpolates from the source's bounds to its own; the content fades in
+    over the first 25% of the way out and fades out between 60% and 90% of
+    the way back, so it stays readable for most of the close. What travels
+    on the glass is light, not a grey box (Caleb, 2026-10-11: "The future of
+    UX does not look like macos"): a lit outline in the accent lifts off the
+    row, stretches into the card's place and goes out as it lands, the
+    card's content arrives under it, and the open card keeps one lit line on
+    its leading edge instead of a panel. The light is drawn by a layer over
+    the whole surface: moving the card itself out of its own slot drew
+    nothing above the slot in a 60 fps recording, though the log showed
+    every frame of the flight. Open is a 0.42 s no-bounce spring, close
+    0.30 s; Material uses 500 ms and 400 ms on a phone (`long2`, `medium4`),
+    Apple asks for brevity in frequent motion and Emil Kowalski's teardown
+    puts UI motion under 300 ms, so the HUD sits between (guessed from those,
+    not measured on the glass). SwiftUI's `matchedGeometryEffect` is the same
+    idea and says so: it interpolates two frames "to make it appear that
+    there is a single view moving", and only links geometry, never rendering,
+    which is why the fades are explicit thresholds here. The protocol, with
+    a row id from the List, Events or Tiles that drew it:
+    `c card Stack from=@/<pointer>` is a card in the same surface, drawn only
+    while the pointer names a row id; `@ <surface> from=<surface>/<row id>`
+    opens a separate surface out of that row. A different row id is a
+    different card: the old one goes back into its row while the new one
+    grows out of its own. A card that appears with its surface (inside
+    0.45 s of the first row reporting) does not also grow, since that would
+    be two motions for one cause. A flight's start must be drawn one frame
+    before it springs: set in the same pass, three recordings showed the
+    card simply appearing. Source: `ContainerTransform.swift`.
+12. **Values roll in place; nothing around them moves.** Lemma's counter,
+    read from their shipped chunk on 2026-10-11, gives every digit its own
+    reel of 11 cells, its own duration (900 ms times sqrt(1.5) to the power
+    of its distance from the last digit), its own 160 ms stagger and its own
+    blur, so the digits settle at different moments and it reads as a
+    mechanism. On the glass: counts use SwiftUI's numeric text transition,
+    a state word and its symbol crossfade, a tile's edge colour eases to
+    the new state's hue, and the tile itself does not move unless its
+    order changed.
+13. **Match by identity, never by index.** The T Combinator site
+    (`components/field/formations.ts`) morphs one set of 6,245 points
+    through every shape by matching points to targets in left-to-right
+    order, so each morph sweeps as one motion instead of criss-crossing.
+    A HUD list is the same problem: rows and tiles are keyed by `id`, so a
+    re-sort slides each row to its new place and only a new row enters.
+14. **Far is a dissolve, near is a travel.** The same site's `Glide.tsx`
+    glides up to 2.5 screens (600 ms plus 90 ms a screen, ease-in-out cubic)
+    and dissolves anything further: 260 ms out, the move under the veil,
+    650 ms settling in. Measured there on 2026-10-05, a 1.6 s glide across
+    14.7 screens moved 1.85 screens in one frame, a strobe. Anything that
+    would cross most of the display fades instead of streaking.
+15. **The edges of the screen are the periphery.** visionOS's motion
+    guidance: avoid motion at the edges of the field of view, and when a
+    large object must move, raise its translucency or lower its contrast so
+    it does not read as the world moving. Kyber's surfaces live in the
+    corners, so they never animate while idle (rule 6) and a moving card's
+    content is faded during the move (rule 11).
+16. **Lemma's numbers, for reference.** The spring and tokens read from
+    uselemma.ai's chunks on 2026-10-11, the press, lift and crossfade from
+    the replica's measurements of their live site (`apps/lemma-replica`,
+    docs/spec/states.md and docs/waves/W3-panels.md): one follow spring of stiffness 170, damping 40 (damping
+    ratio about 1.5, no overshoot); UI tokens 80, 150 and 200 ms on
+    `cubic-bezier(0.4, 0, 0.2, 1)`; a press scales to 0.96; a card lifts
+    6 px over 450 ms on `cubic-bezier(.33, 0, .15, 1)`; its four demo panels
+    crossfade over 500 ms ease-out. On their landing page the motion carries
+    the argument; on the glass it only ever confirms a state change.
 
 **A corner that fills up folds, it does not pile up.** Surfaces in one region
 stack away from their edge (down from the top, up from the bottom, outward
@@ -161,8 +340,13 @@ current is not a panel being read.
 Fields, Selects, row buttons, a folded title and a card's close button all
 take a 44-point click even where the drawing is smaller. The close button
 stays faintly visible without hover and names what it closes, because a
-destructive action names its target (Carlton's design.md). Keyboard focus into the glass is
-not done: the overlay never takes key, by design.
+destructive action names its target (Carlton's design.md). Option-Command-Return takes the
+keyboard into the glass and back out: Tab and Shift-Tab (or the arrows) move
+through every control and row button, surfaces top to bottom then left to
+right and each one's close button last, a ring shows where focus is, Return or
+Space presses it (a Select steps to its next option, a Field takes the keys
+until Tab or Escape), Command-W closes the surface, and Escape hands the keys
+back to the app that had them. Source: `KeyboardFocus.swift`.
 
 ### Row actions
 
@@ -244,38 +428,286 @@ its lane: it has no close button, it is never folded, and panels in its
 region are placed beside it rather than over it. Give it `w=52` and
 `chrome=bare`; it draws its own glass.
 
+### Agents as tiles
+
+```
+c t Tiles items=@/agents/tiles counts=@/agents/counts action=ks-pick
+d /agents/tiles [{"id":"s1","title":"Fix the rail","detail":"Bash: npm test","state":"needs","provider":"claude","name":"Claude","meta":"chewbacca · 2m","selected":true}]
+d /agents/counts {"needs":1,"running":2,"done":4}
+c k Chips options=@/agents/kinds value=@/agents/agent action=ks-agent
+d /agents/kinds [{"id":"claude","label":"Claude"},{"id":"acp:gemini","label":"Gemini"}]
+```
+
+**Tiles** draws agents as a two-column grid of cards (AgentTiles.swift),
+with the non-zero `counts` above it as toned numbers. Each tile has its
+provider's mark (a filled circle in that provider's colour with its initial,
+keyed by `provider`: `claude`, `codex`, `acp:gemini`, `acp:cursor` and the
+other ACP kinds), its `name`, its state as a word and symbol in the state's
+tone, a one-line `title`, up to two lines of `detail` (what it is doing or
+waiting on) and a `meta` line. `state` is `needs`, `failed`, `running` or
+`done`: a tile that needs the person gets an amber edge and glow, the loudest
+mark on the panel; text stays ink and holds 4.5:1 on the tile's dark fill. A
+press on a tile sends `e action <action> row=<id> surface=<surface>`.
+
+**Chips** is a row of small capsules, one per option, each with a dot in its
+provider's colour. A press writes the pick to `value`'s pointer and sends the
+same row-action line. Chips wrap onto as many rows as they need, and
+`dots=false` drops the colour dot, for picks that are not agents (a session's
+model, effort or permission level). Both are keyboard targets, one per tile
+and per chip.
+
+```
+c w Web url=@/agents/webUrl
+```
+
+**Web** is a live web page inside a card, 300 points tall (WebPane.swift):
+the agent card draws its realm browser pane with it, since the headless
+engine keeps only the pane's address. Only http and https load, every
+navigation inside the page is held to that, and the page gets a fresh
+non-persistent data store, so it sees no cookie or login from anything else.
+
+```
+c app App url=@/realm/url
+```
+
+**App** is a whole local web app as the surface's content (AppPane.swift):
+Realm's own desktop interface, which `realm-ui` builds from Carlton's
+renderer and serves on 127.0.0.1:47317 with a pipe to the engine. It fills
+the surface's height (or `h=` points, never under Realm's 600), loads only
+http on 127.0.0.1 or localhost, keeps its own persistent store apart from
+every other web view, opens a link off its origin in the browser in the
+background, and takes the keyboard when clicked without activating Kyber.
+The pipe's token is never served over http: the pane reads it from
+~/.chewbacca/realm-ui/server.json (0600) and sets it in the page as a
+document-start user script, top frame only, so another account on the Mac
+that can reach the port still cannot reach the engine.
+Escape inside the page closes the surface unless a dialog, menu, list,
+text field, the editor or a terminal has it (the bridge decides and posts
+`dismiss`). The `realm` surface (bin/lib/surfaces/realm_app.py) is a glance
+centred on glass, so a click off it takes it down too. "Show my agents" and
+the rail's agents icon open it whenever the bundle is built, and the Swift
+agent card otherwise. Offscreen renders draw it empty, like Web; the
+offscreen check is a WKWebView in a window parked off every display, where
+macOS throttles frames, so Realm's entrance animations must be finished
+before the snapshot or its panes come out blank.
+
+```
+c f Hits caption=@/findFilesCap items=@/findFiles action=ks-open
+d /findFiles [{"id":"f1:0","kind":"file","where":"bin/lib/surfaces","segments":[{"text":"agents","match":true},{"text":".py","match":false}]}]
+```
+
+**Hits** is search results that show why each row is there (HitsView.swift):
+realm's ⌘P and ⌘⇧F rows on the glass. `segments` is the engine's own
+`SearchSnippet`, and the matched runs are lit in Realm's blue at a heavier
+weight, so the reason a row ranked is visible without reading it. `kind`
+picks the glyph: `file`, `line` (code, mono, `where` is path and line),
+`checkpoint`, `ship`, `pr`, `review`, `run`, `schedule`, `mcp`, `memory`.
+The row is the press (no "Open" beside it) and `selected` gives the open
+one a lit line on its leading edge. An empty list draws nothing, caption
+included. The agent card uses it for Find, the `@` picker, History and
+"This space" (bin/lib/surfaces/agent_ide.py, agent_history.py,
+agent_space.py). surface_lint counts Hits as opened-on-purpose text.
+
+`File` takes `line=` (1-based): the editor opens with that line selected
+and in view. Re-pointing a bound `path=` swaps the whole editor, so a
+draft, its baseline and its version stamp belong to one file only.
+
+`File` takes `tabs=` (`[{"id","path","name"}]`) and `tabAction=`: with two
+or more, the header is a strip of the open files' names, the shown one in
+full ink over one lit line, a dot on any with an unsaved draft, and a press
+on another sends `e action <tabAction> row=<id>`. The editor switched away
+from is kept in the store (`SurfaceStore.keptEditors`: draft, the text it was
+edited from, and that text's stamp), so coming back shows the draft and a
+save is still checked against the version it was edited from; a file that
+changed on disk meanwhile opens with the conflict notice. The agent card
+keeps up to five tabs per session (agent_ide.py MAX_TABS).
+
+### Realm's workspace on the glass
+
+Caleb, 2026-10-11: "Literally I just need carlton's app but refactored for a
+fire hud experience". Carlton's renderer runs unedited; everything of ours is
+a layer that `realm-ui build` puts beside his `src/` (bin/lib/realm_ui/glass):
+`glass/main.tsx` is the bundle's entry and imports our layer, then his
+`src/main.tsx` as written, then `glass.css`. The layer reaches his store by
+riding inside his one `StoreContext.Provider` (`install.tsx`), and his engine
+through his own `rpc()`. tests/test_realm_glass.py builds an untouched copy of
+his renderer and checks the bundle carries the layer and his files are byte
+for byte his (`REALM_GLASS_BUILD=1`, about a minute).
+
+- **Tiles first.** "Show my agents" opens on every agent as a tile floating
+  on the desktop: his surface ladder at 92%, his provider mark, the state as a
+  word (Working, Needs you, Done, Failed) and what it is doing now. His app is
+  mounted and live underneath, not drawn. The surface is `chrome=clear`: no
+  frosted field, since the page floats its own surfaces and a field the size
+  of the surface read as a window.
+- **The story first, the transcript one press away.** Caleb, 2026-10-11
+  8:29pm: "literal storytelling level UX like the lemma site, each part of
+  your screen being intentional, not just a sequence of lines". A tile grows
+  into the story of the agent's turn (glass/Story.tsx, beats from
+  glass/beats.mjs), not into his transcript: what was asked, one headline
+  sentence, the beat line (You asked, Reading, Changing, Proving, Your call,
+  Done), what proved it, one figure for the beat, and the one decision
+  waiting. Transcript and Reply open his workspace (mounted all along, so
+  instant); Escape there steps back to the story, and from the story to the
+  tiles. Allow on the glass is offered only when the whole request is on
+  screen (beats.mjs permissionView, ported from agents.py); otherwise the
+  press is his own card. The spec and the subtraction list are in
+  skills/hud/SKILL.md, "An agent turn told by the screen".
+- **One morph.** A press grows a lit outline from the tile to the story
+  (320 ms, his `--dur-move`, `--ease-out-strong`); his app comes up under it
+  while the tiles fade, so no frame is empty, and the light goes out. Escape
+  shrinks it back into its tile (240 ms). Escape inside his palette, a menu,
+  a dialog, the editor or a terminal stays his (bridge.js asks the layer
+  first).
+- **The layout follows the agent.** The column beside the conversation holds
+  only what the agent is doing: the file it is editing with the changed lines
+  lit (orange before the edit lands, his accent after), a command while it
+  runs (gone 2.4 s after), tests only when a test command runs, with the
+  count in words. When the turn settles the file and command go and its diff
+  arrives as hunks. With nothing on it the column is not drawn and his panes
+  take the width back on his 200 ms size step.
+- **Every write is a press that says what it changes.** Keep writes nothing.
+  "Reject: puts back 3 added and 1 removed in auto-compact.ts" is
+  realm-ui's `/glass/reject`, a checked `git apply -R` of exactly that hunk,
+  refused when the file moved on. A file whose hunks are all kept offers
+  "Stage orgs.ts" (his engine's `workspace.stage`). His permission card stays
+  the gate for the agent's own commands.
+- **Voice.** The talk key goes to the agent that has the glass while the page
+  is shown (Kyber tells it on attach and detach): hud-listen asks realm-ui's
+  `/glass/voice` before the assistant (bin/lib/realm_glass_voice.py), surface
+  words like "close my agents" excepted. It fills that agent's reply, "at
+  orgs.ts" adds `@orgs.ts` and opens his picker, "open the palette orgs" and
+  "find X" open his palette. Nothing is sent; Return is the press. Off the
+  glass, or with a report older than 45 s, the assistant answers as before.
+- **The bridge answers in his shapes.** His `@` picker reads
+  `computerAccess.rows`; a null there took the whole page down the moment `@`
+  was typed on the glass (found by the end to end run, fixed 2026-10-11).
+
+### Carlton's language on the glass
+
+Caleb, 2026-10-11: "Not just functionality of carlton's thing, but his UIUX
+is pretty sick bro". The first pass read its design (`theme/tokens.css`,
+`design.md` at 59afd9e4) and re-wrote it in Swift as `Realm` in
+RealmTokens.swift. Copying is allowed: Carlton told Caleb to copy his code
+(Caleb, 2026-10-11: "Carlton told me to copy them bro"), so his components,
+styles and renderer can be used directly, credited in the file header.
+What carried over:
+
+- Type ladder, nothing under 11: 11 tiny, 12 caption, 13 small, 14 body, 15
+  reading, 16, then titles 18, 20, 24, 28. Tracking per rung (-0.2 at 11 and
+  13, -0.1 at 14 and 16, -1.5% on titles). Weights 450 to 500 for labels,
+  560 titles, 600 strong.
+- Radii 2 (ticks), 6 (chips), 8 (controls), 12 (cards, rows), 16 (sheets),
+  nested concentric: outer equals inner plus the padding.
+- Colour ladder page, canvas, surface, inset, hover, then ink, ink-2, ink-3,
+  accent, accent-ink. On his window ink-3 is sRGB 0.42 and measures under
+  3:1 on the glass's worst ground, so the glass keeps his roles with the
+  HUD's measured values (ink, dim, faint). His accent-ink measured 3.9:1
+  there and his accent 2.6:1; both are lifted toward white (`accentInk`
+  4.6:1 for text, `accent` 3.2:1 for an edge). Blue, never the HUD cyan,
+  which means "working".
+- Edges are quiet: a hover is a light overlay (`hoverFill`), a selection is
+  one lit edge, and no row wears a ring.
+- Motion ladder: hover 180 ms on the way out only (it arrives at once),
+  press 120, pop 140, fade 150, swap 160, enter 180, size 200, rise 220,
+  slow 240, travel 320. `--ease-out-strong` for travel, `--ease-fade` for
+  opacity only.
+- Pane grammar: what a pane shows keeps its controls with it; a press on a
+  row selects, and the one verb that row can take appears under the list
+  naming what it changes; a destructive verb says its cost first (a restore
+  says how many files and commits it rewrites and that an undo point is
+  saved).
+
+**Offscreen renders of tall panels.** ImageRenderer draws an AppKit
+ScrollView as nothing, so before 2026-10-11 any HUD_LINES_FILE review of a
+panel taller than its cap came back as an empty card, and the coverage
+check passed on the glass alone. Offscreen (`hudOffscreen`) the card now
+draws its plain layout clipped at the cap, top first, and
+`SnapshotTests.tallPanelRenders` diffs a card with words against the same
+card without them. An NSViewRepresentable (the File editor, a Web pane)
+still draws empty offscreen; check those live.
+
 ## Files
 
 ```
-files                    open the two-pane file manager where it was left
-files ~/Downloads        point the active pane there (a file: its folder, with it picked)
+files                    Downloads on the glass, newest first
+files ~/Documents        that folder (a file: its folder, with the file previewed)
 files "/Volumes/My Disk" quote a path with spaces
-files off                put it away
+files off                take it down
 ```
 
-`hud files [path]` sends the same line, "show me files", "open Finder" or
-"file manager" reach it from hud-listen with no model, and Files is in the
-menu. Like the rim editor it is a native panel over the glass, not a
-surface, because the glass never takes key and this is driven by the
-keyboard: Tab switches pane, Up/Down pick, Enter opens a folder or Quick
-Looks a file, Backspace goes up, F3 or Space Quick Look, F4 opens in its app,
-F5 copies and F6 moves to the other pane, F7 makes a folder, F8 or
-Command-Delete sends to the Trash, Command-L edits the path, Escape closes.
-A clash on copy or move keeps both ("report 2.pdf"); nothing is ever
-overwritten and nothing is deleted outside the Trash. Source:
-`Sources/KyberKit/FilesPanel.swift` and `FilePane.swift`.
+`hud files [path]` sends the same line, and "show me files", "open Finder" or
+"file manager" reach it from hud-listen with no model. It is an ordinary
+surface, id `disk`, drawn by Kyber itself with the same `c`/`d` lines any
+sender writes: the folder's newest seven things (hidden and half-downloaded
+files left out), one Look button per row, and one primary button. Look steps
+into a folder (an Up row comes back, and stops at the folder asked for),
+previews a PDF, image or plain text in place, and only shows anything else in
+Finder, never launching it. The primary button opens the previewed document in
+its viewer, or shows the folder in Finder. Presses are answered inside Kyber
+and never go up the socket.
+
+It leaves like a glance: Escape clears the glass, a click anywhere off its
+card takes it down, and so do "close files", `files off`, `- disk` and the X.
+
+Any other card can leave the same way: `glance <surface>` after its `@`
+line marks it, and a click off every card on the glass then closes it and
+sends `e closed <surface>`, exactly like its X. A click on any card keeps it,
+because pressing a row on one card isn't the person being done. Search, the
+repo card and the model switcher send it; standing surfaces like needs-you
+don't, since they're meant to stay. Source: `clickedAway` in
+`Sources/KyberKit/OverlayModel.swift`, tests in `GlanceTests.swift`.
+
+This replaced a two-pane keyboard file manager (CHW-198, 2026-10-09): an
+NSPanel with no close button that Escape could not reach, and a copy of
+Finder, which docs/plans/NO-APPS.md rules out. Source: `Sources/KyberKit/FilesGlass.swift`.
+
+## Calls
+
+`bin/call-pill` runs FaceTime audio calls from the glass (CHW-190). "Call
+Mark", spoken or typed, goes to hud-listen's call path with no model turn: the
+name resolves through the people store (exact name or nickname, else the
+people whose name starts with those words), one person dials
+`facetime-audio://<handle>` ("on my phone" makes it `tel:`), and the app that
+was in front is put back in front so FaceTime's window sits behind the work.
+Two people, or one person with two numbers and none on the card, draw a
+`call-ask` glance with one button per option; nothing dials until one is
+pressed.
+
+The watcher (`call-pill run`, started by hud-listen) reads FaceTime's tree
+through `chewie app` every two seconds idle and every second on a call, and
+draws `call-pill` while a call rings, is placed or is live: who, a timer bound
+to `/call/status` so a tick is one `d` line, and only the controls the tree
+shows. Mute, End, Accept and Decline press FaceTime's own buttons by AXPress;
+Mute's label is what FaceTime says after the press. Escape and the X hide the
+pill and never end the call; "show the call" brings it back, and it leaves
+when the tree shows no call. "Hang up", "mute the call" and "answer the call"
+press the same controls by voice, shown on the pill and never spoken, since
+the voice would be heard on the line.
+
+Idle FaceTime (15.6.1, launched hidden, 2026-10-10) shows one AX window with
+no window id and no text, and its Video menu's Mute item disabled; that item
+is the fallback mute control when a call window shows none. The call window
+and Notification Center's incoming banner have not been read during a real
+call yet, so their labels (End, Mute, Accept, Decline) are matched by name in
+`bin/lib/call_pill.py` and the first live call should be checked with
+`call-pill observe`. Needs Accessibility for Kyber (the watcher runs in its
+process tree); CallHistory, read only when the tree goes unreadable mid-call,
+needs Full Disk Access. Tests: `tests/test_call_pill.py`.
 
 ## Coding sessions on the glass
 
 Agent work without an editor or a terminal. Sessions are another kind of
 surface, on the same glass, with the same motion and the same input: there is
 no session window and no second chat box. The layout follows Carlton Aikins'
-realm (a design reference; none of its code is used, it carries no license).
+realm, and his code may be copied in directly: Carlton told Caleb to copy it
+(2026-10-11).
 
 `bin/kyber-sessions serve` (the menu's "Agent sessions") draws `sessions` at
 the left: every Claude Code session from the last three days, what needs you
 first (needs permission, then working, failed, finished), each with project,
-model and age. State comes from the terminal hook's live board where it has
+where it runs (VS Code, terminal, desktop, Codex), model and age. A VS Code
+session is a row like any other; Codex rollouts are listed read only. State comes from the terminal hook's live board where it has
 the session (that is also where the exact permission text comes from) and
 from the transcript's tail otherwise. Scripted `claude -p` runs are left out.
 
@@ -286,6 +718,15 @@ read in the transcript, a changed file, or Open diff opens a `Diff` or `File`
 surface beside the card. Run tests runs only the one test command the folder
 declares (`swift test`, `npm test`, `pytest`) and streams it into a `Diff`
 surface; anything else is asked of the agent.
+
+The card also draws `<card>-tree` at the right: the session's repo collapsed
+to what it touched (its Read and Edit calls, and the files git lists as changed) plus
+one level of context, never the whole repo (bin/lib/session_tree.py, and
+`kyber-sessions tree <id>` for the same rows as text). A changed file's row
+opens its `Diff`; any other file opens in `File` with `editable`, so a hand
+edit saves to that path. A row id is an index the daemon drew, never a path.
+The tree goes when its card goes. There are no tabs, no settings and no file
+menu: Escape, a click away or the voice takes any of these down.
 
 Reply addresses the conversation panel to the card: the daemon sends
 
@@ -303,7 +744,7 @@ e action send row="s-6d901cd1" surface="s-6d901cd1" text="run the tests"
 and the daemon types it into the client the session is open in, through
 Claude Code's own session inbox; only when nothing has the session open does
 it resume it with `claude -p --resume <id>` in its folder, streaming the
-reply onto the card (docs/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
+reply onto the card (docs/reference/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
 the input back to the assistant. Closing a card sends `e closed <surface>`
 to its owner so it stops redrawing it.
 
@@ -324,13 +765,29 @@ refusal.
 ```
 c t Transcript items=@/t action=open
 d /t [{"id":"u1:0","role":"user","text":"make the rail glass"},{"id":"a2:1","role":"tool","tool":"Edit","text":"Edit: /x/Glass.swift","open":true}]
-c d Diff text=@/text
+c d Diff text=@/text path="Glass.swift"
+c tr Tree items=@/rows action=open
+d /rows [{"id":"t0","name":"hud","depth":0,"dir":true},{"id":"t1","name":"Glass.swift","depth":1,"dir":false,"mark":"M"}]
 ```
 
 **Transcript** rows are `user`, `assistant`, `tool` or `error`; a tool row
 with `open` gets a button that sends `e action <action> row=<id>`. **Diff**
-draws text monospaced, `+` green, `-` red, `@@` in the accent, the last 600
-lines.
+draws text monospaced, `+` lines on a green wash, `-` on a red one, `@@` in
+the accent, the last 600 lines. Code inside a diff line is syntax colored by
+the language its `+++` header names, or `path` when there is no header (an
+Edit call's diff); text in no known language (test output, a status) stays
+plain. `plain=true` draws every line plain with no wash and no color, for
+terminal output, where a line starting with `-` is not a removal. `hunks`
+(`[{"id","keep","reject","where"}]`, one per `@@` line in order) with
+`keepAction` and `rejectAction` puts two lit words at the end of each `@@`
+line, and a press sends `e action <keepAction|rejectAction> row=<id>`: the
+agent card's per-hunk Keep and Reject (bin/lib/surfaces/agent_hunks.py). The
+`@@` lines are counted over the whole text, so the words stay on their hunk
+when the top is cut. `File` colors text the same way, and its `editable` editor keeps the
+color while typing (`Sources/KyberKit/Syntax.swift`, a line scanner, not a
+parser). **Tree** rows are `{"id","name","depth","dir"}` with optional
+`mark` (git's letters, `edited`, `read`), `collapsed` and `note`; a file row
+sends `e action <action> row=<id>`, folders are not pressable.
 
 **For hud-listen (the hook to route speech and the hyper bar to a session).**
 "Tell the lemma session to run the tests" resolves with
@@ -465,8 +922,18 @@ A text to your own number that starts with "Kyber" is answered as a text.
 Kyber opens `~/Library/Messages/chat.db-wal` for kernel events, not a timer,
 and on a write runs `bin/text-command`, which reads the new rows in the self
 thread and exits. Only a command reaches a model, and nothing reached this way
-sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`.
+sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`,
+which `text-command --setup` fills from the addresses the Mac sends from.
 It needs Full Disk Access for Kyber.
+
+Four everyday jobs answer with no model, in `bin/lib/text_jobs.py`: "what did
+Mom say" quotes her last three texts (Mom is whoever the owner's own card names
+as Mother), "remind me to X tomorrow at 3" adds one reminder, "what's due"
+reads the class ledger, and "text Mom I'm late" queues a draft pinned to her
+thread that sends only from the Mac. No model reads another person's text, so
+an order hidden in one has nothing to talk to. `text-command --ask "words"`
+prints the reply to one text without sending, and CHEWBACCA_NO_SEND=1 sends
+replies to `~/.chewbacca/text-command.outbox.jsonl` and adds nothing.
 
 ## Finding out when you got it wrong
 
@@ -514,6 +981,31 @@ they typed to a session, and every row and button they pressed, so since
    hud-listen, kyber-surfaces and kyber-genui still send a plain `listen` and
    hear nothing until they are updated; `hud press`, call-watch and
    kyber-sessions send it.
+
+## Claiming surfaces
+
+Surface names are shared by everything that can open the socket, so without a
+claim any process running as this user can redraw your panel, close it, or
+point the person's typing at it with `to`. A listener that holds the token can
+claim a namespace:
+
+```
+claim amber token=<the 64 hex characters in ~/.bob/hud.token>
+e claimed amber
+```
+
+Until that connection hangs up, `amber` and every `amber.<name>` are its alone.
+Another connection that sends `@ amber.inbox`, `- amber.inbox`, `glance` or
+`to` on one gets a `!` saying whose it is, and its `c`, `>`, `d` and `r` lines
+are dropped until it names a surface it may draw on. While anyone holds a
+claim, a bare `-` from anyone else is refused (Escape still clears everything),
+and so is a `c` from a connection that never sent an `@`. A claimed surface
+shows "from amber" at the foot of its card, from the socket's record of who
+drew it, never from anything in the line. Claims are opt-in: a glass where
+nobody claimed anything behaves as before. This stops silent overwrites and
+keeps sandboxed apps out; it is not a wall against code running as the same
+user, which can read the token too. Source: `SurfaceClaims.swift`, tests in
+`ClaimsTests.swift`.
 
 ## Events, exactly
 
@@ -566,6 +1058,14 @@ hud draw <<'EOF'
 m bug 420 260 380 90 label="This is the one failing" tone=bad
 EOF
 ```
+
+A mark drawn over an accessibility element of about its size (a button, a
+row, a field: half or more of the two rectangles shared) is tied to that
+element. Four times a second the element is read again: a scroll or a window
+drag moves the mark with it, keeping its margins, and an element that is gone,
+or scrolled out of its scroll area or window, takes the mark down and sends
+`e mark.gone <id>`. A mark over nothing its size, a stretch of a picture or a
+word inside a paragraph, stays where it was drawn. Source: `MarkAnchor.swift`.
 
 Marks decay. The default life is twelve seconds, `life=0` pins one, and re-sending
 the same id with a new rectangle moves it rather than leaving a trail. That is
@@ -671,6 +1171,36 @@ being true.
 Leave `life` off for anything they will read or act on. A panel that vanishes
 mid-sentence is a bug they will blame on you.
 
+## Instant on the glass
+
+Caleb, 2026-10-11, on Realm's interface: "It takes eternity to load,
+everything on the glass should be INSTANT bro". Every surface paints its last
+known state the moment it is asked for, then refreshes in place. Nothing on
+the open path waits on the network, the engine or a fetch before it draws
+what it already has.
+
+- **Paint what you have first.** A provider's model with no data yet returns
+  the last value it knows (realm_app.py reads the address the server last
+  wrote), never an empty frame that a fetch fills in later. The fetch confirms
+  or corrects it with `d` lines.
+- **Expensive views are made once and kept.** A WKWebView, a model session or
+  anything else that costs more than a frame to build lives for the life of
+  Kyber, is warmed at launch, and is attached to a card on open and detached
+  on close. Closing a surface must not unload it. AppPaneHost (AppPane.swift)
+  is the pattern: realm's page made fresh per opening took 1.6 to 1.8 s to
+  paint on every reopen and 8.1 s on a first open; kept alive it paints in 82
+  to 153 ms, warmed at launch the first open paints in 277 to 480 ms
+  (offscreen WKWebView probe, load 15 to 20). It reloads only for a new
+  address, a new pipe token, a failed load or a dead web content process.
+- **No process start on the open path.** hud-listen asks the surfaces daemon
+  over its socket (surface_intent.perform); the CLI is the fallback when no
+  daemon answers. The CLI start cost 116 to 241 ms per open; the socket 1 to 2.
+- **Budget:** under 150 ms from the ask to pixels on a reopen, under 1 s on
+  the first open after login. A change that adds a step to the open path says
+  what it costs, measured.
+- **Tested:** AppPaneTests "closing and reopening the realm App shows the same
+  page and never loads it again" fails if a reopen loads the page.
+
 ## Updating in real time
 
 Bind a prop to the data model and then push data at it. This is the cheap path
@@ -717,6 +1247,16 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c s Screen title="RELATIONSHIPS"
   ```
 
+  `ask="<request>"` makes the card talk: a double-click anywhere on it puts
+  the request into the conversation panel as if it had been typed there, and
+  opens the panel on the answer. It never goes up as an `e` line, so it works
+  for a one-shot sender that has already exited (the verse card, 2026-10-16).
+  Single clicks, rows, buttons and the X are untouched.
+
+  ```
+  c s Screen title="PHILIPPIANS 4:11" ask="Let's talk abt Philippians 4:11: For I have learned..."
+  ```
+
 - **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points. A horizontal Stack is top aligned; give it `align=center` when a row mixes words with a Button, whose 44-point target otherwise sits it below them.
 
   ```
@@ -735,6 +1275,17 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
 
   ```
   c t Text value="Nothing is overdue." tone=muted
+  ```
+
+  `tone=` also takes a meaning, and a state line should: `needs` (amber),
+  `running` (the accent cyan), `done` (green) or `recording` (red). The line
+  is set in that hue with a lit dot before it, the same four hues every
+  surface uses for those four states and for nothing else, each 4.5:1 as text
+  on the glass (`MeaningTests`). Bind it, `tone=@/meetings/stateTone`, so a
+  state change is one `d` line and crossfades in place.
+
+  ```
+  c st Text value=@/state tone=@/stateTone
   ```
 
 - **List** Plain bullets. Prefer Events when the items happened at times, and Bars when they have magnitudes worth comparing.
@@ -805,7 +1356,7 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c d2 Diagram aspect=2 parts=[{"t":"node","x":0.5,"y":0.2,"w":0.3,"h":0.24,"label":"Request"},{"t":"arrow","x":0.44,"y":0.32,"x2":0.22,"y2":0.62},{"t":"arrow","x":0.56,"y":0.32,"x2":0.78,"y2":0.62},{"t":"node","x":0.18,"y":0.76,"w":0.28,"h":0.24,"label":"Cache","tone":"good"},{"t":"node","x":0.82,"y":0.76,"w":0.28,"h":0.24,"label":"Model","tone":"warn"}]
   ```
 
-- **File** Shows an actual file: a PDF through the system's PDF engine, an image as an image, anything that decodes as text as text. Use it when the person names a document, instead of describing the document back to them. `editable` on a text file gives a real editor whose save overwrites that exact path.
+- **File** Shows an actual file: a PDF through the system's PDF engine, an image as an image, anything that decodes as text as text. Use it when the person names a document, instead of describing the document back to them. `editable` on a text file gives a real editor whose save writes that exact path, and only when the file is still the version it read: if something else changed it since, the editor says so and offers Overwrite or Reload. The version a save replaces is copied to `~/.bob/backups` first (ten per file name). Command-Z and Command-Shift-Z undo and redo. Closing the card with unsaved edits asks first; a second close, a sender's second `- <surface>`, or Escape closes it and keeps the draft in `~/.bob/drafts`, offered back the next time that file is opened. A save sends `e file.saved File path=".." backup=".."`; a refused one sends `e file.conflict File path=".."`.
 
   ```
   c f File path="~/Downloads/resume.pdf"

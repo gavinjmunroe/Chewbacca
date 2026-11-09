@@ -21,7 +21,10 @@ APP="$T/runtime/Chewbacca.app"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Contents/Info.plist")" = Chewbacca ] || fail "bundle is not named Chewbacca"
 [ -f "$APP/Contents/Resources/Chewbacca.icns" ] || fail "no icon in the bundle"
 codesign -v "$APP" 2>/dev/null || fail "bundle signature does not verify"
-codesign -dv "$APP" 2>&1 | grep -q "Identifier=com.chewbacca.runtime" || fail "signed under the wrong identifier"
+# Read it whole first: grep -q stops at the match, codesign then writes into a
+# closed pipe, and pipefail turned the SIGPIPE into "wrong identifier" (10/13).
+sig="$(codesign -dv "$APP" 2>&1)"
+grep -q "Identifier=com.chewbacca.runtime" <<< "$sig" || fail "signed under the wrong identifier"
 [ -L "$T/runtime/node" ] || fail "the old plain copy at the node path was not replaced by a link"
 [ "$("$T/runtime/node" -e 'process.stdout.write(process.execPath)')" = "$(cd "$APP/Contents/MacOS" && pwd -P)/Chewbacca" ] \
   || fail "node through the link is not the bundled binary, so TCC would not see Chewbacca"

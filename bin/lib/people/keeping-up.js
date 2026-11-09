@@ -17,7 +17,7 @@ const { sayNextStep } = require("./health");
 // costs its weight instead of zeroing the row. Lateness dominates because the
 // question is who you are overdue with; score is the tiebreaker toward people
 // there is written evidence you care about. They need not sum to 1. The shape
-// is Karthik Devarakonda's from amber-search's PeopleRank.
+// comes from amber-search's PeopleRank (`togari/search/`).
 const RECONNECT_W_LATENESS = Number(process.env.PEOPLE_W_LATENESS ?? 0.85);
 const RECONNECT_W_SCORE = Number(process.env.PEOPLE_W_SCORE ?? 0.15);
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
@@ -154,7 +154,7 @@ function overdueList(limit = 20) {
     // opening on AJ Flamino and Abby Rivers. The bug is invisible because
     // a sorted-looking list is still a list.
     //
-    // The shape is borrowed from Karthik Devarakonda's PeopleRank in
+    // The shape comes from PeopleRank in
     // amberintelligence/amber-search (api/people_rank.py), which solved the
     // same problem: a renormalized ADDITIVE blend of two 0..1 signals, so a
     // missing signal costs its weight instead of zeroing the result, plus an

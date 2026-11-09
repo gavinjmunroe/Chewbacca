@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""contact-photo: save a Contacts card's photo as a JPEG.
+
+  contact-photo "<name>" <out.jpg>     first card whose name contains <name>
+  contact-photo --list "<name>"        cards that match and whether each has a photo
+
+Contacts keeps photos in ZIMAGEDATA of every Sources/*/AddressBook-v22.abcddb, not
+only the top-level db, behind one leading 0x01 byte. On 2026-10-29 a /team headshot
+pull missed twice: the top-level db had no row for Pastor Joe, and sqlite3's
+writefile() isn't in macOS's build. Reads only; never writes to Contacts.
+"""
+import glob
+import os
+import sqlite3
+import sys
+
+ROOT = os.environ.get("CONTACTS_DIR", os.path.expanduser("~/Library/Application Support/AddressBook"))
+QUERY = ("select coalesce(ZFIRSTNAME,''), coalesce(ZLASTNAME,''), coalesce(ZORGANIZATION,''), ZIMAGEDATA "
+         "from ZABCDRECORD where (coalesce(ZFIRSTNAME,'') || ' ' || coalesce(ZLASTNAME,'') || ' ' || "
+         "coalesce(ZORGANIZATION,'')) like ?")
+
+
+def matches(name):
+    for db in sorted(glob.glob(os.path.join(ROOT, "**", "*.abcddb"), recursive=True)):
+        try:
+            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            rows = con.execute(QUERY, (f"%{name}%",)).fetchall()
+        except sqlite3.Error:
+            continue
+        for first, last, org, img in rows:
+            yield " ".join(x for x in (first, last, org) if x), bytes(img) if img else b""
+
+
+def jpeg(blob):
+    start = blob.find(b"\xff\xd8")
+    return blob[start:] if start >= 0 else b""
+
+
+def main(argv):
+    if len(argv) == 3 and argv[1] == "--list":
+        found = False
+        for label, img in matches(argv[2]):
+            found = True
+            print(f"{label}\t{'photo' if jpeg(img) else 'no photo'}")
+        return 0 if found else 1
+    if len(argv) != 3 or argv[1].startswith("-"):
+        print(__doc__.strip().splitlines()[2:4] and "usage: contact-photo \"<name>\" <out.jpg> | --list \"<name>\"", file=sys.stderr)
+        return 2
+    for label, img in matches(argv[1]):
+        data = jpeg(img)
+        if data:
+            with open(argv[2], "wb") as f:
+                f.write(data)
+            print(f"{label} -> {argv[2]} ({len(data)} bytes)")
+            return 0
+    print(f"no card matching {argv[1]!r} has a photo", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

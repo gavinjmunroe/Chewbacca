@@ -25,8 +25,20 @@ RULES = [
      "Throat-clearing. Open on the point."),
     ("faux-insight", r"(?i)\b(what nobody tells you|the part everyone misses|most people get this wrong|nobody talks about)\b",
      "Faux-insight setup. Make the claim stand alone."),
-    ("banned-word", r"(?i)\b(delve|foster|leverage|utilize|facilitate|empower|streamline|robust|seamless|cutting-edge|game changer|paradigm shift|transformative|elevate|harness|meticulous|intricate|realm|tapestry|ever-evolving)\b",
+    ("banned-word", r"(?i)\b(delve|foster|leverage|utilize|facilitate|empower|streamline|robust|seamless|cutting-edge|game changer|paradigm shift|transformative|elevate|harness|meticulous|intricate|tapestry|ever-evolving)\b",
      "Banned word."),
+    # "realm" the figure of speech, never Realm the product: Carlton's agent
+    # engine is named that, and on 2026-10-10 six replies about it were
+    # refused and rewritten around the name. A capital R is the proper noun.
+    # A name inside a path or identifier (realm-engine, realm_ui, a report
+    # file) is not the figure of speech either: on 2026-10-11 three replies
+    # naming bin/realm-engine and realm-morning-report.md were refused and
+    # Caleb saw each one twice.
+    # Lowercase too: "the realm server" is still the product. Of the 72
+    # banned-word flags in a week of real replies (2026-10-11), 46 were Realm
+    # or realm meaning Carlton's engine and none was the figure of speech. The
+    # filler is the phrase: "realm of", "in the realm".
+    ("banned-word", r"(?i:\brealms? of\b|\bin (?:the|this|that|a|our|your) realms?\b)", "Banned word."),
     ("em-dash", r"—", "Em dash. Use a colon, period, or comma."),
     ("ing-clause", r", (?:highlighting|underscoring|showcasing|demonstrating|reflecting|emphasizing|showing) (?:the|his|her|their|its|a|an)\b",
      "Superficial -ing clause."),
@@ -63,6 +75,14 @@ CHAT_RULES = [
      r"the hook)\b[^.\n]{0,40}\bskill\b|\bskill\b[^.\n]{0,30}\b(fits|doesn't fit|"
      r"didn't fit|got suggested|loaded|matched)\b)",
      "Narrating skills or hooks. He built the kit; report the result, never the plumbing."),
+    # 2026-10-09: a reply ended "These are #82 to #84 in your drafts, going to
+    # her directly. The longer versions are deleted." Caleb: "what's the point
+    # of saying that bruh". Draft numbers and cleanup notes are backstage.
+    ("backstage-bookkeeping",
+     r"(?i)(#\d+\s*(?:to|-|through)\s*#?\d+\s+(?:are|is)?\s*(?:in|queued in) your drafts|"
+     r"\b(?:in|queued in) your drafts\b|\b(?:the )?(?:old|longer|stale) (?:versions?|drafts?) (?:are|were|got) (?:deleted|dropped|gone)\b|"
+     r"\bi (?:deleted|dropped) the (?:old|stale|longer) (?:drafts?|versions?)\b)",
+     "Backstage bookkeeping (draft numbers, what got deleted). Give him the result, not the filing."),
 ]
 
 
@@ -127,6 +147,17 @@ def kickers(text):
                 out.append(last)
     return out
 
+def without_code(text):
+    """Blank out fenced blocks and inline code, keeping every newline so line
+    numbers still point at the right place. Code, commands and file paths are
+    not prose: on 2026-10-11 a paste-ready prompt in a ``` block was refused
+    for a path in it, and the rewrite reached Caleb as a duplicate reply."""
+    def blank(m):
+        return re.sub(r"[^\n]", " ", m.group(0))
+    text = re.sub(r"^(```|~~~).*?^\1[ \t]*$", blank, text, flags=re.M | re.S)
+    return re.sub(r"`[^`\n]+`", blank, text)
+
+
 def main(paths, chat=False):
     bad = 0
     for p in paths:
@@ -140,6 +171,7 @@ def main(paths, chat=False):
             m = re.search(r"^# ", text, re.M)
             if m:
                 text = text[m.start():]
+        text = without_code(text)
         found = []
         for label, rx, why in (RULES + CHAT_RULES if chat else RULES):
             for m in re.finditer(rx, text, re.M):
@@ -171,6 +203,9 @@ def main(paths, chat=False):
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--chat"]
-    if not args:
+    if not args or "-h" in args or "--help" in args:
         sys.exit(__doc__)
+    missing = [a for a in args if not pathlib.Path(a).is_file()]
+    if missing:
+        sys.exit(f"prose-check: no such file: {missing[0]}")
     sys.exit(main(args, chat="--chat" in sys.argv[1:]))

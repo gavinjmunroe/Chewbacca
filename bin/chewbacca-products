@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""chewbacca products: every product built out of Chewbacca, kept in step with it.
+
+    chewbacca products              which shared files are behind, per product
+    chewbacca products pull         bring each product up to Chewbacca's main
+    chewbacca products pull NAME    one product
+    chewbacca products --json       the status as JSON
+
+The list is config/products.json. Each product keeps its own sync.json and
+sync.lock.json, and Chewbacca's tools/product_sync.py does the work with
+--root, so a product whose own copy of the engine is behind still syncs with
+the current one.
+
+A pull never touches a product checkout someone is working in. It clones the
+product's origin/main into a temp dir, pulls the shared files, runs the
+product's test command, and pushes to its main only when that passes. A red
+test, a conflict or the firewall holding a file stops that product with
+BLOCKED and pushes nothing, and the other products still run. Products push
+straight to main, the same as every repo here: the tests are the review.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+ENGINE = ROOT / "tools" / "product_sync.py"
+
+
+def products():
+    reg = os.environ.get("CHEWBACCA_PRODUCTS") or ROOT / "config" / "products.json"
+    return json.loads(Path(reg).read_text())["products"]
+
+
+def run(cmd, cwd=None, env=None):
+    return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+
+
+def engine(root, *args):
+    env = dict(os.environ, CHEWBACCA_DIR=os.environ.get("CHEWBACCA_DIR", str(ROOT)))
+    return run([sys.executable, str(ENGINE), "--root", str(root), *args], env=env)
+
+
+def clone(p, dest):
+    src = os.environ.get("CHEWBACCA_PRODUCT_REMOTE_" + p["name"].upper().replace("-", "_"))
+    url = src or f"https://github.com/{p['repo']}.git"
+    if not src and shutil.which("gh"):
+        r = run(["gh", "repo", "clone", p["repo"], str(dest), "--", "-q", "--depth", "50"])
+    else:
+        r = run(["git", "clone", "-q", url, str(dest)])
+    return r
+
+
+def remember(name, dest):
+    """Write which Chewbacca paths this product shares, for land to read.
+
+    land checks a landed diff against this cache to decide whether to queue a
+    pull, so it never has to clone every product on every land.
+    """
+    home = Path(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")))
+    cache = home / "products-shared.json"
+    try:
+        data = json.loads(cache.read_text())
+    except (OSError, ValueError):
+        data = {}
+    paths = []
+    for f in json.loads((dest / "sync.json").read_text()).get("files", []):
+        paths.append(f if isinstance(f, str) else f.get("chewbacca", f["path"]))
+    data[name] = sorted(paths)
+    home.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def status(names, as_json):
+    out, behind = [], 0
+    for p in products():
+        if names and p["name"] not in names:
+            continue
+        with tempfile.TemporaryDirectory() as t:
+            dest = Path(t) / p["name"]
+            r = clone(p, dest)
+            if r.returncode:
+                out.append({"product": p["name"], "error": f"clone failed: {r.stderr.strip()[:200]}"})
+                behind += 1
+                continue
+            if not (dest / "sync.json").exists():
+                out.append({"product": p["name"], "error": "no sync.json yet"})
+                continue
+            remember(p["name"], dest)
+            r = engine(dest, "status", "--json")
+            rep = json.loads(r.stdout) if r.stdout.strip().startswith("{") else {"product": p["name"], "error": r.stderr.strip()[:200]}
+            out.append(rep)
+            if r.returncode:
+                behind += 1
+    if as_json:
+        print(json.dumps(out, indent=2))
+    else:
+        for rep in out:
+            if "error" in rep:
+                print(f"{rep['product']}: {rep['error']}")
+                continue
+            print(f"{rep['product']}: {rep['in_step']} of {rep['total']} shared files in step")
+            for f in rep["files"]:
+                if f["state"] != "same":
+                    print(f"  {f['state']:<22} {f['path']}" + ("  (firewall holds it)" if f["firewall"] else ""))
+    return 1 if behind else 0
+
+
+def pull(names):
+    fails = 0
+    for p in products():
+        if names and p["name"] not in names:
+            continue
+        with tempfile.TemporaryDirectory() as t:
+            dest = Path(t) / p["name"]
+            r = clone(p, dest)
+            if r.returncode:
+                print(f"BLOCKED: {p['name']} clone failed: {r.stderr.strip()[:200]}")
+                fails += 1
+                continue
+            if not (dest / "sync.json").exists():
+                print(f"{p['name']}: no sync.json yet, skipped")
+                continue
+            remember(p["name"], dest)
+            r = engine(dest, "pull")
+            print(r.stdout.rstrip())
+            if r.returncode:
+                print(f"BLOCKED: {p['name']} pull stopped (exit {r.returncode}), nothing pushed")
+                fails += 1
+                continue
+            if not run(["git", "status", "--porcelain"], cwd=dest).stdout.strip():
+                print(f"{p['name']}: already in step")
+                continue
+            if p.get("test") and os.environ.get("CHEWBACCA_PRODUCTS_SKIP_TESTS") != "1":
+                if (dest / "package.json").exists() and not (dest / "node_modules").exists():
+                    run(["npm", "ci", "--silent"], cwd=dest)
+                tr = run(["bash", "-c", p["test"]], cwd=dest)
+                if tr.returncode:
+                    print(f"BLOCKED: {p['name']} tests failed after the pull, nothing pushed:")
+                    print("\n".join(("  " + l) for l in (tr.stdout + tr.stderr).strip().splitlines()[-15:]))
+                    fails += 1
+                    continue
+            changed = [l[3:] for l in run(["git", "status", "--porcelain"], cwd=dest).stdout.splitlines()]
+            g = ["git", "-c", "core.hooksPath=/dev/null"]
+            run([*g, "add", "--", *changed], cwd=dest)
+            c = run([*g, "commit", "-q", "-m", "chore: shared files from Chewbacca main", "--", *changed], cwd=dest)
+            ps = run(["git", "push", "-q", "origin", "HEAD:main"], cwd=dest) if not c.returncode else c
+            if ps.returncode:
+                print(f"BLOCKED: {p['name']} push failed: {ps.stderr.strip()[:200]}")
+                fails += 1
+                continue
+            sha = run(["git", "rev-parse", "--short", "HEAD"], cwd=dest).stdout.strip()
+            print(f"{p['name']}: pushed {len(changed)} file(s) to main at {sha}")
+    return 1 if fails else 0
+
+
+def main(argv):
+    as_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if args and args[0] == "pull":
+        return pull(args[1:])
+    if args and args[0] == "status":
+        args = args[1:]
+    return status(args, as_json)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

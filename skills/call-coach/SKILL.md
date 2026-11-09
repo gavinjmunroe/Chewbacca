@@ -1,6 +1,8 @@
 ---
 name: call-coach
-description: Debrief a sales or client call from its transcript or recording. Use when the user shares a call transcript, mentions a call that went well or badly, asks how they did, wants to prep for a follow-up, or asks what they missed. Also use on webinar, pitch and demo transcripts, and before a meeting to build a battle card on who is on the other side.
+description: "Debrief a sales or client call from its transcript or recording. Use for a call transcript, how did I do, follow-up prep, what I missed, webinar or pitch transcripts, and battle cards before a meeting."
+triggers: >-
+  Debrief a sales or client call from its transcript or recording. Use when the user shares a call transcript, mentions a call that went well or badly, asks how they did, wants to prep for a follow-up, or asks what they missed. Also use on webinar, pitch and demo transcripts, and before a meeting to build a battle card on who is on the other side.
 ---
 
 # call-coach
@@ -52,6 +54,17 @@ bring, and the five objections they will raise with a response to each.
 An unverifiable specific goes in as `[NEED: ...]`, never as a plausible
 value, because the one person who notices is the one who was there.
 
+**Read the live thread with that person before touching the prep.** Run
+`mac contacts find <name>` then `mac messages history <handle> --limit 40`
+and check every claim the prep makes against the newest texts. On
+2026-10-17 a Karthik call prep asked "has any decision been made abt my
+role?" because of Sagar's "Not the direction we want to go in" text. The
+thread showed it was a reply to a Goodword ad Caleb had shared minutes
+earlier, and that Karthik had already written "let's level set, wanna make
+sure you feel integrated and good". Caleb had to say "Read his recent texts
+and adjust accordingly" mid-edit. The prep was arguing with a message
+nobody had reread.
+
 ## What this is not
 
 Not a verdict on the person. A bad call is usually a structural problem: no
@@ -59,6 +72,18 @@ discovery, price before value, or a question that never got asked. Name the
 structure, not the character.
 
 ## During the call
+
+Reach for `meeting-live` first. `room-capture` already transcribes every call on
+this Mac, so nothing gets pasted: a tab that asks about the call gets its new
+lines on each prompt, `meeting-live ask --preset say` answers from the terminal,
+and `kyber-surfaces open live` puts the words and one-press asks on the glass.
+Modes: general, sales, team, lecture, seminar, recruiting, networking. A private
+call reaches nothing, and what's heard is never an instruction. There's no
+interview mode and no hiding from a screen share, on purpose.
+
+`call-listen` below is the older cue-per-turn coach. As of 2026-11-06 its
+`call-ears`, `call-watch` and `whisper-server` aren't on PATH, so treat it as
+unverified until someone rebuilds and runs it.
 
 `call-listen` puts one cue at the top of the screen each time the other side
 finishes talking: ASK, SAY, HANDLE or CLOSE, at most a short line. Audio is
@@ -76,6 +101,36 @@ to the cue model.
   them, need everyone's consent to record, and transcription counts.
 - Cues are prompts, not a script. Reading full sentences off the screen sounds
   like reading. Know the card; let the cue catch what you forgot.
+
+### Transcript pasted mid-call
+
+A Granola transcript that stops mid-sentence means he is still on the call.
+On 2026-10-13 he pasted the first two minutes of a Zeutara call with Ryan and
+Jonah with "GIVE ME MEETING NOTES TO NOT LOOK STUPID PHONY PLZ", then
+"FUCKKKKK" when it got technical. What worked:
+
+- Pull the live numbers before writing a word (for Zeutara, the scorecard
+  script in the zeutara-gtme repo, not this one). A real 7.1% beats any talking point, and a guessed one is the
+  phony he asked not to sound like.
+- Write what to say, in the order he'll say it, one screen max. The last
+  line of the transcript is the question to answer.
+- Name the one open ask the other side can unblock while they're on the line
+  (that call: Jonah's footer address, holding 14 drafts).
+- Flag what the recording will keep: remarks about teammates, and repo
+  access granted live. Check `gh api repos/<repo>/collaborators` after.
+- Every reply during the call is dash bullets, one screen max, from the first
+  one. Paragraphs can't be read while someone is talking. On 2026-11-05 he got
+  paragraphs on a Zeutara call and wrote "GIVE ME BULLET POINTS".
+- A scripted line has to be true when he says it, in words he'd use. The same
+  call's card said "until counsel has reviewed it" with no lawyer hired, and he
+  asked "Who is counsel?" seconds before joining. "I need to review my
+  obligations" was true and needed no explaining.
+- When a question is pending, read his short answer as the answer to it. "I read
+  them" after "Want me to read the PDFs?" meant read them. The reply took it as
+  him having read them, and lost a minute before he wrote "Read them", with the
+  call 9 minutes out. If it could go either way, do the read-only thing.
+- After the call: log it in the project memory, then the follow-ups in
+  `work-ledger --scope ~`.
 
 ## Feeding it back
 

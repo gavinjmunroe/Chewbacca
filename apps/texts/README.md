@@ -83,6 +83,12 @@ Every hit carries `p. N`, the page printed in the book, taken from `<!-- p. N --
 markers laid down during ingest. Cite that rather than the PDF page: a claim
 the reader cannot look up is a claim they have to take on faith.
 
+A web edition, such as an OpenStax book read from openstax.org, has no printed
+pages. Its corpus marks sections instead, `<!-- s. 1.2 -->`, or
+`<!-- s. 1 Key Terms -->` for end-of-chapter material, and its hits carry
+`§1.2`. Its `book.json` names a `source` URL in place of `pages`, and
+`textbook books` prints that.
+
 ## Which corpora exist
 
 Run `textbook books`. The index of a corpus is its own `INDEX.md`, and

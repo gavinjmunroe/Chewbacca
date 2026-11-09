@@ -355,6 +355,8 @@ def read_only(w: World) -> None:
           all("--list" in a for a in calls if subcommand(a) == "config"))
     check("every git call disables optional locks and fsmonitor",
           all("--no-optional-locks" in a and "core.fsmonitor=false" in a for a in calls))
+    check("every git call reads attributes from the empty tree, so no repo filter runs",
+          all("--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904" in a for a in calls))
     check("status and diff never look inside a submodule",
           all("--ignore-submodules=dirty" in a for a in calls if subcommand(a) in ("status", "diff")))
     diffs = [a for a in calls if subcommand(a) == "diff"]

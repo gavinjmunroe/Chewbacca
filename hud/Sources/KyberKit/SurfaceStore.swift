@@ -117,6 +117,20 @@ public final class SurfaceStore {
     /// is a legitimate state: a surface streamed and the agent walked away.
     public var onEvent: ((OutboundEvent) -> Void)?
 
+    /// Where a Screen's `ask=` goes when the card is double-clicked: into the
+    /// conversation as a typed request, set by the overlay. It never goes up
+    /// as an `e` line, because the sender that drew the card (a one-shot like
+    /// hud-verse) has usually exited, and an owner's private line would be
+    /// dropped with it.
+    public var onAsk: ((String) -> Void)?
+
+    /// The card was double-clicked and carries `ask=`: talk about it.
+    public func ask(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onAsk?(trimmed)
+    }
+
     /// The surface this store draws, set when the overlay opens it. Every
     /// action carries it as `surface=`, because component ids are only unique
     /// inside one surface and a daemon with five panels open needs to know
@@ -126,6 +140,53 @@ public final class SurfaceStore {
     /// Bumped on every change so SwiftUI redraws even though `spec` is a value
     /// type nested several levels deep.
     public private(set) var revision = 0
+
+    /// Edited files on this surface that have not been saved, path to the
+    /// draft. Closing a surface with any of these asks first, and whatever
+    /// closes it anyway keeps the drafts in `~/.bob/drafts`.
+    public private(set) var unsaved: [String: String] = [:]
+    /// The person was told this surface has unsaved edits; the next close
+    /// goes through. Cleared when the edits are saved.
+    public var closeWarned = false
+
+    /// The paths with an unsaved draft, changed only when a path flips,
+    /// so a tab strip can mark them without redrawing per keystroke.
+    public private(set) var unsavedPaths: Set<String> = []
+
+    /// Editors whose file was switched away from, by path: read once when
+    /// that file is shown again, so never observed.
+    @ObservationIgnored public private(set) var keptEditors: [String: FileSafety.Kept] = [:]
+
+    public func markUnsaved(path: String, draft: String?) {
+        let was = unsaved.isEmpty
+        if let draft { unsaved[path] = draft } else { unsaved.removeValue(forKey: path) }
+        if unsaved.isEmpty { closeWarned = false }
+        let marked = draft != nil
+        if marked != unsavedPaths.contains(path) {
+            if marked { unsavedPaths.insert(path) } else { unsavedPaths.remove(path) }
+        }
+        // Only when it flips: a redraw per keystroke would repaint the
+        // whole surface while the person types.
+        if was != unsaved.isEmpty { revision += 1 }
+    }
+
+    /// Keep or forget an editor's state for a path (nil once it's saved or
+    /// matches the disk again).
+    public func keepEditor(path: String, _ kept: FileSafety.Kept?) {
+        keptEditors[path] = kept
+    }
+
+    /// Keep every unsaved draft on disk, because the surface is going away.
+    /// Returns where they went.
+    @discardableResult
+    public func rescueUnsaved(in folder: URL = FileSafety.drafts) -> [URL] {
+        let kept = unsaved.compactMap { FileSafety.rescue(draft: $0.value, of: $0.key, in: folder) }
+        unsaved = [:]
+        unsavedPaths = []
+        keptEditors = [:]
+        closeWarned = false
+        return kept
+    }
 
     public init() {}
 
@@ -158,7 +219,7 @@ public final class SurfaceStore {
         switch op {
         case .surface, .close, .presence, .mark, .unmark, .say, .step, .write, .queued,
              .terminal, .terminalOff, .agentCursor, .agentCursorOff, .press, .chatTarget, .editRim, .tuneRim,
-             .openFiles, .closeFiles:
+             .openFiles, .closeFiles, .glance:
             // Routed by the overlay, which owns which surface is current and
             // what the ring and the pill are doing. A store knows about one
             // surface's contents and deliberately nothing about the glass
@@ -256,17 +317,31 @@ public final class SurfaceStore {
     /// it. No path is constructed here and none is resolved against anything.
     /// The event goes out either way, so an agent watching knows the document it
     /// put on screen has changed underneath it.
-    public func saveFile(path: String, contents: String) {
+    ///
+    /// Checked first: if the file is no longer the version the editor read
+    /// (`expecting`), nothing is written unless the person chose to
+    /// overwrite (`force`), and the version replaced is copied to
+    /// `~/.bob/backups` before anything is. See `FileSafety`.
+    @discardableResult
+    public func saveFile(
+        path: String, contents: String, expecting: FileSafety.Stamp?, force: Bool = false,
+        backups: URL = FileSafety.backups
+    ) -> FileSafety.Outcome {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-        do {
-            try contents.write(to: url, atomically: true, encoding: .utf8)
+        let outcome = FileSafety.save(
+            contents, to: url, expecting: expecting, force: force, backups: backups)
+        switch outcome {
+        case .saved(_, let backup):
+            var payload: [String: JSON] = ["path": .string(path)]
+            if let backup { payload["backup"] = .string(backup.path) }
+            onEvent?(.action(name: "file.saved", component: "File", payload: payload))
+        case .conflict:
             onEvent?(.action(
-                name: "file.saved",
-                component: "File",
-                payload: ["path": .string(path)]))
-        } catch {
-            warn("Could not save \(url.lastPathComponent)")
+                name: "file.conflict", component: "File", payload: ["path": .string(path)]))
+        case .failed(let message):
+            warn(message)
         }
+        return outcome
     }
 
     /// Tell whoever is drawing that something they sent was ignored.
@@ -305,6 +380,10 @@ public final class SurfaceStore {
             report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
             return
         }
+        // Where the pressed row is now, so the card it opens grows out of
+        // this row and not out of wherever a row of that id is when the
+        // answer lands (ContainerTransform.swift, RowAnchors.press).
+        if let surfaceID { RowAnchors.shared.press(surface: surfaceID, row: row) }
         onEvent?(.rowAction(name: action, row: row, surface: surfaceID))
     }
 

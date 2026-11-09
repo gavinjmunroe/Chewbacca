@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+"""clay-map: every element on every Clay screen, where it leads, and how fast.
+
+    clay-map stats                          coverage of the current map
+    clay-map states [text]                  states, filtered by id or base path
+    clay-map where <state> <label>          where an element on a state leads
+    clay-map unlocks <state>                what opens a state, and what it holds
+    clay-map path <from> <to>               fastest route in ms, from local data
+    clay-map crawl [--max-passes N]         re-crawl the live UI, read-only
+    clay-map package                        rebuild package.json from the map
+    clay-map go <state>                     drive the Clay tab to any crawled state
+
+Queries read library/learning/clay-navigation/elements.json and never touch
+the browser. A state is a page (URL pattern) or a page plus the chain of
+openers behind its open menu, modal, panel or tab. `path` prices a router hop
+to any page at that page's measured hop time and a press at its measured
+first-change time; `clay-go` drives the result.
+
+`crawl` presses every element that is not a gate, field or toggle in Caleb's
+signed-in Clay tab, behind a guard that refuses every non-read request to
+api.clay.com. It writes nothing to Clay and nothing personal to the repo.
+"""
+from __future__ import annotations
+
+import argparse
+import heapq
+import json
+import os
+import statistics
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+PKG_DIR = Path(os.environ.get("CLAY_MAP_DIR", HERE.parent / "library/learning/clay-navigation"))
+ELEMENTS = PKG_DIR / "elements.json"
+ROUTES = PKG_DIR / "routes.json"
+JEV_DIR = Path(os.environ.get("JEV_ULTRAFAST_DIR", Path.home() / ".chewbacca/jev-ultrafast"))
+# Workspace ids, page labels and the crawl log stay in a cache nothing
+# mirrors: ~/.chewbacca/cache is copied into the second-brain repo.
+CACHE_DIR = Path(os.environ.get("CLAY_PRIVATE_DIR", Path.home() / "Library/Caches/chewbacca-clay"))
+# A press with no measured first-change time is priced at this (guessed,
+# never measured; the crawl records a time for nearly every press).
+DEFAULT_PRESS_MS = 150
+# A page the crawl never timed is priced at the median settle across 32 pages
+# measured on 2026-10-09 (~0.7 s).
+DEFAULT_HOP_MS = 700
+
+
+def default_workspace():
+    """$CLAY_WORKSPACE_ID, else the one workspace the GTM client config names,
+    else None. The same rule as clay-inbox: no client workspace is built in."""
+    if os.environ.get("CLAY_WORKSPACE_ID"):
+        return os.environ["CLAY_WORKSPACE_ID"]
+    cfg = os.environ.get("GTM_CONFIG") or os.path.expanduser("~/.chewbacca/gtm/clients.json")
+    try:
+        with open(cfg) as f:
+            clients = json.load(f).get("clients", [])
+    except (OSError, ValueError, AttributeError):
+        clients = []
+    found = {str(w) for c in clients if isinstance(c, dict) for w in (c.get("workspaces") or [])}
+    return found.pop() if len(found) == 1 else None
+
+
+def load() -> dict:
+    if not ELEMENTS.exists():
+        sys.exit("clay-map: no map yet. run: clay-map crawl")
+    return json.loads(ELEMENTS.read_text())
+
+
+def find_state(m: dict, want: str) -> dict:
+    states = m["states"]
+    if want in states:
+        return states[want]
+    hits = [s for s in states.values() if want in s["id"] or want == s["base"]]
+    hits = [s for s in hits if not s["chain"]] or hits
+    if len(hits) == 1:
+        return hits[0]
+    sys.exit(f"clay-map: state {want!r} matched {len(hits)}: " + ", ".join(s["id"] for s in hits[:8]))
+
+
+def opener_text(s: dict) -> str:
+    return " > ".join(f"{c['role']}:{c['label']}" for c in s["chain"]) or "(page)"
+
+
+def coverage(m: dict) -> dict:
+    """Counts straight from the stored states, so they always match the file."""
+    c = {"states": len(m["states"]), "states_reached": 0, "elements": 0, "explored": 0, "links_and_external": 0,
+         "gates": 0, "gates_found_by_guard": 0, "fields_and_toggles": 0, "chrome_or_inherited_repeats": 0,
+         "templates": 0, "template_instances_represented": 0, "list_siblings_not_pressed": 0, "no_visible_change": 0, "depth_capped": 0,
+         "unknown_destination": 0, "unexplored": 0}
+    unexplored = []
+    for sid, st in m["states"].items():
+        c["states_reached"] += bool(st.get("reached"))
+        if not st.get("reached"):
+            unexplored.append({"state": sid, "element": "(whole state)", "why": "could not reach it"})
+        for e in st["elements"]:
+            c["elements"] += 1
+            d = e["disposition"]
+            if e.get("template"):
+                c["templates"] += 1
+                c["template_instances_represented"] += e.get("instances", 1)
+            if d == "explored":
+                c["explored"] += 1
+                if e.get("kind") in ("nothing", "in-place"):
+                    c["no_visible_change"] += 1
+                if e.get("kind") == "document-load":
+                    c["unknown_destination"] += 1
+                if "depth cap" in e.get("reason", ""):
+                    c["depth_capped"] += 1
+            elif d in ("link", "external"):
+                c["links_and_external"] += 1
+            elif d == "gate":
+                c["gates"] += 1
+                c["gates_found_by_guard"] += e.get("kind") == "write-blocked"
+                c["unknown_destination"] += 0 if e.get("to") else 1
+            elif d in ("field", "toggle"):
+                c["fields_and_toggles"] += 1
+                c["unknown_destination"] += 1
+            elif d in ("chrome", "current-tab", "template-instance"):
+                c["chrome_or_inherited_repeats"] += 1
+            elif d == "sibling":
+                c["list_siblings_not_pressed"] += 1
+            else:
+                c["unexplored"] += 1
+                unexplored.append({"state": sid, "element": f"{e['role']}:{e['label']}", "why": e.get("reason", d)})
+    c["endpoints"] = m.get("coverage", {}).get("endpoints")
+    c["passes"] = m.get("coverage", {}).get("passes")
+    c["crawl_minutes"] = m.get("coverage", {}).get("crawl_minutes")
+    c["unexplored_list"] = unexplored[:400]
+    return c
+
+
+def cmd_stats(m: dict, _a) -> int:
+    m["coverage"] = coverage(m)
+    print(json.dumps(m["coverage"], indent=1))
+    return 0
+
+
+def cmd_states(m: dict, a) -> int:
+    for s in m["states"].values():
+        if a.text and a.text not in s["id"] and a.text not in s["base"]:
+            continue
+        print(f"{s['id']:50} {s['kind']:8} {len(s['elements']):4} el  {opener_text(s)[:80]}")
+    return 0
+
+
+def cmd_where(m: dict, a) -> int:
+    s = find_state(m, a.state)
+    q = a.label.lower()
+    hits = [e for e in s["elements"] if q in e["label"].lower() or q in e.get("testid", "").lower()]
+    for e in hits:
+        print(json.dumps({k: e.get(k) for k in ("role", "label", "testid", "disposition", "kind", "to", "ms", "unlocked", "unlocked_sample", "reason") if e.get(k) not in (None, "", [])}))
+    if not hits:
+        print(f"no element matching {a.label!r} on {s['id']}; {len(s['elements'])} elements there")
+        return 1
+    return 0
+
+
+def cmd_unlocks(m: dict, a) -> int:
+    s = find_state(m, a.state)
+    into = [(src["id"], e) for src in m["states"].values() for e in src["elements"] if e.get("to") == s["id"]]
+    print(json.dumps({"state": s["id"], "base": s["base"], "kind": s["kind"], "opened_by": opener_text(s),
+                      "reached_from": [f"{sid} :: {e['role']}:{e['label']} ({e.get('kind')})" for sid, e in into[:20]],
+                      "router_hop_ms": m["hop_ms"].get(s["base"]),
+                      "holds": len(s["elements"]),
+                      "explorable": [f"{e['role']}:{e['label']} -> {e.get('kind') or e['disposition']}" for e in s["elements"]
+                                     if e["disposition"] in ("explored", "link")][:40],
+                      "gates": [f"{e['role']}:{e['label']}" for e in s["elements"] if e["disposition"] == "gate"][:40]}, indent=1))
+    return 0
+
+
+def graph(m: dict) -> dict[str, list[tuple[float, str, str]]]:
+    g: dict[str, list] = {sid: [] for sid in m["states"]}
+    pages = [s for s in m["states"].values() if not s["chain"]]
+    for s in m["states"].values():
+        for e in s["elements"]:
+            to = e.get("to")
+            if e["disposition"] in ("explored", "link") and to in m["states"]:
+                cost = (m["hop_ms"].get(m["states"][to]["base"]) or DEFAULT_HOP_MS) if e["disposition"] == "link" else (e.get("ms") or DEFAULT_PRESS_MS)
+                g[s["id"]].append((float(cost), to, f"press {e['role']}:{e['label']}" if e["disposition"] != "link" else f"link {e['label']}"))
+        # Any page is one router hop away from anywhere: clay-go pushes the URL.
+        for p in pages:
+            if p["id"] != s["id"]:
+                g[s["id"]].append((float(m["hop_ms"].get(p["base"]) or DEFAULT_HOP_MS), p["id"], f"router hop {p['base']}"))
+    return g
+
+
+def cmd_path(m: dict, a) -> int:
+    src, dst = find_state(m, a.src)["id"], find_state(m, a.dst)["id"]
+    g = graph(m)
+    dist, prev = {src: 0.0}, {}
+    pq = [(0.0, src)]
+    while pq:
+        d, u = heapq.heappop(pq)
+        if u == dst:
+            break
+        if d > dist.get(u, 1e18):
+            continue
+        for c, v, how in g.get(u, []):
+            if d + c < dist.get(v, 1e18):
+                dist[v], prev[v] = d + c, (u, how, c)
+                heapq.heappush(pq, (d + c, v))
+    if dst not in dist:
+        print(json.dumps({"reachable": False, "from": src, "to": dst}))
+        return 1
+    steps, v = [], dst
+    while v != src:
+        u, how, c = prev[v]
+        steps.insert(0, {"from": u, "do": how, "to": v, "ms": round(c)})
+        v = u
+    print(json.dumps({"from": src, "to": dst, "total_ms": round(dist[dst]), "steps": steps}, indent=1))
+    return 0
+
+
+# ---------------------------------------------------------------- crawl ----
+
+def names_for_redaction(ws: str) -> list[str]:
+    """Every workspace-specific name the CLI knows. Used only inside the page
+    to blank labels; never written anywhere."""
+    out = []
+    for args, field in ((["tables", "list"], "name"), (["campaigns", "list"], "name"), (["workflows", "list"], "name"),
+                        (["workbooks", "list"], "name"), (["users", "list"], "name"), (["audiences", "list"], "name")):
+        try:
+            r = subprocess.run(["clay", *args], capture_output=True, text=True, timeout=60)
+            out += [d.get(field) or "" for d in json.loads(r.stdout).get("data", [])]
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            continue
+    return [n for n in out if n]
+
+
+def _harness_env() -> None:
+    try:
+        import browser_harness  # noqa: F401
+    except ImportError:
+        py = JEV_DIR / ".venv/bin/python"
+        if not py.exists():
+            sys.exit("clay-map: Browser Harness is not installed. run: jev-browse install")
+        os.execv(str(py), [str(py), __file__, *sys.argv[1:]])
+
+
+def cmd_go(m: dict, a) -> int:
+    """Reach a crawled state: one router hop to its page, then its openers,
+    matched by structure and label exactly as the crawl pressed them. The
+    concrete page URLs come from the private cache the crawl wrote."""
+    _harness_env()
+    sys.path.insert(0, str(HERE / "lib"))
+    import clay_crawl as cc
+    target = find_state(m, a.state)
+    cache = CACHE_DIR / f"clay-map-{a.ws}.json"
+    if not cache.exists():
+        sys.exit("clay-map: no URL cache for this workspace. run: clay-map crawl")
+    urls = json.loads(cache.read_text())["urls"]
+    routes = json.loads(ROUTES.read_text())
+    t0 = time.perf_counter()
+    page = cc.Page(a.ws, [], routes["gate_words"], reload=False)
+    crawl = cc.Crawl(page, a.ws)
+    crawl.urls = urls
+    chain = []
+    for c in target["chain"]:
+        struct, _, tail = c["key"].rpartition("|")
+        chain.append({"struct": struct, "tail": tail, "template": tail == "<per-row>", "index": 0, "key": c["key"]})
+    sid = crawl.add_state(target["base"], chain, target["kind"])
+    ok = crawl.reach(sid)
+    print(json.dumps({"state": target["id"], "ok": ok, "ms": round((time.perf_counter() - t0) * 1000),
+                      "at": cc.pattern(page.url())}))
+    return 0 if ok else 1
+
+
+def cmd_crawl(_m, a) -> int:
+    _harness_env()
+    sys.path.insert(0, str(HERE / "lib"))
+    import clay_crawl as cc
+
+    routes = json.loads(ROUTES.read_text())
+    t0 = time.time()
+    log_path = CACHE_DIR / f"clay-crawl-{a.ws}.log"
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    logf = log_path.open("a")
+
+    import clay_sanitize
+
+    def log(msg: str) -> None:
+        msg = clay_sanitize.log_line(msg)
+        logf.write(msg + "\n"); logf.flush()
+        # Always to stdout too, so `chewbacca jobs log` shows progress.
+        print(msg, flush=True)
+
+    names = names_for_redaction(a.ws)
+    page = cc.Page(a.ws, names, routes["gate_words"])
+    crawl = cc.Crawl(page, a.ws, log)
+    crawl.names = names
+    private = CACHE_DIR / f"clay-crawl-state-{a.ws}.json"
+    if a.resume and private.exists():
+        # The private checkpoint keeps the page's own keys; the repo file is
+        # sanitized and would not match the live page.
+        log(f"resumed {crawl.resume_private(json.loads(private.read_text()))} states")
+    last = [0.0]
+
+    def checkpoint(c, result, final):
+        # Write the map every two minutes so a crash keeps what was learned.
+        if final or time.time() - last[0] > 120:
+            write_map(c, result, time.time() - t0, a.ws, repo=not a.max_states)
+            last[0] = time.time()
+
+    crawl.checkpoint = checkpoint
+    result = crawl.run(passes_quiet=2, max_passes=a.max_passes, max_states=a.max_states)
+    # A run cut short with --max-states is a check, not a crawl: on 2026-10-10
+    # one rewrote the shipped map with 322 states marked unread. It keeps only
+    # the private checkpoint.
+    write_map(crawl, result, time.time() - t0, a.ws, repo=not a.max_states)
+    if not a.max_states:
+        print(json.dumps({k: v for k, v in json.loads(ELEMENTS.read_text())["coverage"].items() if k != "unexplored_list"}, indent=1))
+    return 0
+
+
+def add_endpoint(endpoints: dict, r: dict, who: str) -> None:
+    key = f"{r['method']} {r['path']}"
+    ep = endpoints.setdefault(key, {"method": r["method"], "path": r["path"], "query": [], "body": [], "statuses": [],
+                                    "_ms": [], "fired_by": [], "blocked_by_guard": False})
+    ep["query"] = sorted(set(ep["query"]) | set(r.get("query") or []))
+    ep["body"] = sorted(set(ep["body"]) | set(r.get("body") or []))
+    if r.get("status") not in ep["statuses"]:
+        ep["statuses"].append(r.get("status"))
+    ep["_ms"].append(r.get("ms"))
+    ep["blocked_by_guard"] = ep["blocked_by_guard"] or r.get("status") == "blocked"
+    if who not in ep["fired_by"]:
+        ep["fired_by"].append(who)
+
+
+def persist(m: dict, endpoints: dict | None, names=()) -> None:
+    """The only writer of elements.json and routes.json endpoints: both go
+    through clay_sanitize.Sanitizer first, and a leak check refuses the write."""
+    sys.path.insert(0, str(HERE / "lib"))
+    import clay_sanitize
+    san = clay_sanitize.Sanitizer(names=names)
+    clean = san.map(m)
+    routes = json.loads(ROUTES.read_text())
+    if endpoints is not None:
+        routes["endpoints"] = san.endpoints(endpoints)
+    else:
+        routes["endpoints"] = san.endpoints(routes.get("endpoints", {}))
+    # Op names come from the repo's own registry, after the sanitizer ran.
+    import clay_registry_link
+    linked = clay_registry_link.annotate(clean, routes["endpoints"], clay_registry_link.index(HERE.parent))
+    clean["coverage"]["endpoints"] = len(routes["endpoints"])
+    clean["coverage"]["endpoints_linked_to_registry_ops"] = linked
+    text = json.dumps(clean, indent=1, ensure_ascii=False) + "\n"
+    rtext = json.dumps(routes, indent=1, ensure_ascii=False) + "\n"
+    leaks = clay_sanitize.find_leaks(text) + clay_sanitize.find_leaks(json.dumps(routes.get("endpoints", {})))
+    if leaks:
+        sys.exit(f"clay-map: refusing to write, the sanitizer let through {leaks[:5]}")
+    ELEMENTS.write_text(text)
+    ROUTES.write_text(rtext)
+
+
+def cmd_scrub(_m, _a) -> int:
+    """Re-run the sanitizer over the stored map (after a rule change)."""
+    persist(json.loads(ELEMENTS.read_text()), None)
+    print(json.dumps(coverage(json.loads(ELEMENTS.read_text())) | {"unexplored_list": "..."}))
+    return 0
+
+
+def write_map(crawl, result: dict, secs: float, ws: str, repo: bool = True) -> None:
+    states = {}
+    counts = {"states": 0, "elements": 0, "explored": 0, "gates": 0, "links": 0, "fields_toggles": 0,
+              "template_instances": 0, "chrome_repeats": 0, "unknown_destination": 0, "unexplored": 0}
+    unexplored = []
+    endpoints: dict[str, dict] = {}
+    for sid, st in crawl.states.items():
+        els = []
+        for e in st["elements"].values():
+            d = e.get("disposition", "unexplored")
+            rec = {k: e[k] for k in ("role", "label", "testid", "popup", "template", "instances", "struct") if k in e}
+            rec["disposition"] = d
+            for k in ("kind", "to", "ms", "quiet_ms", "unlocked", "unlocked_sample", "reason", "requests"):
+                if e.get(k) not in (None, "", []):
+                    rec[k] = e[k]
+            els.append(rec)
+            counts["elements"] += 1
+            if d == "explored":
+                counts["explored"] += 1
+                if rec.get("kind") in ("nothing", "in-place", "document-load"):
+                    counts["unknown_destination"] += 1
+            elif d == "gate":
+                counts["gates"] += 1
+                counts["unknown_destination"] += 0 if rec.get("to") else 1
+            elif d in ("link", "external"):
+                counts["links"] += 1
+            elif d in ("field", "toggle"):
+                counts["fields_toggles"] += 1
+                counts["unknown_destination"] += 1
+            elif d == "template-instance":
+                counts["template_instances"] += 1
+            elif d in ("chrome", "current-tab"):
+                counts["chrome_repeats"] += 1
+            else:
+                counts["unexplored"] += 1
+                unexplored.append({"state": sid, "element": f"{rec['role']}:{rec['label']}", "why": e.get("reason", d)})
+        for r in st.get("load_requests") or []:
+            add_endpoint(endpoints, r, f"{sid} (page load)")
+        for e in els:
+            for r in e.get("requests") or []:
+                add_endpoint(endpoints, r, f"{sid} :: {e['role']}:{e['label']}")
+        states[sid] = {"id": sid, "base": st["base"], "kind": st["kind"], "redirects_to": st.get("match"),
+                       "load_requests": st.get("load_requests") or [],
+                       "chain": [{"role": c["role"], "label": c["label"], "key": c["key"]} for c in st["chain"]],
+                       "reached": st["explored"], "elements": els}
+        if not st["explored"]:
+            unexplored.append({"state": sid, "element": "(whole state)", "why": "could not reach it"})
+    counts["states"] = len(states)
+    hop = {b: round(statistics.median(v)) for b, v in crawl.hop_ms.items() if v}
+    m = {"schema": "clay-elements/1", "revision": time.strftime("%Y-%m-%d") + ".1",
+         "observed": "Crawled read-only behind clay_guard.js in a signed-in Chrome over Browser Harness. Labels are Clay's own UI copy; <data> and <per-row> mark text that was not, which is never stored.",
+         "coverage": {**counts, "passes": result["passes"], "crawl_minutes": round(secs / 60, 1), "unexplored_list": unexplored[:400]},
+         "hop_ms": hop, "states": states}
+    m["coverage"]["endpoints"] = len(endpoints)
+    m["coverage"] = {**m["coverage"], **coverage(m)}
+    for ep in endpoints.values():
+        ep["fired_by"] = sorted(ep["fired_by"])[:30]
+        ms = [x for x in ep.pop("_ms") if isinstance(x, (int, float))]
+        ep["ms_p50"] = round(statistics.median(ms)) if ms else None
+        ep["statuses"] = sorted(ep["statuses"], key=str)
+    if repo:
+        persist(m, endpoints, getattr(crawl, "names", ()))
+    (CACHE_DIR / f"clay-map-{ws}.json").write_text(json.dumps({"urls": crawl.urls, "hop_ms": crawl.hop_ms}))
+    # Private resume point: local cache only, never committed.
+    (CACHE_DIR / f"clay-crawl-state-{ws}.json").write_text(json.dumps(
+        {"states": crawl.states, "urls": crawl.urls, "hop_ms": crawl.hop_ms, "page_keys": crawl.page_keys}))
+
+
+def cmd_package(_m, _a) -> int:
+    """Rebuild package.json. Hand-written edges (ids not generated here) and
+    their states are carried over from the current file, so receipts that
+    name them keep matching."""
+    sys.path.insert(0, str(HERE / "lib"))
+    import clay_package
+    current = json.loads((PKG_DIR / "package.json").read_text())
+    routes = json.loads(ROUTES.read_text())
+    generated = set(routes["states"]) | {"any-page", "gate-held"}
+    legacy = {"states": [s for s in current["states"] if not s["id"].startswith("x.") and s["id"] not in generated
+                         or s["id"] == "home"],
+              "edges": [e for e in current["edges"] if not e["id"].startswith("e-")]}
+    pkg = clay_package.build(PKG_DIR, legacy)
+    (PKG_DIR / "package.json").write_text(json.dumps(pkg, indent=1, ensure_ascii=False) + "\n")
+    print(json.dumps({"states": len(pkg["states"]), "edges": len(pkg["edges"]),
+                      "forbidden": sum(e["forbidden"] for e in pkg["edges"]), "revision": pkg["revision"]}))
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("stats")
+    sub.add_parser("package")
+    sub.add_parser("scrub")
+    p = sub.add_parser("go"); p.add_argument("state"); p.add_argument("--ws", default=None)
+    p = sub.add_parser("states"); p.add_argument("text", nargs="?")
+    p = sub.add_parser("where"); p.add_argument("state"); p.add_argument("label")
+    p = sub.add_parser("unlocks"); p.add_argument("state")
+    p = sub.add_parser("path"); p.add_argument("src"); p.add_argument("dst")
+    p = sub.add_parser("crawl"); p.add_argument("--ws", default=None); p.add_argument("--max-passes", type=int, default=6)
+    p.add_argument("-v", "--verbose", action="store_true"); p.add_argument("--max-states", type=int, default=0)
+    p.add_argument("--resume", action="store_true", help="continue from the last checkpoint")
+    a = ap.parse_args(argv)
+    if hasattr(a, "ws") and not a.ws:
+        a.ws = default_workspace()
+        if not a.ws and a.cmd in ("crawl", "go"):
+            sys.exit("no Clay workspace: pass --ws <id> or set CLAY_WORKSPACE_ID")
+    if a.cmd == "crawl":
+        return cmd_crawl(None, a)
+    if a.cmd == "package":
+        return cmd_package(None, a)
+    if a.cmd == "scrub":
+        return cmd_scrub(None, a)
+    m = load()
+    if a.cmd == "go":
+        return cmd_go(m, a)
+    return {"stats": cmd_stats, "states": cmd_states, "where": cmd_where, "unlocks": cmd_unlocks, "path": cmd_path}[a.cmd](m, a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

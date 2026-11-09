@@ -138,7 +138,12 @@ struct SocketTests {
         if second >= 0 {
             let payload = "r successor\n"
             _ = payload.withCString { send(second, $0, strlen($0), 0) }
-            try await Task.sleep(for: .milliseconds(100))
+            // Polled, not one fixed sleep: a flat 100 ms missed the line in
+            // two of four full runs on 2026-10-10 with the Mac at load 50 to
+            // 160, and passed five of five run on its own.
+            for _ in 0..<40 where !lines.all.contains("r successor") {
+                try await Task.sleep(for: .milliseconds(50))
+            }
             close(second)
         }
         #expect(lines.all.contains("r successor"))

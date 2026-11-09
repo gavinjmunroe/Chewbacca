@@ -29,12 +29,40 @@ type hook_init >/dev/null 2>&1 && hook_init skill-route.sh "$([ -n "${SKILL_ROUT
 # speaks on every prompt is one that gets tuned out inside a week, which is the
 # failure it exists to prevent.
 
-SKILL_ROUTE_PAYLOAD=$(cat)
+SKILL_ROUTE_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export SKILL_ROUTE_PAYLOAD
 export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 
-exec python3 <<'PY'
-import atexit, json, os, re, sys
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
+exec python3 -I <<'PY'
+import atexit, json, os, re, sys, time
+
+_T0 = time.time()
+
+def _verdict(kind, name, decision, ms=0, reason="", subject="", event="", session=""):
+    """One row in ~/.chewbacca/logs/verdicts.tsv, the format tools/verdicts.py
+    reads (`chewbacca why --verdicts`). Inlined in skill-route.sh and
+    kit-route.sh because install.sh copies only *.sh into ~/.claude/hooks.
+    Never raises."""
+    try:
+        if os.environ.get("CHEWBACCA_VERDICTS") == "0":
+            return
+        import time as _time
+        path = os.environ.get("CHEWBACCA_VERDICT_LOG") or os.path.join(
+            os.environ.get("CHEWBACCA_LOG_DIR") or os.path.expanduser("~/.chewbacca/logs"), "verdicts.tsv")
+        def c(value, cap):
+            return str(value or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")[:cap]
+        row = "\t".join([str(int(_time.time() * 1000)), kind, c(name, 200), c(event, 60), c(decision, 40),
+                         str(int(ms or 0)), c(session or os.environ.get("CLAUDE_CODE_SESSION_ID", ""), 80),
+                         c(subject, 300), c(reason, 600)]) + "\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, row.encode("utf-8", "replace"))
+        finally:
+            os.close(fd)
+    except Exception:
+        pass
 
 
 def route_shadow(row):
@@ -106,6 +134,30 @@ SHADOW = {"hook": "skill-route", "session_id": str(payload.get("session_id") or 
           "gate_threshold": None, "candidates": [], "shown": [], "required": []}
 if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
     atexit.register(lambda: route_shadow(dict(SHADOW)))
+
+
+def _route_verdict():
+    """What this prompt was routed to, as one verdict row: require (a skill
+    the next tool call is gated on), route (skills shown), or skip with the
+    gate that stopped it. The prompt itself stays in route-shadow.jsonl."""
+    if SHADOW.get("required"):
+        decision = "require"
+    elif SHADOW.get("shown"):
+        decision = "route"
+    else:
+        decision = "skip"
+    top = ", ".join("%s %s" % (c.get("name"), c.get("score")) for c in (SHADOW.get("candidates") or [])[:3])
+    parts = [("required: " + ", ".join(SHADOW["required"])) if SHADOW.get("required") else "",
+             ("shown: " + ", ".join(SHADOW["shown"])) if SHADOW.get("shown") else "",
+             ("gate: " + SHADOW["gate"]) if SHADOW.get("gate") else "",
+             ("top: " + top) if top else "",
+             ("method: " + SHADOW["method"]) if SHADOW.get("method") else ""]
+    _verdict("router", "skill-route.sh", decision, (time.time() - _T0) * 1000,
+             "; ".join(x for x in parts if x), event="UserPromptSubmit", session=SHADOW.get("session_id", ""))
+
+
+if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
+    atexit.register(_route_verdict)
 # Too short to match on, or a slash command the person already chose.
 if len(prompt) < 12 or prompt.startswith("/"):
     SHADOW["gate"] = "short-or-slash"
@@ -117,7 +169,27 @@ if len(prompt) < 12 or prompt.startswith("/"):
 # and it will match something almost every time. Nobody asked it anything.
 NOISE = ("SYSTEM NOTIFICATION", "task-notification", "<task-id>",
          "exited with code", "hookSpecificOutput", "task notification")
-if any(marker in prompt for marker in NOISE):
+# Messages from other sessions and the harness, and prompts a tool sends through
+# claude -p. Measured 2026-10-16 (tools/skill_route_eval.py, 238 hand-labeled
+# prompts): 8 of 35 held-out machine prompts still got a skill or armed the
+# graph-engineering gate, because the app prepends a <system-reminder> block to a
+# <cross-session-message>, so the tag was not where a marker check looked, and the
+# commit security review ("Review this change...") armed the big-work gate 5
+# times. The route-shadow log held 59 routed cross-session messages and 165
+# routed prompts that opened with a Linked-sessions reminder in the week before.
+# None of them is a request anyone typed, so none of them gets a nudge.
+MACHINE_OPENERS = ("<cross-session-message", "<side-sessions-event", "<task-notification", "<heartbeat",
+                   "<agent-message", "<send_user_message", "<ci-monitor-event", "Stop hook feedback",
+                   # The tools' exact wording, so a typed "review this change for
+                   # security vulnerabilities in X" still routes.
+                   "Review this change for security vulnerabilities.\n\nChanged files",
+                   "Write a short sidebar title for a coding session that opens with this request:",
+                   # Kit tools that drive claude -p (the people extractor, Realm, the runtime
+                   # check); each got a keyword nudge on 2026-10-16's held-out run.
+                   "### EPISODE ", "The user opened with: ",
+                   "This is an explicitly authorized bounded Chewbacca native runtime check")
+body = re.sub(r"^(?:\s*<(system-reminder|ide_opened_file|ide_selection)>.*?</\1>)+\s*", "", prompt, flags=re.S)
+if any(marker in prompt for marker in NOISE) or body.startswith(MACHINE_OPENERS):
     SHADOW["gate"] = "machine"
     raise SystemExit(0)
 
@@ -144,9 +216,13 @@ if any(marker in prompt for marker in NOISE):
 # The weights are float16, base64, regenerated by tools/train_bigwork_probe.py
 # from labels that stay in the private second brain. A down or cold model gates
 # nothing here; skill-gate.sh's third-file and agent-spawn backstop still does.
-PROBE_W = "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"
-PROBE_B = -0.442645
-PROBE_CUTOFF = 0.5
+# Refit 2026-10-09 (CHW-144) on 162: 21 prompts from route-shadow.jsonl it had
+# misjudged, labeled by what the turn became (a subagent or 40+ tool calls = big).
+# 5-fold CV 27/41 big, 18/121 false; refit weights on the old 141: 33/34 big,
+# false 5/107 to 3/107; on the 21 new: big 2/7 to 6/7, false 13/14 to 5/14.
+PROBE_W = "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"
+PROBE_B = -0.524564
+PROBE_CUTOFF = float(os.environ.get("SKILL_ROUTE_PROBE_CUTOFF", "0.5"))
 low = prompt.lower()
 question = low.endswith("?") and re.match(r"(how|what|why|when|where|which|who|is|are|does|do|can|should)\b", low)
 sid_early = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
@@ -193,7 +269,7 @@ def big_work():
 # asset generation, page code and deploy prep ran strictly one after another,
 # because a once-per-session gate had nothing left to say. Caleb: "Why tf you
 # not graph engineering I should never have to say this". Loaded is not
-# applied; each big prompt needs its own task graph, so skill-gate.sh refuses
+# applied; each big prompt needs its own task graph, so skill-gate.sh nudges
 # that turn's first tool call until the skill is re-read or an agent fans out.
 if (sid_early and not question
         and not os.environ.get("SKILL_ROUTE_BUILD_CACHE") and big_work()):
@@ -290,7 +366,7 @@ def frontmatter(path):
     if len(head) < 3:
         return None, None
     body = head[1]
-    name = desc = None
+    name = desc = trig = None
     key = None
     for line in body.split("\n"):
         m = re.match(r"^([a-zA-Z_-]+):\s*(.*)$", line)
@@ -300,10 +376,17 @@ def frontmatter(path):
                 name = val.strip().strip("'\"")
             elif key == "description":
                 desc = val.strip().strip("'\"")
+            elif key == "triggers":
+                trig = "" if val.strip() in (">", ">-", "|", "|-") else val.strip().strip("'\"")
             continue
         if key == "description" and line.strip():
             desc = (desc or "") + " " + line.strip().strip("'\"")
-    return name, desc
+        elif key == "triggers" and line.strip():
+            trig = ((trig or "") + " " + line.strip()).strip()
+    # `triggers:` holds a skill's full routing text. Claude Code never loads it,
+    # so the description it does load can stay near 200 characters (cut from up
+    # to 1,015 on 2026-10-11) while routing reads exactly what it read before.
+    return name, (trig or desc)
 
 skills = []
 seen = set()
@@ -397,9 +480,79 @@ def vector_route():
     SHADOW["candidates"] = [{"name": skills[i][0], "score": round(c, 4)} for c, i in scored[:3]]
     return [(c, skills[i][0], skills[i][2]) for c, i in scored[:2] if c >= VEC_MIN][:1]
 
-vec = None if os.environ.get("SKILL_ROUTE_NO_VECTOR") else vector_route()
-SHADOW["method"] = "stem" if vec is None else "vector"
+def named_skills(text):
+    """Skills the prompt names on purpose: a hyphenated skill name as a word ("gtm-engineering"),
+    or a one-word name next to load/use/run/open or followed by "skill" ("use the texts skill").
+    A bare common word like "texts" or "team" is not a name; that is the meaning router's job."""
+    # A name inside a path ("~/second-brain/...", "skills/jev/SKILL.md") is a file, not a request:
+    # on 2026-10-16 that alone named second-brain on 3 of 4 held-out briefs.
+    low = re.sub(r"\S*/\S*", " ", text.lower())
+    words = set(re.findall(r"[a-z0-9][a-z0-9-]*[a-z0-9]", low))
+    found = []
+    for name, _d, path in skills:
+        n = name.lower()
+        if n not in words:
+            continue
+        if "-" in n or re.search(rf"\b(?:load|use|run|open)\s+(?:the\s+)?{re.escape(n)}\b|\b{re.escape(n)}\s+skill\b", low):
+            found.append((name, path))
+    return found[:2]
+
+
+NAMED = named_skills(prompt)
+# The meaning (embedding) nudge is off unless SKILL_ROUTE_MEANING=on. Measured 2026-10-16 with
+# tools/skill_route_eval.py on 284 held-out prompts (126 random, 71 positives, labels private):
+#   meaning on (as shipped before)  precision 10.9% (5 of 46)  recall 40.8%  p95 1337ms
+#   keyword + named, meaning off    precision 11.9% (5 of 42)  recall 25.4%  p95 577ms
+#   strict cutoff 0.46              precision 7.7%  (1 of 13)  recall 11.3%
+#   named only                      precision 25%   (1 of 4)   recall 4.2%
+# No cutoff reached 50% precision on train. The rule fixed before the run was: ship the arm with
+# higher precision than today and recall no more than 5 points below the no-meaning control, and
+# no arm beat the control. It costs 15 points of recall on skill-shaped prompts; on the random
+# traffic the right nudges were 5 either way.
+if NAMED:
+    vec = []
+elif os.environ.get("SKILL_ROUTE_NO_VECTOR") or os.environ.get("SKILL_ROUTE_MEANING", "off") != "on":
+    vec = None
+else:
+    vec = vector_route()
+SHADOW["method"] = "named" if NAMED else ("stem" if vec is None else "vector")
 SHADOW["threshold"] = None if vec is None else VEC_MIN
+
+def phrase_skills(text):
+    """Skills whose learned trigger phrase is in the prompt, as whole words.
+
+    Descriptions are documentation English and Caleb types in his own register, so on
+    2026-10-17 the held-out recall gap was prompts like "give me a text to send the gc".
+    config/skill-route-phrases.json holds phrases learned from the train split only
+    (tools/skill_route_phrases.py) and cut by hand of names. SKILL_ROUTE_PHRASES=off
+    turns it off, which is how the eval measures the arm against the control."""
+    if os.environ.get("SKILL_ROUTE_PHRASES", "on") == "off":
+        return []
+    here = os.path.dirname(os.path.abspath(os.environ.get("SKILL_ROUTE_SELF") or "."))
+    table = {}
+    for cand in (os.path.join(here, "..", "..", "config", "skill-route-phrases.json"),
+                 os.path.expanduser("~/.chewbacca/kit/current/config/skill-route-phrases.json")):
+        try:
+            with open(cand) as fh:
+                table = json.load(fh).get("phrases") or {}
+            break
+        except (OSError, ValueError, AttributeError):
+            continue
+    low = re.sub(r"<system-reminder>.*?</system-reminder>", " ", text, flags=re.S)
+    low = " " + " ".join(re.findall(r"[a-z0-9']+", re.sub(r"\S*/\S*", " ", low.lower()))) + " "
+    paths = {n: p for n, _d, p in skills}
+    found = []
+    for name, phrases in table.items():
+        if name not in paths or not isinstance(phrases, list):
+            continue
+        hit = next((ph for ph in phrases if isinstance(ph, str) and f" {ph} " in low), None)
+        if hit:
+            found.append((name, paths[name], hit))
+    return found[:2]
+
+PHRASED = [] if NAMED else phrase_skills(prompt)
+if PHRASED:
+    SHADOW["phrases"] = [{"name": n, "phrase": ph} for n, _p, ph in PHRASED]
 
 prompt_stems = stems(prompt)
 prompt_bigrams = bigrams(stem_seq(prompt))
@@ -411,10 +564,13 @@ for _n, desc, _p in skills:
     for s in stems(desc):
         claims[s] = claims.get(s, 0) + 1
 
-best = []
-if vec is not None:
+best = [(100.0, name, path, ["named in the prompt"]) for name, path in NAMED]
+if vec:
     best = [(c, name, path, [f"meaning {c:.2f}"]) for c, name, path in vec]
-for name, desc, path in ([] if vec is not None else skills):
+# A learned phrase outranks a description overlap and a meaning score: stem scores are
+# weight*10 plus a bonus and grow with prompt length, so 1000 keeps the phrase first.
+best += [(1000.0, name, path, [f'phrase "{ph}"']) for name, path, ph in PHRASED]
+for name, desc, path in ([] if vec is not None or os.environ.get("SKILL_ROUTE_NO_STEM") else skills):
     d_stems = stems(desc)
     hits = prompt_stems & d_stems
     if not hits:
@@ -467,6 +623,34 @@ if not best:
     raise SystemExit(0)
 
 top = best[:2]
+
+# Third-party packs are parts of a kit skill, never a replacement for it.
+#
+# On 2026-10-10 tests/live/gtm-route.sh failed 4 of 10 after two outside packs
+# were linked into ~/.claude/skills on 10/9: "build a demand gen playbook for
+# jonahs offer" went to playbook-ai-specificity, "book more meetings from cold
+# email" to cold-email, "set up an outbound campaign for a new client" to
+# campaign-strategy. Each is a narrow recipe; the request belongs to the
+# growth engineer, which runs the whole outbound job and reaches for those
+# recipes as references. Rewording gtm-engineering's description to outscore 30
+# narrower skills on their own words never converges, so a match inside a pack
+# routes to the owning skill first and keeps the recipe as the second line.
+PACK_PARENTS = (
+    # (parent skill, path fragments of the pack, single skills that belong)
+    ("gtm-engineering", ("/coldoutboundskills/",), {"cold-email"}),
+)
+if top:
+    _s0, name0, path0, why0 = top[0]
+    real0 = os.path.realpath(path0)
+    for parent, frags, names in PACK_PARENTS:
+        if name0 == parent or not (name0 in names or any(f in real0 for f in frags)):
+            continue
+        hit = next(((n, p) for n, _d, p in skills if n == parent), None)
+        if hit:
+            top = [(_s0, hit[0], hit[1], [f"owns {name0}"] + list(why0)[:1]), top[0]]
+            SHADOW["pack_parent"] = {"child": name0, "parent": parent}
+        break
+
 SHADOW["shown"] = [name for _s, name, _p, _w in top]
 
 lines = []
@@ -476,7 +660,7 @@ for score, name, path, why in top:
     lines.append(f"  {name}  ({short})  matched on: {because}")
 
 # ENFORCED skills: a match writes a marker that skill-gate.sh turns into a
-# refusal on the first tool call, until the skill is actually loaded.
+# nudge on the first tool call, until the skill is actually loaded.
 #
 # 2026-09-29: graph-engineering was named by this router on several prompts in
 # one session and skipped every time, and Caleb had to say "Graph engineer bro,

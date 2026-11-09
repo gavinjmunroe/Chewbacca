@@ -1,0 +1,26 @@
+[package]
+name = "sendpolicy"
+version = "0.1.0"
+edition = "2021"
+description = "Asks config/send-policy.cedar whether a send may go right now, and names the rule that says no."
+license = "MIT"
+publish = false
+
+# Cedar is the policy engine (AWS's, Apache-2.0); hand-rolling one is how a
+# rule file and its reader drift apart. Both crates are pinned in Cargo.lock.
+# If it fails to build, every sink keeps its own inline checks exactly as
+# before (tools/send_policy.py says "unavailable"), so a missing binary costs
+# the one-file answer, never a check.
+[dependencies]
+cedar-policy = "=4.13.0"
+serde_json = "1"
+
+[[bin]]
+name = "chewbacca-sendpolicy"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

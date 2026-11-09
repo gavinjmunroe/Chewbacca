@@ -1,6 +1,8 @@
 ---
 name: grilling
-description: "Grill the user about a plan, design or idea, one round of questions at a time, until there's a shared understanding with nothing silently assumed. Use ONLY when the user asks for it: grill me, grill this, stress-test my plan, poke holes in this, interview me about this, what am I missing in this plan. Never start an interview unasked."
+description: "Grill the user about a plan, design or idea, one round at a time, until nothing is silently assumed. ONLY when asked: grill me, stress-test my plan, poke holes, what am I missing."
+triggers: >-
+  Grill the user about a plan, design or idea, one round of questions at a time, until there's a shared understanding with nothing silently assumed. Use ONLY when the user asks for it: grill me, grill this, stress-test my plan, poke holes in this, interview me about this, what am I missing in this plan. Never start an interview unasked.
 ---
 
 # Grilling
@@ -29,4 +31,4 @@ The session is done when the frontier is empty: every branch visited, nothing le
 
 ## In this kit
 
-From [mattpocock/skills](https://github.com/mattpocock/skills) `skills/productivity/grilling` (MIT, see LICENSE), the tool Charles Zheng named first in his 2026-09-15 reel: "it will help you see your blind spots." Changed here: the round format drops the emoji markers for his register, and the trigger is explicit only, because this kit's standing rule is to act by default and never open with an interview (`feedback_never_interview_first`). He asks to be grilled; it never starts on its own.
+From the `productivity/grilling` skill in [mattpocock/skills](https://github.com/mattpocock/skills) (MIT, see LICENSE), the tool Charles Zheng named first in his 2026-09-15 reel: "it will help you see your blind spots." Changed here: the round format drops the emoji markers for his register, and the trigger is explicit only, because this kit's standing rule is to act by default and never open with an interview (`feedback_never_interview_first`). He asks to be grilled; it never starts on its own.

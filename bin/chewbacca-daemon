@@ -1,0 +1,1113 @@
+#!/usr/bin/env node
+// @ts-nocheck
+/**
+ * chewbacca-daemon: the one background item Chewbacca puts on a Mac.
+ *
+ *   chewbacca-daemon install            write the one LaunchAgent, adopt the old ones
+ *   chewbacca-daemon register NAME (--every SEC | --at HH:MM[,HH:MM] | --keepalive | --app PATH)
+ *                                [--nice N] [--env K=V]... [--start-later]
+ *                                [--swap overlap|stop-start|self] [--listen PORT] [--health-http PATH] -- ARGV...
+ *   chewbacca-daemon unregister NAME
+ *   chewbacca-daemon status [--json] [--check]
+ *   chewbacca-daemon run                 the supervisor launchd starts
+ *   chewbacca-daemon uninstall
+ *
+ * Caleb, 2026-10-11, on two "Background Items Added" notices (kyber-sessions,
+ * node): "Chewb should aim to be only 1 thing ... Most ppl will get weirded out
+ * if they see too many things". Login Items then listed Chewbacca as five
+ * python3 rows, bash rows, two node rows, kyber-sessions and Kyber: one
+ * LaunchAgent per job, each named after whatever binary it started.
+ *
+ * Now there is one LaunchAgent, com.chewbacca, whose program is the
+ * Chewbacca.app runtime (bin/chewbacca-node), so the row reads "Chewbacca"
+ * with its icon. Every job is a file in ~/.chewbacca/daemon/services/ and runs
+ * as a child of this supervisor. Children inherit the runtime as their
+ * responsible process, so the texts refresh keeps its Full Disk Access grant.
+ * The cost: every service here runs under that grant too, the same exposure
+ * bin/chewbacca-node already documents for anything launched through it.
+ *
+ * Kyber is the exception that stays its own process: it is started with
+ * `open`, so LaunchServices launches it and its Accessibility grant stays its own.
+ */
+"use strict";
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { spawn, execFileSync, spawnSync } = require("child_process");
+
+const HOME = os.homedir();
+const DIR = process.env.CHEWBACCA_DAEMON_DIR || path.join(HOME, ".chewbacca", "daemon");
+const SERVICES = path.join(DIR, "services");
+const STATE = path.join(DIR, "state.json");
+const LEGACY = path.join(DIR, "legacy");
+const LOGS = process.env.CHEWBACCA_DAEMON_LOGS || path.join(HOME, "Library", "Logs", "chewbacca");
+const AGENTS = process.env.CHEWBACCA_LAUNCH_AGENTS || path.join(HOME, "Library", "LaunchAgents");
+const LABEL = "com.chewbacca";
+const KIT = process.env.CHEWBACCA_KIT || path.join(HOME, ".chewbacca", "kit", "current");
+const SNAPS = path.join(path.dirname(KIT), "snapshots");
+// Which generation (kit snapshot sha) the supervisor itself booted on, for status.
+const SELF = path.join(DIR, "daemon.json");
+const DEFAULT_PATH = `${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`;
+
+// launchd ran the fastest of the old jobs (the job queue) every 30 s, so a 5 s
+// tick is finer than anything a service asked for. Guessed, never measured
+// for cost; one readdir and a few stats per tick.
+const TICK_MS = 5000;
+// A keepalive service that dies is restarted after 10 s, doubling to 5 min,
+// and the delay resets once it has stayed up a minute. launchd's own
+// ThrottleInterval is 10 s; the ceiling is guessed, never measured.
+const BACKOFF_MIN_S = 10, BACKOFF_MAX_S = 300, STABLE_S = 60;
+// Logs are cut back to the last 1 MB once they pass 5 MB. Guessed: the busiest
+// old log, chewbacca-jobs.log, grew by about 30 lines an hour.
+const LOG_MAX = 5 * 1024 * 1024, LOG_KEEP = 1024 * 1024;
+
+// Labels the kit or Caleb's own setup put in ~/Library/LaunchAgents before
+// this existed. `install` folds each one it finds into a service and removes
+// its plist, so Login Items loses the row. Anything not named here is left alone.
+const ADOPT = [
+  "com.chewbacca.messages-refresh", "com.chewbacca.jobs", "com.chewbacca.agent-watch",
+  "com.chewbacca.kit-runtime", "com.chewbacca.bridge", "com.chewbacca.live-stats-sync",
+  "com.chewbacca.people-dashboard", "com.chewbacca.main-ci", "com.chewbacca.realm",
+  "com.calebnewton.brain-index", "com.calebnewton.people-sync", "com.calebnewton.people-dashboard",
+  "com.calebnewton.chewbacca.hud", "com.calebnewton.chewbacca-maintain",
+  "com.calebnewton.presence-watch", "com.calebnewton.claude-contacts-export",
+  "ai.chewie.brief", "ai.nova.brief",
+];
+// Re-checked this often while running, so a tool that still writes its own
+// plist (realm-engine install, mac/app/install-brief.sh) is folded in within
+// minutes. Guessed, never measured.
+const ADOPT_EVERY_MS = 10 * 60 * 1000;
+
+// A service still on an old generation this long after kit/current moved fails
+// `status --check` (and doctor). The daemon notices a move on its next 5 s tick
+// and was back up 5 to 8 s after each of the 10 moves logged on 2026-10-12;
+// people-sync, a timed job, ran 960 s and held every keepalive service on the
+// old code for that long. 60 s is the plan's line (reengineer step 9).
+const STALE_GRACE_S = 60;
+
+// Blue/green (reengineer step 10). On a kit move every service used to die
+// with the daemon and come back with the next one: the daemon log shows 5.3 to
+// 8.0 s from "kit moved" to "daemon up" across the 7 moves on 2026-10-12, and
+// people-dashboard (0.07 s to listen) and realm-ui (0.17 s) were dark that
+// whole time. Now keepalive services outlive the daemon's restart, and the new
+// daemon swaps each one onto the new kit.
+//
+// The health check decides which copy to keep; it does not hold traffic back.
+// The last socket bound gets every new connection, so a --listen service's new
+// copy serves from the moment it binds, and a bad one serves its errors for up
+// to HEALTH_TIMEOUT_S before the old one takes over again.
+//
+// An adopted process is not our child, so its exit code is unknown: a
+// crash-only service (realm) that exits cleanly in the tick before its swap
+// comes back after backoff instead of staying down. Every adopted service
+// swaps on the first tick, so that window is about 5 s.
+//
+// A new copy must stay up this long before the old one stops. Both services
+// above listen in under 0.2 s, so 3 s is 15 times that. Guessed past that.
+const HEALTH_UP_S = 3;
+// A new copy that is not healthy by now is stopped and the old one keeps
+// serving. Guessed, never measured: 10 times HEALTH_UP_S.
+const HEALTH_TIMEOUT_S = 30;
+// After a failed swap, try again this much later. Guessed: the crash
+// backoff's own ceiling, BACKOFF_MAX_S.
+const SWAP_RETRY_S = 300;
+// A service the last daemon left running is adopted only if the new daemon
+// starts within this long. launchd brought it back in 5.3 to 8.0 s on
+// 2026-10-12; anything far later is a crash we should not trust.
+const HANDOVER_MAX_S = 120;
+// Services that hand themselves over (swap "self"): the daemon never stops
+// one for a kit move. realm-engine run waits until no agent turn is running,
+// then execs the new kit's copy under the same pid. On 2026-10-12 the daemon
+// stop-started the realm engine at 14:57:19Z and 15:03:47Z, 30 s and 23 s
+// into two real Claude turns, and both turns died. A realm adopted from its
+// old plist carries no swap key, so its label alone says self.
+const SELF_HANDOVER_LABELS = new Set(["com.chewbacca.realm"]);
+// A self service still on the old kit fails `status --check` only past this.
+// Guessed, never measured: the longest real turn on 2026-10-12 was 82 s, and
+// an agent run can go much longer, so an hour before it reads as stuck.
+const SELF_STALE_GRACE_S = 3600;
+// ps prints a start time to the second, and spawn() returns within a few ms
+// of the fork, so a pid whose start is within 2 s of lastStart is ours.
+const SAME_START_MS = 2000;
+const PYTHON = "/usr/bin/python3";
+const LISTEN_EXEC = path.join(__dirname, "lib", "listen_exec.py");
+
+const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+function readJSON(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+function writeJSON(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+function validate(svc) {
+  if (!svc || !NAME_RE.test(svc.name || "")) return "name must be lowercase letters, digits, . _ or -";
+  const modes = ["every", "at", "keepalive", "app"].filter((k) => svc[k] !== undefined && svc[k] !== false);
+  if (modes.length !== 1) return "give exactly one of --every, --at, --keepalive, --app";
+  if (svc.keepalive !== undefined && svc.keepalive !== true && svc.keepalive !== "crash") return "--keepalive is true or crash";
+  if (svc.every !== undefined && !(Number.isFinite(svc.every) && svc.every >= 5)) return "--every needs whole seconds, at least 5";
+  if (svc.at !== undefined && !(Array.isArray(svc.at) && svc.at.length && svc.at.every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))) return "--at needs HH:MM times";
+  if (svc.swap !== undefined && !["overlap", "stop-start", "self"].includes(svc.swap)) return "--swap is overlap, stop-start or self";
+  if (svc.swap === "self" && !svc.keepalive) return "--swap self needs --keepalive or --restart-on-crash";
+  if (svc.swap === "overlap" && !svc.keepalive) return "--swap overlap needs --keepalive";
+  if (svc.listen !== undefined && !(Number.isInteger(svc.listen) && svc.listen > 0 && svc.listen < 65536)) return "--listen needs a port";
+  if (svc.health !== undefined && !(svc.health && typeof svc.health.http === "string" && svc.health.http.startsWith("/") && svc.listen))
+    return "--health-http needs a path starting with / and --listen";
+  if (svc.app !== undefined) { if (typeof svc.app !== "string" || !svc.app.endsWith(".app")) return "--app needs a .app path"; }
+  else if (!Array.isArray(svc.argv) || !svc.argv.length || !svc.argv.every((a) => typeof a === "string")) return "give the command after --";
+  return null;
+}
+
+// How a service moves to a new kit. One owner per answer: the registration,
+// or for an adopted realm plist, its label. The label is read here rather
+// than written into the file, so a kit moved back to a daemon that doesn't
+// know "self" still loads realm.json instead of dropping it and stopping
+// realm as an orphan (review of c5dba0dc).
+function swapOf(svc) {
+  return svc.swap || (SELF_HANDOVER_LABELS.has(svc.adoptedFrom) ? "self" : undefined);
+}
+
+// The one snapshot a self service's process group runs from now, from ps, or
+// null while it can't tell (none named, or old and new both alive mid-exec).
+function selfGen(pid, table) {
+  const seen = new Set();
+  for (const r of table) if (r.pgid === pid || r.pid === pid) for (const sha of shasIn(r.command)) seen.add(sha);
+  return seen.size === 1 ? [...seen][0] : null;
+}
+
+function register(svc) {
+  const err = validate(svc);
+  if (err) throw new Error(err);
+  writeJSON(path.join(SERVICES, `${svc.name}.json`), svc);
+}
+
+function loadServices() {
+  let names = [];
+  try { names = fs.readdirSync(SERVICES).filter((f) => f.endsWith(".json")); } catch { return []; }
+  const out = [];
+  for (const f of names) {
+    const svc = readJSON(path.join(SERVICES, f), null);
+    if (!svc || validate(svc) || `${svc.name}.json` !== f) continue;
+    try { svc._mtime = fs.statSync(path.join(SERVICES, f)).mtimeMs; } catch { svc._mtime = 0; }
+    out.push(svc);
+  }
+  return out;
+}
+
+// ---- adopting the old LaunchAgents ----------------------------------------
+
+function plistToJSON(file) {
+  const r = spawnSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", file], { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  try { return JSON.parse(r.stdout); } catch { return null; }
+}
+
+function serviceFromPlist(label, p) {
+  const name = /^ai\.(chewie|nova)\.brief$/.test(label) ? "brief"
+    : label.replace(/^com\.(chewbacca|calebnewton)\./, "").replace(/^chewbacca[.-]/, "") || label;
+  const argv = p.ProgramArguments || (p.Program ? [p.Program] : null);
+  if (!argv || !argv.length) return null;
+  // What the supervisor can't reproduce stays a LaunchAgent rather than run
+  // on the wrong schedule: a weekly job run daily, a disabled job revived.
+  if (p.Disabled) return "it is disabled";
+  const ka = p.KeepAlive;
+  if (ka && typeof ka === "object" && Object.keys(ka).some((k) => k !== "SuccessfulExit")) return "its KeepAlive has conditions";
+  if ([].concat(p.StartCalendarInterval || []).some((c) => ["Weekday", "Day", "Month"].some((k) => c[k] !== undefined)))
+    return "it runs on certain days only";
+  const svc = { name, argv, adoptedFrom: label };
+  const app = argv[0].match(/^(.*?\.app)\/Contents\/MacOS\//);
+  // KeepAlive {SuccessfulExit: false} means restart only after a crash; the
+  // realm engine relies on it so its own stop command stays stopped.
+  const crashOnly = p.KeepAlive && typeof p.KeepAlive === "object" && p.KeepAlive.SuccessfulExit === false;
+  if (app && p.KeepAlive) { delete svc.argv; svc.app = app[1]; }
+  else if (crashOnly) svc.keepalive = "crash";
+  else if (p.KeepAlive) svc.keepalive = true;
+  else if (p.StartInterval) svc.every = Math.max(5, Number(p.StartInterval));
+  else if (p.StartCalendarInterval) {
+    const slots = [].concat(p.StartCalendarInterval)
+      .filter((s) => s.Hour !== undefined)
+      .map((s) => `${String(s.Hour).padStart(2, "0")}:${String(s.Minute || 0).padStart(2, "0")}`);
+    if (!slots.length) return null;
+    svc.at = slots;
+  } else if (p.RunAtLoad) svc.keepalive = true;
+  else return null;
+  if (p.EnvironmentVariables) svc.env = p.EnvironmentVariables;
+  if (p.WorkingDirectory) svc.cwd = p.WorkingDirectory;
+  if (Number.isInteger(p.Nice)) svc.nice = p.Nice;
+  if (svc.every !== undefined && p.RunAtLoad === false) svc.startLater = true;
+  return svc;
+}
+
+// launchd's gui/<uid> domain is one per account, whatever $HOME says, so a
+// load or unload from an install in a scratch home lands on the real Mac. On
+// 2026-10-13 at 00:04 a stranger-stopwatch run (setup.sh with HOME=mktemp -d)
+// booted out the real com.chewbacca and loaded its own, pointing into the
+// scratch kit. The scratch folder was deleted, the daemon kept running from a
+// file that no longer existed, and every service that needed lib/listen_exec.py
+// beside it (realm-ui, from 00:53) exited 2 on each start: the agents page was
+// down until the job was put back by hand at 00:56. Only an install whose
+// LaunchAgents folder is the account's own may change what launchd runs.
+// CHEWBACCA_LAUNCHCTL names a fake for tests and is always called.
+// Same folder by device and inode, so a symlink, /private/tmp vs /tmp, or a
+// HOME spelled /users/... all match; by path, case folded (APFS default),
+// when either doesn't exist yet.
+function agentsVsOwn(agents, own) {
+  try {
+    const a = fs.statSync(agents), b = fs.statSync(own);
+    return a.dev === b.dev && a.ino === b.ino ? null : `${agents} isn't this account's LaunchAgents (${own})`;
+  } catch {
+    return path.resolve(agents).toLowerCase() === path.resolve(own).toLowerCase()
+      ? null : `${agents} isn't this account's LaunchAgents (${own})`;
+  }
+}
+
+function foreignAgents() {
+  if (process.env.CHEWBACCA_LAUNCHCTL) return null;
+  return agentsVsOwn(AGENTS, path.join(os.userInfo().homedir, "Library", "LaunchAgents"));
+}
+
+const LAUNCHD_WRITES = new Set(["bootstrap", "bootout", "kickstart", "enable", "disable", "load", "unload"]);
+
+function launchctl(args) {
+  if (LAUNCHD_WRITES.has(args[0])) {
+    const foreign = foreignAgents();
+    if (foreign) return { status: 0, skipped: foreign, stdout: "", stderr: "" };
+  }
+  return spawnSync(process.env.CHEWBACCA_LAUNCHCTL || "/bin/launchctl", args, { encoding: "utf8" });
+}
+
+function adoptLegacy({ dryRun = false } = {}) {
+  const uid = process.getuid();
+  const adopted = [];
+  const disabled = new Set();
+  const pd = launchctl(["print-disabled", `gui/${uid}`]);
+  for (const m of String(pd.stdout || "").matchAll(/"([^"]+)"\s*=>\s*(true|disabled)/g)) disabled.add(m[1]);
+  for (const label of ADOPT) {
+    const file = path.join(AGENTS, `${label}.plist`);
+    if (!fs.existsSync(file)) continue;
+    const p = plistToJSON(file);
+    const svc = p && serviceFromPlist(label, p);
+    if (typeof svc === "string") { adopted.push({ label, skipped: svc }); continue; }
+    if (!svc || validate(svc)) { adopted.push({ label, skipped: "could not read a schedule from it" }); continue; }
+    if (disabled.has(label)) { adopted.push({ label, skipped: "it is turned off in launchctl" }); continue; }
+    // An existing service file wins: setup registers the current command just
+    // before install, and the old plist's command (an old node path, say) must
+    // not overwrite it. Two old labels for one job fold into the first.
+    const exists = fs.existsSync(path.join(SERVICES, `${svc.name}.json`));
+    adopted.push({ label, service: svc.name, kept: exists || undefined });
+    if (dryRun) continue;
+    if (!exists) register(svc);
+    launchctl(["bootout", `gui/${uid}/${label}`]);
+    fs.mkdirSync(LEGACY, { recursive: true });
+    fs.renameSync(file, path.join(LEGACY, `${label}.plist`));
+  }
+  return adopted;
+}
+
+// ---- install ----------------------------------------------------------------
+
+function runtimeBinary() {
+  const app = path.join(HOME, ".chewbacca", "runtime", "Chewbacca.app", "Contents", "MacOS", "Chewbacca");
+  if (fs.existsSync(app)) return app;
+  return process.execPath;
+}
+
+function plistXML(bin, script) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key><array>
+    <string>${esc(bin)}</string><string>${esc(script)}</string><string>run</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>${esc(DEFAULT_PATH)}</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>${esc(path.join(LOGS, "daemon.log"))}</string>
+  <key>StandardErrorPath</key><string>${esc(path.join(LOGS, "daemon.log"))}</string>
+</dict></plist>
+`;
+}
+
+function install({ dryRun = false } = {}) {
+  const script = fs.existsSync(path.join(KIT, "bin", "chewbacca-daemon"))
+    ? path.join(KIT, "bin", "chewbacca-daemon") : path.resolve(__filename);
+  const plist = path.join(AGENTS, `${LABEL}.plist`);
+  const xml = plistXML(runtimeBinary(), script);
+  if (dryRun) return { plist, xml, adopted: adoptLegacy({ dryRun: true }) };
+  fs.mkdirSync(AGENTS, { recursive: true });
+  fs.mkdirSync(LOGS, { recursive: true });
+  const adopted = adoptLegacy();
+  const same = fs.existsSync(plist) && fs.readFileSync(plist, "utf8") === xml;
+  const uid = process.getuid();
+  if (!same) {
+    fs.writeFileSync(plist, xml);
+    launchctl(["bootout", `gui/${uid}/${LABEL}`]);
+    const r = launchctl(["bootstrap", `gui/${uid}`, plist]);
+    if (r.status !== 0) throw new Error(`launchctl bootstrap failed: ${(r.stderr || "").trim()}`);
+  } else if (launchctl(["print", `gui/${uid}/${LABEL}`]).status !== 0) {
+    launchctl(["bootstrap", `gui/${uid}`, plist]);
+  }
+  const foreign = foreignAgents();
+  return { plist, adopted, changed: !same, notLoaded: foreign || undefined };
+}
+
+// ---- generations ---------------------------------------------------------------
+//
+// A generation is the kit snapshot sha a process runs from. On 2026-10-11 three
+// processes ran from snapshots already pruned (room-capture, hud-speak, the
+// origin-guard server), and nothing could say so short of reading ps by hand.
+
+function realOrNull(p) {
+  try { return fs.realpathSync(p); } catch { return null; }
+}
+
+// The snapshot a path resolves into, or null.
+function snapOf(p, snapsReal = realOrNull(SNAPS)) {
+  const r = realOrNull(p);
+  if (!r || !snapsReal) return null;
+  const rel = path.relative(snapsReal, r);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep)[0];
+}
+
+function kitSha() {
+  return snapOf(KIT);
+}
+
+// The checkout kit/current was built from, per its sidecar, for naming a
+// service that runs from the checkout instead of the kit.
+function kitSource() {
+  const sha = kitSha();
+  if (!sha) return null;
+  const side = readJSON(path.join(SNAPS, `${sha}.kit-runtime.json`), {});
+  return typeof side.source === "string" ? realOrNull(side.source) : null;
+}
+
+// Where a service's argv says it runs from: { gen, from }. from is "kit" when an
+// argument resolves into a snapshot, "checkout" when one resolves into the
+// checkout the kit was built from, else "assumed": the kit at start time, which
+// is what a `bash -lc "$HOME/.local/bin/x"` reaches through its links.
+function generationOf(svc) {
+  const snapsReal = realOrNull(SNAPS);
+  const source = kitSource();
+  let checkout = false;
+  for (const arg of svc.argv || []) {
+    for (const tok of String(arg).split(/[\s"'=]+/)) {
+      const p = tok.replace(/^file:\/\//, "");
+      if (!p.startsWith("/")) continue;
+      const sha = snapOf(p, snapsReal);
+      if (sha) return { gen: sha, from: "kit" };
+      const r = source && realOrNull(p);
+      if (r && (r === source || r.startsWith(source + path.sep))) checkout = true;
+    }
+  }
+  if (checkout) return { gen: null, from: "checkout" };
+  return { gen: kitSha(), from: "assumed" };
+}
+
+// Every process, once: [{ pid, pgid, command }].
+function psTable() {
+  const r = spawnSync("/bin/ps", ["-axww", "-o", "pid=,pgid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const rows = [];
+  for (const line of String(r.stdout || "").split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (m) rows.push({ pid: Number(m[1]), pgid: Number(m[2]), command: m[3] });
+  }
+  return rows;
+}
+
+// Snapshot shas named as paths in a command line.
+function shasIn(command) {
+  const out = new Set();
+  const prefixes = new Set([SNAPS, realOrNull(SNAPS)].filter(Boolean).map((p) => p + "/"));
+  for (const pre of prefixes) {
+    let i = command.indexOf(pre);
+    while (i >= 0) {
+      const m = /^[0-9a-f]{7,64}/.exec(command.slice(i + pre.length));
+      if (m) out.add(m[0]);
+      i = command.indexOf(pre, i + pre.length);
+    }
+  }
+  return out;
+}
+
+function snapExists(sha) {
+  return fs.existsSync(path.join(SNAPS, sha));
+}
+
+// ---- the supervisor ----------------------------------------------------------
+
+function log(msg) {
+  process.stdout.write(`${new Date().toISOString()} ${msg}\n`);
+}
+
+function trimLog(file) {
+  try {
+    const st = fs.statSync(file);
+    if (st.size <= LOG_MAX) return;
+    const fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(LOG_KEEP);
+    fs.readSync(fd, buf, 0, LOG_KEEP, st.size - LOG_KEEP);
+    fs.closeSync(fd);
+    // A child holding the log open with O_APPEND keeps writing at the new end.
+    fs.writeFileSync(file, buf);
+  } catch { /* no log yet */ }
+}
+
+function openLog(name) {
+  fs.mkdirSync(LOGS, { recursive: true });
+  const file = path.join(LOGS, `${name}.log`);
+  trimLog(file);
+  return fs.openSync(file, "a");
+}
+
+function appRunning(app) {
+  const exe = path.basename(app, ".app");
+  return spawnSync("/usr/bin/pgrep", ["-x", exe]).status === 0;
+}
+
+// When this Mac last booted. A crash-only service that exited cleanly stays
+// down until this changes, the way launchd left it down until the next login.
+// Infinity was tried first and JSON turned it into null, so any daemon restart
+// (a kit update every few hours) brought back an engine Caleb had stopped.
+// CHEWBACCA_BOOT_TIME (epoch seconds) is the tests' seam for a restart.
+function bootTime() {
+  const fake = Number(process.env.CHEWBACCA_BOOT_TIME);
+  if (process.env.CHEWBACCA_BOOT_TIME && Number.isFinite(fake)) return Math.floor(fake);
+  const r = spawnSync("/usr/sbin/sysctl", ["-n", "kern.boottime"], { encoding: "utf8" });
+  const m = /sec\s*=\s*(\d+)/.exec(r.stdout || "");
+  return m ? Number(m[1]) : 0;
+}
+
+// This boot's id (kern.bootsessionuuid), stamped on every start so a pid
+// saved before a restart is never mistaken for ours. The clock can't decide
+// it: stepping the clock moves kern.boottime too (review, 10/13).
+// CHEWBACCA_BOOT_SESSION is the tests' seam.
+let SESSION;
+function bootSession() {
+  if (SESSION === undefined) {
+    SESSION = process.env.CHEWBACCA_BOOT_SESSION
+      ?? String(spawnSync("/usr/sbin/sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).stdout || "").trim();
+  }
+  return SESSION;
+}
+
+// Started before this boot. Entries from before the id was stamped fall back
+// to the start time.
+function beforeBoot(st, boot) {
+  if (st.bootId && bootSession()) return st.bootId !== bootSession();
+  return Boolean(boot && st.lastStart && st.lastStart < boot * 1000);
+}
+
+// The last time an --at slot came due, at or before now.
+function lastSlot(times, now) {
+  let best = 0;
+  for (const t of times) {
+    const [h, m] = t.split(":").map(Number);
+    const d = new Date(now); d.setHours(h, m, 0, 0);
+    if (d.getTime() > now) d.setDate(d.getDate() - 1);
+    best = Math.max(best, d.getTime());
+  }
+  return best;
+}
+
+function due(svc, st, now, boot = 0) {
+  if (svc.app) return !appRunning(svc.app) && now >= (st.retryAt || 0);
+  if (st.pid) return false;
+  if (svc.keepalive) {
+    if (st.stoppedBoot !== undefined && st.stoppedBoot !== null) {
+      if (st.stoppedBoot === boot) return false;
+      st.stoppedBoot = null;
+    }
+    return now >= (st.retryAt || 0);
+  }
+  if (svc.every) {
+    if (st.retryAt && now < st.retryAt) return false;
+    if (!st.lastStart) return !svc.startLater || now - (st.firstSeen || now) >= svc.every * 1000;
+    return now - st.lastStart >= svc.every * 1000;
+  }
+  if (svc.at) return lastSlot(svc.at, now) > (st.lastStart || st.firstSeen || now);
+  return false;
+}
+
+function finished(svc, st, children, boot, code, signal, why) {
+  children.delete(svc.name);
+  st.pid = null;
+  st.handover = null;
+  st.lastExit = why || (signal ? `signal ${signal}` : code);
+  st.lastEnd = Date.now();
+  if (st.swapping) {
+    // Stopped by a generation swap: back on the next tick, no backoff.
+    st.swapping = false;
+    st.retryAt = 0;
+  } else if (svc.keepalive === "crash" && code === 0 && !signal) {
+    st.stoppedBoot = boot;
+  } else if (svc.keepalive || why) {
+    // A binary that can't start backs off like a crash, keepalive or not, so a
+    // missing tool is retried every few minutes rather than every tick.
+    const up = (st.lastEnd - st.lastStart) / 1000;
+    st.backoff = up >= STABLE_S && !why ? BACKOFF_MIN_S : Math.min(BACKOFF_MAX_S, (st.backoff || BACKOFF_MIN_S / 2) * 2);
+    st.retryAt = st.lastEnd + st.backoff * 1000;
+  }
+}
+
+// Spawn a service's command, through listen_exec.py when it holds a port.
+// overlap: this is the new half of a swap, allowed to bind beside the old one.
+function launch(svc, overlap = false) {
+  const fd = openLog(svc.name);
+  try {
+    const argv = svc.listen ? [PYTHON, LISTEN_EXEC, String(svc.listen), "--", ...svc.argv] : svc.argv;
+    const env = { ...process.env, PATH: DEFAULT_PATH, ...(svc.env || {}) };
+    delete env.CHEWBACCA_LISTEN_OVERLAP;
+    if (overlap) env.CHEWBACCA_LISTEN_OVERLAP = "1";
+    const child = spawn(argv[0], argv.slice(1), {
+      cwd: svc.cwd || HOME, env,
+      detached: true, stdio: ["ignore", fd, fd],
+    });
+    if (Number.isInteger(svc.nice) && child.pid) { try { os.setPriority(child.pid, svc.nice); } catch { /* best effort */ } }
+    return child;
+  } finally {
+    try { fs.closeSync(fd); } catch { /* closed */ }
+  }
+}
+
+function start(svc, st, children, boot) {
+  const now = Date.now();
+  st.lastStart = now;
+  st.bootId = bootSession();
+  if (svc.app) {
+    // `open --env` hands the app a PATH; LaunchServices otherwise gives it
+    // /usr/bin:/bin only, and on 2026-09-21 that left the HUD unable to find
+    // the model CLI, so speech went nowhere with no error.
+    const envArgs = Object.entries(svc.env || {}).flatMap(([k, v]) => ["--env", `${k}=${v}`]);
+    spawnSync("/usr/bin/open", ["-g", ...envArgs, "-a", svc.app]);
+    // Give LaunchServices a minute before checking again, so a slow launch is not opened twice.
+    st.retryAt = now + 60 * 1000;
+    log(`opened ${svc.name}`);
+    return;
+  }
+  let child;
+  try {
+    child = launch(svc);
+  } catch (e) {
+    st.pid = null;
+    finished(svc, st, children, boot, null, null, `spawn failed: ${e.message}`);
+    return;
+  }
+  st.pid = child.pid || null;
+  st.swapping = false;
+  st.handover = null;
+  st.shared = Boolean(svc.listen);
+  st.argv0 = path.basename(svc.argv[0]);
+  const g = generationOf(svc);
+  st.gen = g.gen;
+  st.from = g.from;
+  children.set(svc.name, child);
+  watch(svc, st, children, boot, child);
+}
+
+// Exit handling for a child that is (or becomes) the service's current copy.
+// A copy replaced by a swap exits later; by then st.pid names its successor,
+// and that exit must not mark the service down.
+function watch(svc, st, children, boot, child) {
+  const pid = child.pid || null;
+  // A missing binary never emits "exit", only "error" (ENOENT, pid undefined):
+  // without this the service stayed "running" forever and blocked kit restarts.
+  let ended = false;
+  const end = (code, signal, why) => {
+    if (ended) return; ended = true;
+    if (st.pid !== pid) return;
+    finished(svc, st, children, boot, code, signal, why);
+  };
+  child.on("error", (e) => end(null, null, `error: ${e.message}`));
+  child.on("exit", (code, signal) => { if (svc.every && st.pid === pid) st.retryAt = 0; end(code, signal); });
+}
+
+// One line per swap in swaps.jsonl, with both generations, the health result
+// and how long it took (Cole's rule in docs/plans/one-supervisor.md).
+function swapEvent(ev) {
+  log(`swap ${ev.service} ${ev.mode}: ${String(ev.from || "?").slice(0, 12)} -> ${String(ev.to || "?").slice(0, 12)} ${ev.result} in ${ev.ms} ms`);
+  try {
+    fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+    fs.appendFileSync(path.join(DIR, "swaps.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...ev }) + "\n", { mode: 0o600 });
+  } catch { /* disk full: the daemon log has it */ }
+}
+
+// When a process started, from ps, in ms; null when it is gone.
+function startedAt(pid) {
+  const r = spawnSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" });
+  const t = Date.parse(String(r.stdout || "").trim());
+  return Number.isFinite(t) ? t : null;
+}
+
+// Is this pid the service we started, and not a reused number? Same program
+// name, or (for a service that execs another binary, like realm-ui's python
+// becoming node) started within SAME_START_MS of when we spawned it.
+function ours(st) {
+  if (!st.pid || !alive(st.pid)) return false;
+  const comm = spawnSync("/bin/ps", ["-o", "comm=", "-p", String(st.pid)], { encoding: "utf8" }).stdout.trim();
+  if (st.argv0 && path.basename(comm) === st.argv0) return true;
+  const t = startedAt(st.pid);
+  return Boolean(t && st.lastStart && Math.abs(t - st.lastStart) < SAME_START_MS);
+}
+
+function kitTarget() {
+  try { return fs.realpathSync(KIT); } catch { return null; }
+}
+
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Alive and not a zombie. A child of this daemon that exits stays a zombie
+// until node reaps it, and node can't reap while stopGroups blocks the loop,
+// so kill(pid, 0) kept saying "alive": every stop waited the full 5 s and
+// then sent SIGKILL. That was 5 of the 5.3 to 8.0 s each kit move took on
+// 2026-10-12 (reengineer step 10 found it).
+function running(pid) {
+  if (!alive(pid)) return false;
+  const r = spawnSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" });
+  const stat = String(r.stdout || "").trim();
+  return stat !== "" && !stat.startsWith("Z");
+}
+
+// SIGTERM every group, give them five seconds, then SIGKILL what's left, so a
+// slow child can't keep a port the next daemon's copy needs. Five is guessed.
+function stopGroups(pids) {
+  for (const pid of pids) { try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ } }
+  const until = Date.now() + 5000;
+  while (pids.some(running) && Date.now() < until) sleepMs(100);
+  for (const pid of pids) if (alive(pid)) { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }
+}
+
+// A daemon that crashed left its children running. A saved pid still alive
+// and still running the same program is ours; anything else is a reused pid.
+// The exception is a keepalive service the last daemon handed over on a kit
+// move: it keeps serving, and this daemon adopts it and swaps it.
+// Nothing started before this boot is still running, so a pid saved then
+// names a stranger now: pids wrapped all the way round here in under three
+// hours on 2026-10-12 (pid 2414 at 22:25, 5668 at 00:58), and a stranger
+// running the same program (python3, sleep) passed ours() and was stopped,
+// or adopted as a handed-over service.
+function reapOrphans(state, services = [], adopted = new Map(), boot = bootTime()) {
+  const now = Date.now();
+  const keep = new Set(services.filter((s) => s.keepalive && !s.app).map((s) => s.name));
+  const stop = [];
+  for (const [name, st] of Object.entries(state)) {
+    if (beforeBoot(st, boot)) continue;
+    if (!ours(st)) continue;
+    if (st.handover && now - st.handover < HANDOVER_MAX_S * 1000 && keep.has(name)) { adopted.set(name, st.pid); continue; }
+    stop.push(st.pid);
+  }
+  if (stop.length) { log(`stopping ${stop.length} left over from the last run`); stopGroups(stop); }
+  for (const [name, st] of Object.entries(state)) {
+    if (!adopted.has(name)) st.pid = null;
+    st.swapping = false;
+    st.handover = null;
+  }
+  if (adopted.size) log(`adopted ${[...adopted.keys()].join(", ")} from the last run`);
+  return adopted;
+}
+
+// Move one keepalive service onto the current kit.
+//   overlap: start the new copy beside the old one; once it is healthy, stop
+//     the old one. A --listen service's new copy takes the port's new
+//     connections the moment it binds (listen_exec.py), so nothing is refused.
+//   stop-start: stop the old one, start the new one in the same tick. For a
+//     service that binds its own port and can't share it (realm-ui).
+function swapStart(svc, st, ctx, cur) {
+  const { children, greens, adopted, boot } = ctx;
+  const t0 = Date.now();
+  const from = st.gen;
+  // A copy started before its registration had --listen bound the port
+  // without SO_REUSEPORT, and no new copy can bind beside it: swap that one
+  // stop-start, once, and every swap after it overlaps.
+  const mode = svc.swap === "overlap" && (!svc.listen || st.shared) ? "overlap" : "stop-start";
+  if (mode !== "overlap") {
+    const old = st.pid;
+    children.delete(svc.name);
+    adopted.delete(svc.name);
+    st.pid = null;
+    stopGroups([old]);
+    const stopped = Date.now() - t0;
+    st.retryAt = 0;
+    start(svc, st, children, boot);
+    swapEvent({ service: svc.name, mode: "stop-start", from, to: st.gen, result: st.pid ? "started" : "failed to start",
+      ms: Date.now() - t0, downMs: stopped });
+    return;
+  }
+  let child;
+  try { child = launch(svc, true); } catch (e) {
+    st.swapRetryAt = t0 + SWAP_RETRY_S * 1000;
+    swapEvent({ service: svc.name, mode: "overlap", from, to: cur, result: `spawn failed: ${e.message}`, ms: 0 });
+    return;
+  }
+  const g = { child, pid: child.pid || null, since: t0, from, to: cur, dead: false, healthy: false, checking: false };
+  child.on("error", () => { g.dead = true; });
+  child.on("exit", () => { g.dead = true; });
+  greens.set(svc.name, g);
+  log(`swap ${svc.name}: started new copy ${g.pid} beside ${st.pid}`);
+}
+
+function healthCheck(svc, g) {
+  if (!svc.health || g.checking) return;
+  g.checking = true;
+  const http = require("http");
+  const req = http.get({ host: "127.0.0.1", port: svc.listen, path: svc.health.http, timeout: 2000 }, (res) => {
+    res.resume();
+    g.checking = false;
+    if (res.statusCode < 500) g.healthy = true;
+  });
+  req.on("timeout", () => req.destroy(new Error("timeout")));
+  req.on("error", () => { g.checking = false; });
+}
+
+// One tick of every overlap swap in flight: promote a healthy new copy,
+// or give up on a dead or slow one and keep the old.
+function swapTick(services, state, ctx) {
+  const { children, greens, adopted, boot } = ctx;
+  const now = Date.now();
+  for (const [name, g] of greens) {
+    const svc = services.find((s) => s.name === name);
+    const st = state[name];
+    const fail = (why) => {
+      greens.delete(name);
+      if (g.pid && !g.dead) stopGroups([g.pid]);
+      if (st) st.swapRetryAt = now + SWAP_RETRY_S * 1000;
+      swapEvent({ service: name, mode: "overlap", from: g.from, to: g.to, result: why, ms: now - g.since });
+    };
+    if (!svc || !st) { fail("service went away"); continue; }
+    if (g.dead || !g.pid) { fail("new copy exited"); continue; }
+    if (!st.pid) {
+      // The old copy died during the swap: the new one is all there is.
+      greens.delete(name);
+      st.pid = g.pid; st.lastStart = g.since; st.bootId = bootSession(); st.argv0 = path.basename(svc.argv[0]); st.shared = Boolean(svc.listen);
+      Object.assign(st, (({ gen, from }) => ({ gen, from }))(generationOf(svc)));
+      children.set(name, g.child); watch(svc, st, children, boot, g.child);
+      swapEvent({ service: name, mode: "overlap", from: g.from, to: st.gen, result: "old copy exited first", ms: now - g.since });
+      continue;
+    }
+    if (now - g.since > HEALTH_TIMEOUT_S * 1000) { fail(`not healthy after ${HEALTH_TIMEOUT_S} s`); continue; }
+    if (now - g.since < HEALTH_UP_S * 1000) continue;
+    if (svc.health && !g.healthy) { healthCheck(svc, g); continue; }
+    const old = st.pid;
+    greens.delete(name);
+    adopted.delete(name);
+    st.pid = g.pid; st.lastStart = g.since; st.bootId = bootSession(); st.argv0 = path.basename(svc.argv[0]); st.handover = null; st.shared = Boolean(svc.listen);
+    const gen = generationOf(svc);
+    st.gen = gen.gen; st.from = gen.from;
+    children.set(name, g.child);
+    watch(svc, st, children, boot, g.child);
+    stopGroups([old]);
+    swapEvent({ service: name, mode: "overlap", from: g.from, to: st.gen, result: svc.health ? `healthy (${svc.health.http})` : `up ${HEALTH_UP_S} s`,
+      ms: Date.now() - g.since, downMs: 0 });
+  }
+}
+
+function run() {
+  const children = new Map();
+  const greens = new Map();
+  const state = readJSON(STATE, {});
+  const adopted = reapOrphans(state, loadServices());
+  const boot = bootTime();
+  const bootKit = kitTarget();
+  try { writeJSON(SELF, { pid: process.pid, gen: kitSha(), started: Date.now() }); } catch { /* status shows it unknown */ }
+  const daemonLog = path.join(LOGS, "daemon.log");
+  log(`daemon up, pid ${process.pid}`);
+  let lastAdopt = 0;
+  let ticks = 0;
+
+  const ctx = { children, greens, adopted, boot };
+  const stopAll = (sig) => {
+    stopGroups([...children.values(), ...greens.values()].map((c) => c.pid).filter(Boolean).concat([...adopted.values()]));
+    log(`daemon down (${sig})`);
+    process.exit(0);
+  };
+  // A kit move: keepalive services keep serving while launchd brings the next
+  // daemon up on the new kit, which adopts and swaps them. Only a new copy
+  // mid-swap is stopped, since nothing would ever promote it.
+  const handOver = (services) => {
+    const now = Date.now();
+    const keep = new Set(services.filter((s) => s.keepalive && !s.app).map((s) => s.name));
+    const stop = [...greens.values()].map((g) => g.pid).filter(Boolean);
+    const left = [];
+    for (const [name, child] of children) {
+      if (keep.has(name) && state[name] && state[name].pid === child.pid && alive(child.pid)) { state[name].handover = now; left.push(name); }
+      else if (child.pid) stop.push(child.pid);
+    }
+    for (const [name, pid] of adopted) {
+      if (keep.has(name) && state[name] && state[name].pid === pid && alive(pid)) { state[name].handover = now; left.push(name); }
+      else stop.push(pid);
+    }
+    stopGroups(stop);
+    try { writeJSON(STATE, state); } catch { /* the next daemon reaps them as orphans instead */ }
+    log(`daemon down (kit update), left running for the next one: ${left.join(", ") || "none"}`);
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => stopAll("SIGTERM"));
+  process.on("SIGINT", () => stopAll("SIGINT"));
+
+  const tick = () => {
+    const now = Date.now();
+    ticks += 1;
+    if (now - lastAdopt >= ADOPT_EVERY_MS) {
+      lastAdopt = now;
+      try { for (const a of adoptLegacy()) log(`folded in ${a.label}${a.skipped ? ` (skipped: ${a.skipped})` : ""}`); }
+      catch (e) { log(`adopt failed: ${e.message}`); }
+    }
+    const services = loadServices();
+    const live = new Set(services.map((s) => s.name));
+    for (const [name, child] of children) {
+      if (!live.has(name) && child.pid) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+    }
+    for (const [name, pid] of adopted) {
+      if (!live.has(name)) { try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ } }
+    }
+    // An adopted service is not our child, so no exit event comes: poll it.
+    for (const [name, pid] of adopted) {
+      const st = state[name];
+      if (!st || st.pid !== pid) { adopted.delete(name); continue; }
+      if (!alive(pid)) {
+        adopted.delete(name);
+        const svc = services.find((s) => s.name === name);
+        if (svc) finished(svc, st, children, boot, null, null); else st.pid = null;
+      }
+    }
+    for (const svc of services) {
+      const st = state[svc.name] || (state[svc.name] = { firstSeen: now });
+      // A service registered again (its file rewritten) is wanted now: drop a
+      // crash backoff left from before. On 2026-10-11 realm-ui sat in a
+      // 300 s backoff after an orphan copy held its port.
+      if (svc._mtime && st.seenMtime && svc._mtime > st.seenMtime && !st.pid) { st.retryAt = 0; st.backoff = undefined; }
+      st.seenMtime = svc._mtime;
+      try { if (due(svc, st, now, boot)) start(svc, st, children, boot); }
+      catch (e) { log(`${svc.name}: ${e.message}`); }
+    }
+    // Long-running services never reopen their log, so trim them here too,
+    // about once a minute.
+    if (ticks % 12 === 0) {
+      trimLog(daemonLog);
+      for (const name of children.keys()) trimLog(path.join(LOGS, `${name}.log`));
+    }
+    for (const name of Object.keys(state)) if (!live.has(name) && !children.has(name)) delete state[name];
+    try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
+    // A kit update swapped ~/.chewbacca/kit/current: hand over once no timed
+    // job is mid-run, and launchd's KeepAlive starts the new code.
+    const kit = kitTarget();
+    if (bootKit && kit && kit !== bootKit) {
+      const busy = [...children.keys()].filter((n) => {
+        const s = services.find((x) => x.name === n); return s && !s.keepalive;
+      });
+      if (!busy.length) {
+        log(`kit moved to ${path.basename(kit)}, restarting`);
+        handOver(services);
+        return;
+      }
+    }
+    // Keepalive services on an old generation move to the current kit, one
+    // swap each: after the daemon itself restarted onto a new kit (it adopted
+    // them), or while a timed job holds it on the old code (people-sync ran
+    // 960 s on 2026-10-12, and every keepalive service waited on it).
+    // Only a known old generation swaps: a null gen, or a kit outside the
+    // snapshots dir, would restart the service every tick.
+    const cur = kitSha();
+    swapTick(services, state, ctx);
+    let table = null;
+    for (const svc of services) {
+      const st = state[svc.name];
+      if (!cur || !svc.keepalive || !st || !st.pid || greens.has(svc.name) || st.from === "checkout") continue;
+      if (!children.has(svc.name) && !adopted.has(svc.name)) continue;
+      if (!st.gen || st.gen === cur) continue;
+      // A self service moves itself; the daemon only reads where it went.
+      if (swapOf(svc) === "self") {
+        table = table || psTable();
+        const gen = selfGen(st.pid, table);
+        if (gen && gen !== st.gen) {
+          swapEvent({ service: svc.name, mode: "self", from: st.gen, to: gen, result: "handed itself over", ms: 0, downMs: 0 });
+          st.gen = gen; st.from = "kit";
+        }
+        continue;
+      }
+      if (now < (st.swapRetryAt || 0)) continue;
+      // An argv pinned to one snapshot (chewbacca-bridge registered its
+      // resolved path) would come back on the old code and swap every tick.
+      if (generationOf(svc).gen !== cur) continue;
+      try { swapStart(svc, st, ctx, cur); } catch (e) { log(`swap ${svc.name}: ${e.message}`); }
+    }
+    try { writeJSON(STATE, state); } catch { /* disk full: keep running */ }
+  };
+  const safeTick = () => { try { tick(); } catch (e) { log(`tick failed: ${e.stack || e.message}`); } };
+  safeTick();
+  setInterval(safeTick, TICK_MS);
+}
+
+// ---- status -------------------------------------------------------------------
+
+function ago(ms) {
+  if (!ms) return "never";
+  const s = Math.round((Date.now() - ms) / 1000);
+  return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+}
+
+// What runs on which generation, from state.json checked against ps. A row is
+// stale when its process group runs anything but the current snapshot, and
+// pruned when that snapshot is gone from disk.
+function generations() {
+  const services = loadServices();
+  const state = readJSON(STATE, {});
+  const cur = kitSha();
+  let movedAt = null;
+  try { movedAt = fs.lstatSync(KIT).mtimeMs; } catch { /* no kit */ }
+  const table = psTable();
+  const now = Date.now();
+  const judge = (gen, pids) => {
+    const seen = new Set(gen ? [gen] : []);
+    for (const r of table) if (pids.has(r.pgid) || pids.has(r.pid)) for (const sha of shasIn(r.command)) seen.add(sha);
+    const old = [...seen].filter((sha) => cur && sha !== cur);
+    const stale = old.length > 0;
+    return {
+      gen: gen || null, seen: [...seen], stale, pruned: old.filter((sha) => !snapExists(sha)),
+      staleFor: stale && movedAt ? Math.max(0, Math.round((now - movedAt) / 1000)) : 0,
+    };
+  };
+  const ours = new Set();
+  const rows = services.map((s) => {
+    const st = state[s.name] || {};
+    const when = s.app ? "kept open" : s.keepalive ? "always on" : s.every ? `every ${s.every}s` : `at ${s.at.join(", ")}`;
+    const pid = st.pid && alive(st.pid) ? st.pid : null;
+    const running = s.app ? appRunning(s.app) : Boolean(pid);
+    if (pid) ours.add(pid);
+    const g = pid ? judge(st.gen, new Set([pid])) : { gen: null, seen: [], stale: false, pruned: [], staleFor: 0 };
+    // A timed job finishes on the generation it started on, by design.
+    if (!s.keepalive && !s.app) g.staleFor = 0;
+    return { name: s.name, when, running, pid, from: pid ? st.from || null : null, self: swapOf(s) === "self", ...g,
+      lastStart: st.lastStart || null, lastExit: st.lastExit ?? null };
+  });
+  const self = readJSON(SELF, {});
+  let daemon = null;
+  if (self.pid && alive(self.pid)) {
+    ours.add(self.pid);
+    daemon = { pid: self.pid, ...judge(self.gen, new Set()) };
+  }
+  // Processes outside the daemon that name an old snapshot: Kyber's children,
+  // tab helpers. Reported, never stopped from here.
+  const others = [];
+  for (const r of table) {
+    if (ours.has(r.pgid) || ours.has(r.pid) || r.pid === process.pid) continue;
+    const old = [...shasIn(r.command)].filter((sha) => cur && sha !== cur);
+    if (!old.length) continue;
+    others.push({ pid: r.pid, gen: old[0], pruned: old.some((sha) => !snapExists(sha)), command: r.command.slice(0, 160) });
+  }
+  return { current: cur, movedAt, services: rows, daemon, others };
+}
+
+function status(json, check) {
+  const g = generations();
+  const loaded = launchctl(["print", `gui/${process.getuid()}/${LABEL}`]).status === 0;
+  const late = g.services.filter((r) => r.stale && r.staleFor > (r.self ? SELF_STALE_GRACE_S : STALE_GRACE_S));
+  // The daemon itself waits on a timed job by design, and its keepalive
+  // services are swapped meanwhile, so it shows but never fails the check.
+  if (check) process.exitCode = late.length ? 1 : 0;
+  if (json) {
+    process.stdout.write(JSON.stringify({ loaded, label: LABEL, current: g.current, movedAt: g.movedAt,
+      graceS: STALE_GRACE_S, late: late.map((r) => r.name), daemon: g.daemon, services: g.services, others: g.others }, null, 2) + "\n");
+    return;
+  }
+  const short = (sha) => (sha ? sha.slice(0, 8) : "-");
+  console.log(`Chewbacca background: ${loaded ? "running" : "NOT loaded"} (one Login Items row), kit ${short(g.current)}`);
+  if (g.daemon && g.daemon.stale) console.log(`  daemon itself still on ${short(g.daemon.gen)}, ${g.daemon.staleFor}s after the move`);
+  for (const r of g.services) {
+    const where = !r.running ? "" : r.pruned.length ? `  PRUNED ${short(r.pruned[0])}`
+      : r.stale && r.self ? `  on ${short(r.seen.find((x) => x !== g.current))} for ${r.staleFor}s, moves itself once no turn is running`
+      : r.stale ? `  STALE ${short(r.seen.find((x) => x !== g.current))} for ${r.staleFor}s`
+      : r.from === "checkout" ? "  from the checkout" : `  ${short(r.gen)}`;
+    console.log(`  ${r.name.padEnd(22)} ${r.when.padEnd(16)} ${r.running ? "running" : `last ${ago(r.lastStart)}, exit ${r.lastExit ?? "-"}`}${where}`);
+  }
+  for (const o of g.others) console.log(`  outside the daemon: pid ${o.pid} on ${o.pruned ? "PRUNED" : "old"} ${short(o.gen)}  ${o.command.slice(0, 80)}`);
+  if (check && late.length) console.log(`stale past ${STALE_GRACE_S}s: ${late.map((r) => r.name).join(", ")}`);
+}
+
+// ---- cli -------------------------------------------------------------------------
+
+function parseRegister(args) {
+  const dash = args.indexOf("--");
+  const opts = dash >= 0 ? args.slice(0, dash) : args;
+  const argv = dash >= 0 ? args.slice(dash + 1) : [];
+  const svc = { name: opts.shift() };
+  for (let i = 0; i < opts.length; i++) {
+    const a = opts[i];
+    if (a === "--every") svc.every = Number(opts[++i]);
+    else if (a === "--at") svc.at = String(opts[++i] || "").split(",").filter(Boolean);
+    else if (a === "--keepalive") svc.keepalive = true;
+    else if (a === "--restart-on-crash") svc.keepalive = "crash";
+    else if (a === "--app") svc.app = opts[++i];
+    else if (a === "--nice") svc.nice = Number(opts[++i]);
+    else if (a === "--cwd") svc.cwd = opts[++i];
+    else if (a === "--start-later") svc.startLater = true;
+    else if (a === "--swap") svc.swap = opts[++i];
+    else if (a === "--listen") svc.listen = Number(opts[++i]);
+    else if (a === "--health-http") svc.health = { http: opts[++i] };
+    else if (a === "--env") {
+      const kv = String(opts[++i] || ""); const eq = kv.indexOf("=");
+      if (eq < 1) throw new Error("--env needs KEY=VALUE");
+      (svc.env = svc.env || {})[kv.slice(0, eq)] = kv.slice(eq + 1);
+    } else throw new Error(`unknown option ${a}`);
+  }
+  if (!svc.app) svc.argv = argv;
+  return svc;
+}
+
+function main(argv) {
+  const [cmd, ...rest] = argv;
+  try {
+    switch (cmd) {
+      case "run": return run();
+      case "install": {
+        const r = install({ dryRun: rest.includes("--dry-run") });
+        if (rest.includes("--dry-run")) { process.stdout.write(JSON.stringify(r, null, 2) + "\n"); return; }
+        console.log(`Chewbacca background item ${r.changed ? "installed" : "already installed"}: ${r.plist}`);
+        if (r.notLoaded) console.log(`  not loaded into launchd: ${r.notLoaded}`);
+        for (const a of r.adopted) console.log(`  folded in ${a.label}${a.skipped ? ` (skipped: ${a.skipped})` : ` as ${a.service}`}`);
+        return;
+      }
+      case "register": { const svc = parseRegister(rest); register(svc); console.log(`registered ${svc.name}`); return; }
+      case "unregister": {
+        const name = rest[0];
+        if (!NAME_RE.test(name || "")) throw new Error("give a service name");
+        try { fs.unlinkSync(path.join(SERVICES, `${name}.json`)); console.log(`unregistered ${name}`); }
+        catch { console.log(`${name} was not registered`); }
+        return;
+      }
+      case "status": return status(rest.includes("--json"), rest.includes("--check"));
+      case "uninstall": {
+        const plist = path.join(AGENTS, `${LABEL}.plist`);
+        launchctl(["bootout", `gui/${process.getuid()}/${LABEL}`]);
+        try { fs.unlinkSync(plist); } catch { /* not installed */ }
+        console.log("Chewbacca background item removed; services stay registered in " + SERVICES);
+        return;
+      }
+      default:
+        process.stdout.write(fs.readFileSync(__filename, "utf8").split("\n").slice(3, 12).map((l) => l.replace(/^ \* ?/, "")).join("\n") + "\n");
+        process.exitCode = cmd ? 2 : 0;
+    }
+  } catch (e) {
+    console.error(`chewbacca-daemon: ${e.message}`);
+    process.exitCode = 2;
+  }
+}
+
+if (require.main === module) main(process.argv.slice(2));
+module.exports = { agentsVsOwn, generationOf, shasIn, swapOf, selfGen, validate, serviceFromPlist, lastSlot, due, parseRegister, plistXML, adoptLegacy, register, startedAt };

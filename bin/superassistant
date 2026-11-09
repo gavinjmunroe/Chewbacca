@@ -265,7 +265,7 @@ def digest(brain: Path | None = None, log: Path | None = None) -> str:
         out += [
             "",
             "## The rest of the brain",
-            f"SCHOOL.md in {brain} is the term, the courses and the AI policy per course, but never state a "
+            f"SCHOOL.md in {brain} is the term, the courses and their grading, but never state a "
             "deadline you did not read: run `coursework due --days 14 --json` or `coursework today`. "
             "SYSTEM.md is the tools and hooks on this Mac, STACK.md the technologies they build with. "
             "`cat` the file before answering anything about their life, work, people or school.",

@@ -10,10 +10,12 @@
 // this reads a private message archive and it does not belong on the network.
 
 const http = require("node:http");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, execFile, spawn } = require("node:child_process");
+const weekly = require("./weekly-dashboard");
 
 let DatabaseSync;
 try {
@@ -117,6 +119,8 @@ function pulse(db, days = 21) {
 // Kits carry a .kit marker and a DEADLINES.md with dated rows. Reading the
 // markdown rather than a database is deliberate: the kit is the source of
 // truth for its own dates and it is the file the human edits.
+const SKIP_HOME = new Set(["Library", "Applications", "Movies", "Music", "Pictures", "Public"]);
+
 function kits() {
   const home = os.homedir();
   const found = [];
@@ -136,7 +140,12 @@ function kits() {
       if (
         !e.isDirectory() ||
         e.name.startsWith(".") ||
-        e.name === "node_modules"
+        e.name === "node_modules" ||
+        // Walking the home folder three deep went through Library and the
+        // Google Drive and OneDrive mounts, and listing a cloud folder makes
+        // the sync client fetch it: the scan took over two minutes and held
+        // the whole server for the duration.
+        (dir === home && SKIP_HOME.has(e.name))
       )
         continue;
       walk(path.join(dir, e.name), depth + 1);
@@ -667,11 +676,121 @@ load();
 setInterval(load, 30000);
 </script></body></html>`;
 
+// Slow lookups run in a child process and are served from the last good copy.
+// The numbers come from Reminders, launchd, git and the filesystem, any of
+// which can stall for many seconds on a locked screen; run in this thread
+// they froze every other request with them.
+const CACHE_TTL = 20000;
+const stateCache = { at: 0, body: null, pending: null };
+const weekCache = { at: 0, body: null, pending: null };
+function refresh(cache, args, script) {
+  if (cache.pending) return cache.pending;
+  cache.pending = new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      script ? args : [__filename, ...args],
+      { timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: process.env },
+      (err, out) => {
+        if (!err && out) {
+          cache.body = out;
+          cache.at = Date.now();
+        }
+        cache.pending = null;
+        resolve();
+      },
+    );
+  });
+  return cache.pending;
+}
+function serveCached(res, cache, args, script = false) {
+  const respond = () => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(cache.body || JSON.stringify({ error: "this could not be read yet; try again in a moment" }));
+  };
+  if (!cache.body) refresh(cache, args, script).then(respond);
+  else {
+    if (Date.now() - cache.at > CACHE_TTL) refresh(cache, args, script);
+    respond();
+  }
+}
+
+// Proof that the thing on the port is this tool and not whatever else got
+// there first. A random secret lives in a 0600 file only this user can read,
+// and the server answers a challenge with an HMAC of it, so a process that
+// merely holds the port, or another user on the same Mac, cannot pass for it.
+function hudToken() {
+  const file = process.env.CHEWBACCA_HUD_TOKEN_FILE || path.join(os.homedir(), ".chewbacca", "hud.token");
+  try {
+    const existing = fs.readFileSync(file, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    /* first run: made below */
+  }
+  const token = crypto.randomBytes(32).toString("hex");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, token + "\n", { mode: 0o600 });
+  return token;
+}
+const proof = (nonce) => crypto.createHmac("sha256", hudToken()).update(nonce).digest("hex");
+
+function isOurs(port, host) {
+  const nonce = crypto.randomBytes(16).toString("hex");
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host, port, path: `/healthz?n=${nonce}`, headers: { host: `${host}:${port}` }, timeout: 2500 },
+      (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body).proof === proof(nonce));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
 function serve({ port = 7474, host = "127.0.0.1", onReady }) {
   const server = http.createServer((req, res) => {
-    if (req.url.startsWith("/api/state")) {
+    // Only a request that names this machine in Host, from a page this server
+    // served, gets anything. A hostile site can point its own name at 127.0.0.1
+    // (DNS rebinding) and then read these JSON routes from the browser; its
+    // requests carry its own name in Host and a cross-site fetch mark, and
+    // both are refused here before a single route runs.
+    const p = server.address() && server.address().port;
+    const named = String(req.headers.host || "").toLowerCase();
+    const site = req.headers["sec-fetch-site"];
+    const localHost = [`localhost:${p}`, `127.0.0.1:${p}`, `[::1]:${p}`].includes(named);
+    if (!localHost || (site && site !== "same-origin" && site !== "none")) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("forbidden");
+      return;
+    }
+    if (req.url.startsWith("/healthz")) {
+      const nonce = new URL(req.url, "http://x").searchParams.get("n") || "";
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(snapshot()));
+      res.end(JSON.stringify({ app: "chewbacca-hud", proof: /^[a-f0-9]{8,64}$/.test(nonce) ? proof(nonce) : null }));
+      return;
+    }
+    if (req.url.startsWith("/api/state")) {
+      serveCached(res, stateCache, ["--json"]);
+      return;
+    }
+    if (req.url.startsWith("/api/week")) {
+      serveCached(res, weekCache, [path.join(__dirname, "weekly-dashboard.js"), "--json"], true);
+      return;
+    }
+    if (req.url === "/week" || req.url.startsWith("/week?")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(weekly.WEEK_PAGE);
       return;
     }
     if (req.url === "/" || req.url.startsWith("/?")) {
@@ -681,6 +800,22 @@ function serve({ port = 7474, host = "127.0.0.1", onReady }) {
     }
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("not found");
+  });
+  // A second `chewbacca open` finds the first still serving, which is the
+  // normal case, so it opens the window onto the running one. But a taken port
+  // is not proof of that: it opens a window only after the holder answers a
+  // challenge only this user's own server can answer.
+  server.on("error", async (e) => {
+    if (e.code === "EADDRINUSE") {
+      if (await isOurs(port, host)) onReady(server);
+      else {
+        console.error(`  port ${port} is held by something that is not chewbacca. Set CHEWBACCA_HUD_PORT to a free port.`);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error(`  chewbacca could not start: ${e.message}`);
+    process.exit(1);
   });
   server.listen(port, host, () => onReady(server));
   return server;
@@ -696,12 +831,34 @@ if (require.main === module) {
     serve({
       port,
       onReady: () => {
-        const url = `http://localhost:${port}`;
+        const week = process.argv.includes("--week");
+        const url = `http://localhost:${port}${week ? "/week" : ""}`;
         console.log(`  chewbacca is open at ${url}`);
-        try {
-          execFileSync("open", [url]);
-        } catch {
-          /* headless, the URL above is the whole answer */
+        // Detached and not waited on: `open` can sit for many seconds on a
+        // locked or sleeping screen, and waiting for it here froze the server
+        // it was opening a window onto.
+        const launch = (cmd, args) => {
+          try {
+            const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+            child.on("error", () => {});
+            child.unref();
+          } catch {
+            /* headless, the URL above is the whole answer */
+          }
+        };
+        // The week view is a window you arrange, so it gets the native Mac
+        // window when it is installed, then a chrome-less Chrome window.
+        const native = ["/Applications", path.join(os.homedir(), "Applications")]
+          .map((d) => path.join(d, "Chewbacca Week.app"))
+          .find((a) => fs.existsSync(a));
+        if (process.argv.includes("--no-open")) {
+          /* serving only: the native window starts this and opens itself */
+        } else if (week && native) {
+          launch("open", [native]);
+        } else if (week && fs.existsSync("/Applications/Google Chrome.app")) {
+          launch("open", ["-na", "Google Chrome", "--args", `--app=${url}`, "--window-size=1180,820"]);
+        } else {
+          launch("open", [url]);
         }
       },
     });

@@ -1,6 +1,8 @@
 ---
 name: jev-browse
-description: "Do a narrow task on a website in the user's own Chrome in seconds, with Jev choosing each click and field instead of a model writing selectors. Use for a web task with one clear goal (find, filter, open, fill a search, navigate a web app like Clay, LinkedIn or Google Flights) when speed matters, before falling back to chrome-js or clicking by hand. Stops before any send, submit, pay, delete, sign-in, run or enrich and leaves that press to the person."
+description: "Do a narrow web task in the user's own Chrome in seconds, Jev picking each click: find, filter, open, search Clay, LinkedIn or Google Flights. Stops before any send, submit, pay, delete or sign-in."
+triggers: >-
+  Do a narrow task on a website in the user's own Chrome in seconds, with Jev choosing each click and field instead of a model writing selectors. Use for a web task with one clear goal (find, filter, open, fill a search, navigate a web app like Clay, LinkedIn or Google Flights) when speed matters, before falling back to chrome-js or clicking by hand. Stops before any send, submit, pay, delete, sign-in, run or enrich and leaves that press to the person.
 license: MIT
 requires: [chewbacca]
 ---
@@ -38,13 +40,19 @@ Each `--goal` should be one sentence, one outcome, and name its own stopping poi
 
 ## The floor
 
-The wrapper, not the goal text, refuses any click whose label reads like send, submit, post, publish, pay, buy, book, delete, archive, sign in, apply, invite, share, merge, deploy, run or enrich. A model can ignore a sentence, but it cannot get past this. `--allow-commit` lifts the floor for one run, and only after the person has said yes to that exact press.
+The wrapper, not the goal text, refuses any click whose label reads like send, submit, post, publish, pay, buy, book, delete, archive, sign in, apply, invite, share, merge, deploy, run, enrich, launch, start, resume, activate, enroll or add leads. That floor is why launch-guard lets `jev-browse run` onto a Clay page; `--allow-commit` and a goal naming a launch or resume are still refused there. From 2026-10-10 to 2026-10-16 jev-browse was missing from launch-guard's list, so every Clay run refused and the Sabo table got sorted by hand before the call. `tests/test_launch_guard_grade.py` holds that exact command now. Before reaching for a page, check `chewbacca clay ops`: views, sort, filters, hidden columns and rows all read and write there with no tab. A model can ignore a sentence, but it cannot get past this. `--allow-commit` lifts the floor for one run, and only after the person has said yes to that exact press.
 
 ## Setup
 
 `jev-browse install` clones jev-ultrafast at a pinned commit into `~/.chewbacca/jev-ultrafast` and runs `uv sync`. Chrome connects over Browser Harness, so allow remote debugging when Chrome asks. It needs one key, `TYPESAFE_API_KEY`, the same one `bin/lib/jev.py` reads from the environment or the login Keychain.
 
 Owned tabs open in the background of the Chrome profile Browser Harness attaches to. For client work, that should be the profile signed in to the client's account.
+
+## Timed tickets and reservations
+
+- Check availability at the real party size. On 2026-10-10 the Lucas Museum showed a Thu 3:30 slot open for 1 person and sold out for 2, and Caleb's plan was for him and Mark. Ask for the headcount up front if it isn't known, and give the per-person price and the total.
+- Say what the venue's hours rule out before listing slots. He asked for Thu or Mon 4-5, and those days close at 5 with 3:30 as the last entry.
+- Leave the selection in the cart page and stop. Payment is his: state it as a BLOCKED: line so handoff-guard doesn't refuse the reply and send it to him twice.
 
 ## After a run
 

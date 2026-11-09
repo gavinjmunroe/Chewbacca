@@ -1,6 +1,8 @@
 ---
 name: audio-brief
-description: Turn a piece of work into something the user can listen to instead of read. Use when they say they want to hear it, listen to it, put it in their ears, or that they will be driving, walking, at the gym, doing laundry, or otherwise away from the screen. Also use when handing over a long analysis they will not sit and read, and when they ask for a voice memo, an audio summary, or a recording of a briefing.
+description: "Turn work into something to listen to instead of read. Use when they want to hear it, will be driving, walking or at the gym, or ask for a voice memo, audio summary or recorded briefing."
+triggers: >-
+  Turn a piece of work into something the user can listen to instead of read. Use when they say they want to hear it, listen to it, put it in their ears, or that they will be driving, walking, at the gym, doing laundry, or otherwise away from the screen. Also use when handing over a long analysis they will not sit and read, and when they ask for a voice memo, an audio summary, or a recording of a briefing.
 license: MIT
 requires: [brief-audio]
 ---

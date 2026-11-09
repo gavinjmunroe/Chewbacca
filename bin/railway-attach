@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""railway-attach: point a linked Railway service at a GitHub repo and a real domain.
+
+Run from a directory linked with `railway link`:
+
+  railway-attach --repo owner/name [--branch main] [--root /site]
+  railway-attach --domain example.com --domain www.example.com
+  railway-attach --repo owner/name --root /site --domain example.com --domain www.example.com
+
+--repo connects the service to the repo (a push to the branch deploys from then on).
+--root sets the root directory for a site that lives in a subfolder of the repo.
+--domain adds a custom domain and prints the exact DNS records to enter at the
+registrar, apex as ALIAS, plus the TXT verification line. Custom domains get no
+fixed target port, so they follow the service's PORT the way its railway.app
+domain does.
+
+2026-10-29, Firm Foundation: Caleb said "We're moving it to railway on my
+deployment" and "the github to my github". The move took a GraphQL session by
+hand: serviceConnect, a rootDirectory of /site, two customDomainCreate calls with
+targetPort 8080 that then had to be set back to null to match the service domain,
+and DNS lines rewritten for Porkbun. This is that session as one command.
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+API = "https://backboard.railway.com/graphql/v2"
+
+
+def token():
+    for var in ("RAILWAY_API_TOKEN", "RAILWAY_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var]
+    with open(os.path.expanduser("~/.railway/config.json")) as fh:
+        user = json.load(fh).get("user", {})
+    return user.get("token") or user.get("accessToken")
+
+
+def gql(query, variables):
+    req = urllib.request.Request(
+        API,
+        data=json.dumps({"query": query, "variables": variables}).encode(),
+        # A bare urllib User-Agent gets a Cloudflare 403 (feedback_railway_deploys_from_github).
+        headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json", "User-Agent": "railway-cli/4.0.0"},
+    )
+    body = json.load(urllib.request.urlopen(req, timeout=30))
+    if body.get("errors"):
+        raise SystemExit("railway-attach: " + "; ".join(e.get("message", "") for e in body["errors"]))
+    return body["data"]
+
+
+def linked():
+    out = subprocess.run(["railway", "status", "--json"], capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit("railway-attach: run `railway link` in this directory first")
+    status = json.loads(out.stdout)
+    service = (status.get("services", {}).get("edges") or [{}])[0].get("node", {})
+    env = (status.get("environments", {}).get("edges") or [{}])[0].get("node", {})
+    return status["id"], service.get("id"), env.get("id")
+
+
+def dns_lines(domain, records, verify_host, verify_token):
+    """The records to type into a registrar, one per line, apex as ALIAS."""
+    lines = []
+    for rec in records:
+        host = rec.get("hostlabel") or "@"
+        kind = "ALIAS" if host == "@" else "CNAME"
+        lines.append(f"{kind}  {host}  {rec['requiredValue']}")
+    if verify_token:
+        lines.append(f"TXT  {verify_host}  {verify_token}")
+    return lines
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--repo")
+    ap.add_argument("--branch", default="main")
+    ap.add_argument("--root")
+    ap.add_argument("--domain", action="append", default=[])
+    args = ap.parse_args(argv)
+    if not (args.repo or args.root or args.domain):
+        ap.print_help()
+        return 2
+
+    project, service, env = linked()
+    if args.root:
+        gql("mutation($s:String!,$e:String!,$r:String!){serviceInstanceUpdate(serviceId:$s,environmentId:$e,input:{rootDirectory:$r})}",
+            {"s": service, "e": env, "r": args.root})
+        print(f"root directory: {args.root}")
+    if args.repo:
+        gql("mutation($s:String!,$r:String!,$b:String!){serviceConnect(id:$s,input:{repo:$r,branch:$b}){id}}",
+            {"s": service, "r": args.repo, "b": args.branch})
+        print(f"connected to {args.repo}@{args.branch}; a build has started")
+    for domain in args.domain:
+        data = gql(
+            "mutation($i:CustomDomainCreateInput!){customDomainCreate(input:$i){status{dnsRecords{hostlabel requiredValue} verificationDnsHost verificationToken}}}",
+            {"i": {"domain": domain, "serviceId": service, "environmentId": env, "projectId": project}},
+        )
+        status = data["customDomainCreate"]["status"]
+        print(f"\n{domain}: enter these at the registrar, and leave every MX, SPF, DKIM and DMARC record alone")
+        for line in dns_lines(domain, status["dnsRecords"], status.get("verificationDnsHost"), status.get("verificationToken")):
+            print("  " + line)
+    if args.domain:
+        print("\nDelete any old A or CNAME on the same hosts first (a Vercel A record wins over nothing).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

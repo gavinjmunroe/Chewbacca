@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from sqlite_ro import open_ro
+
 NODE_TYPES = frozenset({
     "Person", "Thread", "Message", "MailItem", "Event", "Assignment", "Task",
     "Project", "Space", "Track", "File", "Day",
@@ -86,6 +88,25 @@ EDGE_TYPES: dict[str, tuple[frozenset, frozenset]] = {
     # A booking signal read out of an inbox thread points at the reply that
     # carries it, so the evidence is one hop from the number it feeds.
     "EVIDENCE_IN": (frozenset({"Signal"}), frozenset({"Reply"})),
+    # "What am I missing" (bin/lib/osgraph_missing.py, CHW-204). Each is one
+    # finding, written by the `missing` walk with props.provenance naming the
+    # message, event or ledger row it stands on, and a confidence. They join
+    # a commitment to what it needs and to the other commitments around it.
+    #   Event BLOCKED_BY Thread: you meet them and their ask is unanswered.
+    #   Assignment BLOCKED_BY Assignment: the reading or pre-lab isn't done.
+    "BLOCKED_BY": (frozenset({"Event", "Assignment", "Task"}),
+                   frozenset({"Assignment", "Task", "Thread", "MailItem"})),
+    #   Event CONFLICTS_WITH Event: two commitments with other people overlap.
+    "CONFLICTS_WITH": (frozenset({"Event"}), frozenset({"Event"})),
+    #   Assignment OVERDUE_SINCE Day, Thread OVERDUE_SINCE Day (an ask waiting
+    #   on his reply a day or more).
+    "OVERDUE_SINCE": (frozenset({"Assignment", "Task", "Thread", "MailItem"}), frozenset({"Day"})),
+    #   Task LAPSED_ON Day: his own "I'll send it tonight", past its time with
+    #   nothing from him in the thread since.
+    "LAPSED_ON": (frozenset({"Task"}), frozenset({"Day"})),
+    #   Message ANNOUNCES Day: a group text names a meeting at a time that day
+    #   and nothing on his calendar sits near it.
+    "ANNOUNCES": (frozenset({"Message"}), frozenset({"Day"})),
 }
 ME = "person:me"
 
@@ -421,7 +442,7 @@ class Identities:
         if not self.ok:
             return
         try:
-            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            db = open_ro(path, timeout=2)
         except sqlite3.Error:
             self.ok = False
             return

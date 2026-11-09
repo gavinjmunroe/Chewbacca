@@ -1,6 +1,6 @@
 """Tests for tools/inventory.py frontmatter parsing and house-style normalising.
 
-Both cases here are bugs that shipped into docs/REFERENCE.md, which is a public
+Both cases here are bugs that shipped into docs/reference/REFERENCE.md, which is a public
 file, on 2026-09-16 when Cap's two skills were installed.
 
     python3 tests/test_inventory.py
@@ -39,7 +39,7 @@ def frontmatter(text):
 #
 # The parser handled a bare "|" and ">" and nothing else. Cap writes
 # `description: >-`, so the marker became the value and the folded lines were
-# appended behind it. docs/REFERENCE.md published ">- Always use Cap's CLI...".
+# appended behind it. docs/reference/REFERENCE.md published ">- Always use Cap's CLI...".
 
 for marker in ("|", ">", "|-", ">-", "|+", ">+", "|2", ">2"):
     fm = frontmatter(f"---\nname: x\ndescription: {marker}\n  the real text here\n---\n\nbody\n")
@@ -67,7 +67,7 @@ check(
 
 # ── house style on vendored text ─────────────────────────────────────────────
 #
-# Vendored descriptions ship verbatim into README.md and docs/REFERENCE.md,
+# Vendored descriptions ship verbatim into README.md and docs/reference/REFERENCE.md,
 # where this repo's writing rules ban em dashes outright. Cap's cap-demo
 # description put one straight into the generated table.
 
@@ -143,13 +143,69 @@ check("a pinned pack warns when an existing clone is elsewhere", "not at the vet
 
 # ── the generated files themselves ───────────────────────────────────────────
 
-for rel in ("docs/REFERENCE.md", "README.md", "config/settings/toolkit.json"):
+for rel in ("docs/reference/REFERENCE.md", "README.md", "config/settings/toolkit.json"):
     p = ROOT / rel
     if not p.is_file():
         continue
     body = p.read_text(encoding="utf-8")
     check(f"{rel} carries no em dash", "—" not in body)
     check(f"{rel} carries no leaked scalar marker", ">- " not in body and "| >-" not in body)
+
+# ── a refused write still names its caller (backlog 515) ─────────────────────
+#
+# The 10/06 rewrite was never attributed. The guard added on 10/09 refused
+# worktree and suite runs but logged only successful writes, so a refused
+# writer left no trace. This runs main() under CHEWBACCA_SUITE with the log
+# pointed at a temp dir and checks the refusal landed with a parent process.
+
+if __name__ == "__main__":
+    import json as _json
+    import os as _os
+
+    with tempfile.TemporaryDirectory() as logdir:
+        saved = {k: _os.environ.get(k) for k in ("CHEWBACCA_SUITE", "CHEWBACCA_LOG_DIR")}
+        _os.environ["CHEWBACCA_SUITE"] = "1"
+        _os.environ["CHEWBACCA_LOG_DIR"] = logdir
+        try:
+            rc = inv.main()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    _os.environ.pop(k, None)
+                else:
+                    _os.environ[k] = v
+        logfile = pathlib.Path(logdir) / "inventory-writes.log"
+        rows = [_json.loads(l) for l in logfile.read_text().splitlines()] if logfile.exists() else []
+        check("a suite run is refused", rc == 2, f"rc={rc}")
+        check("the refusal is logged", len(rows) == 1 and str(rows[0].get("changed", "")).startswith("refused:"), rows)
+        check("the refusal names a parent process", bool(rows and rows[0].get("parent")), rows)
+
+# ── a thin machine can't shrink the catalog, and --help doesn't write ───────
+#
+# Break-it, 2026-10-19: in a full clone, a home with one plugin and no skills
+# ran `inventory.py --help`, and it wrote anyway: 719 lines out of setup.sh,
+# toolkit.json and REFERENCE.md, all 8 upstream skills among them.
+
+if __name__ == "__main__":
+    import subprocess as _sp
+    with tempfile.TemporaryDirectory() as td:
+        clone = pathlib.Path(td) / "clone"
+        _sp.run(["git", "clone", "-q", "--shared", str(ROOT), str(clone)], check=True)
+        # The generator under test is this checkout's, which may not be committed yet.
+        (clone / "tools/inventory.py").write_bytes((ROOT / "tools/inventory.py").read_bytes())
+        _sp.run(["git", "-C", str(clone), "update-index", "--assume-unchanged", "tools/inventory.py"], check=True)
+        home = pathlib.Path(td) / "home"
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude" / "settings.json").write_text('{"enabledPlugins": {"x@y": true}}')
+        env = dict(os.environ if "os" in dir() else __import__("os").environ, HOME=str(home))
+        env.pop("CHEWBACCA_SUITE", None)
+        r = _sp.run([sys.executable, str(clone / "tools/inventory.py"), "--help"], env=env, capture_output=True, text=True)
+        dirty = _sp.run(["git", "-C", str(clone), "status", "--porcelain"], capture_output=True, text=True).stdout
+        check("--help prints help and writes nothing", r.returncode == 0 and not dirty, (r.returncode, dirty[:200]))
+        r = _sp.run([sys.executable, str(clone / "tools/inventory.py")], env=env, capture_output=True, text=True)
+        dirty = _sp.run(["git", "-C", str(clone), "status", "--porcelain"], capture_output=True, text=True).stdout
+        check("a thin home is refused instead of shrinking the catalog", r.returncode == 2 and not dirty,
+              (r.returncode, r.stderr[-300:], dirty[:200]))
 
 # Guarded because the filename matches pytest's discovery pattern. Without
 # this, importing the module to collect it runs sys.exit and pytest aborts the

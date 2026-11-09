@@ -25,7 +25,7 @@ BRAIN_SYNC_PAYLOAD="$(cat)"
 export BRAIN_SYNC_PAYLOAD PERSONAL_CONTEXT_DIR="${PERSONAL_CONTEXT_DIR:-}" PUBLIC_CONTEXT_DIR="${PUBLIC_CONTEXT_DIR:-}"
 export CHEWBACCA_WRITE_LOG="${CHEWBACCA_WRITE_LOG:-$HOME/.chewbacca/write-log.tsv}"
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os, subprocess, sys
 
 try:
@@ -64,6 +64,12 @@ def subject():
                     event = json.loads(line)
                 except ValueError:
                     continue
+                # A message typed mid-turn is an attachment row
+                # (bin/lib/transcript_rows.py); it can be the latest prompt.
+                att = event.get("attachment") if event.get("type") == "attachment" else None
+                if isinstance(att, dict) and att.get("type") == "queued_command" \
+                        and (att.get("origin") or {}).get("kind", "human") == "human":
+                    event = {"type": "user", "message": {"content": att.get("prompt")}}
                 # Hook feedback, agent messages and the compaction summary are
                 # user events too. Only the person's own prompt names a commit.
                 if event.get("type") != "user" or event.get("isMeta") or event.get("isCompactSummary"):
@@ -134,7 +140,7 @@ if [ -d "$lock" ]; then
 fi
 mkdir "$lock" 2>/dev/null || exit 0
 echo $$ > "$lock/pid"
-# A phone session commits to the same repo through GitHub (docs/PHONE.md), so
+# A phone session commits to the same repo through GitHub (docs/guide/PHONE.md), so
 # the remote can be ahead, and a rejected push used to fail silently forever.
 # brain-pull-safe rebases onto note-only remote commits and refuses anything
 # that touches code or instruction files; if it is missing, nothing is pulled.

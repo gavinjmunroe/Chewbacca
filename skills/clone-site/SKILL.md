@@ -1,6 +1,8 @@
 ---
 name: clone-site
-description: "Rebuild an existing website faithfully: a replica, a design study, or a page that has to match a reference. Use when asked to clone, replicate, copy, match or rebuild a site, when a reference URL is given as the target to hit, when the user says make it look like <site>, and when a build is being judged against a live page. Also fires on: clone, replica, reverse engineer, match this site, like their site, fidelity, pixel perfect, same as theirs, why is theirs better."
+description: "Rebuild an existing website faithfully: a replica, design study or page matched to a reference. Use for clone, replicate, match this site, make it look like <site>, pixel perfect, why is theirs better."
+triggers: >-
+  Rebuild an existing website faithfully: a replica, a design study, or a page that has to match a reference. Use when asked to clone, replicate, copy, match or rebuild a site, when a reference URL is given as the target to hit, when the user says make it look like <site>, and when a build is being judged against a live page. Also fires on: clone, replica, reverse engineer, match this site, like their site, fidelity, pixel perfect, same as theirs, why is theirs better.
 ---
 
 # Clone site
@@ -250,6 +252,28 @@ both brand names to one token and flag any shared run of eight words.
 **Your own probe can fake a regression.** A script that hid "banner" and
 "cookie" elements by class substring also hid two figures, and the crop said
 they had vanished. Confirm a surprising frame with the probe removed.
+
+## A replica is a study, never a client's site (2026-10-31)
+
+The Firm Foundation home hero was built on the Lemma replica's mechanism: floating
+tabbed plates with sheet numbers around a centred headline, a brick wall whose lit
+stones widen sideways, narrow to squares and flip into diamonds on an iso lattice,
+and a timed wave of cubes. Caleb: "not look like a complete rip off of lemma", "I hv
+friends that know lemma". Reskinning failed twice in one hour: arched frames kept the
+floating-plates layout ("It's still copying lemma bro we need to be more creative"),
+and pills kept the choreography ("making it ovals isnt intentional especially since
+ur still copying the animation of them expanding sideways and then turning into
+squares on a grid").
+
+- Never ship a replica's sequence of moves on someone else's site with new shapes on
+  it. Shapes, colours and labels are the cheap part; the layout and the choreography
+  are what people recognise.
+- Start from the client's own story and write its beats first. For Firm Foundation
+  that was Matthew 7:24-27, the house on the sand and the house on the rock, which
+  Caleb named ("the man with the sand vs firm foundation"). "The lemma one fit the
+  lemma story well, we need one that fits the firm foundation one."
+- Then check the result against the reference side by side: if the hero layout or any
+  scroll beat could be described in the same words as the reference's, it is still a copy.
 
 ## Done means
 

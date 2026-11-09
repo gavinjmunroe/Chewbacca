@@ -7,8 +7,12 @@
 #   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
 #                                      learn a new operation (api-anything add)
 #   chewbacca api login <site>         import a session from a signed-in browser
-#                                      (brightspace: from the Work Chrome profile)
+#                                      (brightspace, handshake, usc-reg, usc-fees, usc-parking: from
+#                                      whichever Chrome profile is signed in to USC)
 #   chewbacca api sync                 load the kit's taught sites into the engine
+#   chewbacca api grow                 sites browsed with no op yet, most visited first
+#   chewbacca api renew [site]         re-import Chrome sessions, never a window
+#   chewbacca api keepalive            renew every 15 min in the background item
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
 # The engine is goodnight000/api-anything (MIT). It watches a site's own page
@@ -182,6 +186,10 @@ sync_sites() {
   local f base dest tmp copied=0
   for f in "$KIT_SITES"/*.json; do
     [ -f "$f" ] || continue
+    # Other tools keep config beside the specs (x-timeline.json is a note, a
+    # timeline and a user, no operations). Skipping it installs nothing, the
+    # safe side; refusing it printed a warning on every call.
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and ("operations" in d or "baseUrl" in d) else 1)' "$f" 2>/dev/null || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
     if [ -f "$dest" ] && ! [ "$f" -nt "$dest" ]; then
@@ -211,37 +219,198 @@ sync_sites() {
   [ "${1:-}" = "--quiet" ] || say "synced $copied site(s) from the kit"
 }
 
-# Brightspace's d2l login cookies have no expiry, and the engine's own Chrome
-# drops cookies like that on every restart, so a plain profile import never
-# held (2026-10-10: every capture bounced to USC SSO). Instead this reads the
-# four d2l cookies the way bin/brightspace does, gives them a 12 hour expiry,
-# imports them from a private temp file, and deletes the file.
-login_brightspace() {
-  local dir rc
+# Some sites' login cookies have no expiry, and the engine's own Chrome drops
+# cookies like that on every restart, so a plain profile import never holds
+# (2026-10-10: Brightspace bounced to USC SSO on every capture, Handshake
+# answered not_logged_in). For those, this reads the site's cookies straight
+# from the student's Chrome cookie store (the decryption bin/brightspace
+# uses), gives them a 12 hour expiry, imports them from a private temp file,
+# and deletes the file. One line per site: name, cookie host suffixes (comma
+# separated), and a cookie-name prefix ("-" for all of those hosts' cookies).
+# usc-reg needs the Microsoft sign-in cookies because webreg signs in through
+# Entra; Caleb approved importing that session on 2026-10-10, for read-only
+# USC systems. The other usc-* rows sign in the same way and take the same
+# narrowed Entra set, never every login.microsoftonline.com cookie.
+PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
+handshake joinhandshake.com -
+usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -
+usc-fees atweb.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -
+usc-parking aimsparking.com,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
+
+profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
+
+# Sites whose USC sign-in only finishes inside a page: the SAML answer lands on
+# a handoff page that POSTs the session over, and the engine's read guard
+# aborts that POST on a tier-3 call (2026-10-13: AIMS parking's trigger ended
+# on an aborted POST to /secure/index.php, so every call drifted).
+# bin/lib/sso_warmup.mjs signs in headless from the imported jar and hands the
+# site's own cookies to the import, the same click a student makes on "USC NetID".
+# One line per site: name, the sign-in URL, and a GET plus a JSON path that is
+# true only when signed in, so a guest landing never counts as a sign-in. Never
+# a page that changes anything: the only POSTs are the SAML answer and handoff.
+PROFILE_SSO_WARMUP="usc-parking https://uscauth.aimsparking.com/aimsweb/index.php /api/common/index.php?cmd=get_common_data user.logged_in"
+
+sso_warmup_url() { printf '%s\n' "$PROFILE_SSO_WARMUP" | awk -v s="$1" '$1 == s {print $2}'; }
+sso_warmup_check() { printf '%s\n' "$PROFILE_SSO_WARMUP" | awk -v s="$1" '$1 == s {print $3, $4}'; }
+
+login_from_profile() {
+  local row host prefix dir rc
+  row="$(profile_login_row "$1")"
+  host="$(printf '%s' "$row" | awk '{print $2}')"
+  prefix="$(printf '%s' "$row" | awk '{print $3}')"
+  # Chrome's own Brightspace session lapses too (2026-10-10: a 403 hours
+  # after a good import). bin/brightspace rereads Chrome's cookies until a
+  # live one turns up, so check it first and import what that leaves. Not on
+  # the silent re-import inside `call`: signed out for real, whoami opens the
+  # sign-in page, and a read nobody watched must never put a window up.
+  [ "$1" = brightspace ] && [ -z "${2:-}" ] && CHEWBACCA_NO_OPEN=1 python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
-  if ! python3 - "$ROOT/bin/brightspace" "$dir/cookies.json" <<'PY'
-import importlib.machinery, importlib.util, json, os, sys, time
-loader = importlib.machinery.SourceFileLoader("brightspace", sys.argv[1])
-spec = importlib.util.spec_from_loader("brightspace", loader)
-mod = importlib.util.module_from_spec(spec); loader.exec_module(mod)
-jar = {k: v for k, v in mod.chrome_cookies().items() if k.lower().startswith("d2l")}
-if not jar:
-    sys.exit("no Brightspace session in the Work Chrome profile; open brightspace.usc.edu there once")
+  # Decrypted Chrome cookies sit in here; a Ctrl-C mid sign-in must not leave them.
+  trap 'rm -rf "$dir"; exit 130' INT TERM
+  if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
+import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
+from pathlib import Path
+def aes_cbc_decrypt(key, data):
+    # /usr/bin/python3 on a fresh Mac has no `cryptography`, so fall back to
+    # the openssl macOS ships (same helper as bin/brightspace).
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError:
+        # CommonCrypto in libSystem, in process. The first fallback ran
+        # /usr/bin/openssl with the key as -K <hex>, and argv is readable by
+        # every process on the Mac through ps, so the one key that opens all of
+        # Chrome's cookies sat in a process listing (security review, 2026-10-10).
+        import ctypes
+        import ctypes.util
+        lib = ctypes.CDLL(ctypes.util.find_library("System") or "/usr/lib/libSystem.dylib")
+        out = ctypes.create_string_buffer(len(data) + 16)
+        moved = ctypes.c_size_t(0)
+        # CCCrypt(decrypt, AES, no padding, key, iv, in, out): padding is
+        # stripped by the caller, the same as with the cryptography path.
+        status = lib.CCCrypt(1, 0, 0, bytes(key), len(key), b" " * 16, bytes(data), len(data),
+                             out, len(out), ctypes.byref(moved))
+        if status != 0:
+            raise RuntimeError(f"CCCrypt failed with status {status}")
+        return out.raw[:moved.value]
+    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+    return dec.update(data) + dec.finalize()
+hosts, prefix, out, profile = sys.argv[1:5]
+# "host:a|b|c" narrows one host to cookies whose names start with a, b or c.
+# login.microsoftonline.com carries his whole Microsoft 365 sign-in, so only
+# the cookies Entra's sign-in reads come along (security review, 2026-10-10:
+# the first version took every cookie there). ESTS* alone was not enough: the
+# sign-in then stopped on Entra's interrupt page and WebReg answered 302, so
+# the device and flow cookies (buid, fpc, esctx, gateway slice) ride too.
+hosts = [(h.split(":")[0], (h.split(":")[1] if ":" in h else prefix)) for h in hosts.split(",") if h]
+chrome = Path(os.environ.get("CHEWBACCA_CHROME_DIR") or Path.home() / "Library/Application Support/Google/Chrome")
+query = ("select host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc"
+         " from cookies where host_key = ? or host_key = ? or host_key like ?")
+
+def read(db):
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "Cookies"
+        shutil.copy(db, copy)
+        con = sqlite3.connect(copy)
+        out = []
+        for h, hp in hosts:
+            for r in con.execute(query, (h, "." + h, "%." + h)).fetchall():
+                if hp == "-" or any(r[1].lower().startswith(p) for p in hp.split("|")):
+                    out.append(r)
+        return out
+
+# Any student, any Mac: with no profile named, use whichever Chrome profile
+# touched the site's own cookies most recently. One student's USC login lives
+# in "Profile 1" and a classmate's will be somewhere else.
+# Only the site's own hosts vote. The narrowed identity-provider hosts
+# (login.microsoftonline.com) are signed in from every profile that ever opened
+# Outlook or Teams, so letting them vote handed usc-reg to a personal profile
+# with a newer Microsoft cookie and no USC session at all.
+own = [h for h, hp in hosts if hp == prefix]
+def on_own(host_key):
+    k = host_key.lstrip(".")
+    return any(k == h or k.endswith("." + h) for h in own)
+if profile:
+    rows = read(chrome / profile / "Cookies")
+else:
+    best, rows = -1, []
+    for db in sorted(chrome.glob("*/Cookies")):
+        try:
+            found = read(db)
+        except Exception:
+            continue
+        seen = max((r[6] for r in found if on_own(r[0])), default=-1)
+        if seen > best:
+            best, rows, profile = seen, found, db.parent.name
+# Before the keychain read: no session anywhere is a plain answer, never a
+# Keychain prompt for cookies that aren't there.
+if not any(on_own(r[0]) for r in rows):
+    sys.exit(f"no {hosts[0][0]} session in any Chrome profile; sign in there once in Chrome")
+secret = (os.environ.get("CHEWBACCA_CHROME_SAFE_KEY", "").encode()
+          or subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip())
+key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
 expires = int(time.time()) + 12 * 3600
-rows = [{"name": k, "value": v, "domain": "brightspace.usc.edu", "path": "/", "expires": expires,
-         "httpOnly": True, "secure": True, "sameSite": "Lax"} for k, v in jar.items()]
-fd = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+jar = []
+for hk, name, blob, path, secure, httponly, _ in rows:
+    raw = aes_cbc_decrypt(key, blob[3:])
+    raw = raw[: -raw[-1]]
+    try:
+        raw[:32].decode(); value = raw.decode()
+    except UnicodeDecodeError:
+        value = raw[32:].decode()
+    jar.append({"name": name, "value": value, "domain": hk, "path": path or "/", "expires": expires,
+                "httpOnly": bool(httponly), "secure": bool(secure), "sameSite": "Lax"})
+if not jar:
+    sys.exit(f"no {hosts[0][0]} session in any Chrome profile; sign in there once in Chrome")
+fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as f:
-    json.dump(rows, f)
+    json.dump(jar, f)
 PY
   then
-    rm -rf "$dir"
+    rm -rf "$dir"; trap - INT TERM
     return 1
   fi
-  api-anything login brightspace --cookies "$dir/cookies.json" >/dev/null; rc=$?
-  rm -rf "$dir"
-  [ "$rc" -eq 0 ] && say "Brightspace session imported for 12 hours"
+  # The engine keeps only cookies on the site's own domain, so a sign-in that
+  # crosses domains (webreg through login.microsoftonline.com) loses the
+  # foreign half. Import each other domain's cookies under that domain too,
+  # which puts them in the engine's Chrome profile where the sign-in runs.
+  python3 - "$dir/cookies.json" "$dir" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1]))
+root = lambda h: ".".join(h.lstrip(".").split(".")[-2:])
+groups = {}
+for r in rows:
+    groups.setdefault(root(r["domain"]), []).append(r)
+for dom, part in groups.items():
+    with open(f"{sys.argv[2]}/extra-{dom}.json", "w") as f:
+        json.dump(part, f)
+PY
+  local extra dom siteroot
+  siteroot="$(printf '%s' "$host" | cut -d, -f1 | cut -d: -f1 | awk -F. '{print $(NF-1)"."$NF}')"
+  for extra in "$dir"/extra-*.json; do
+    [ -f "$extra" ] || continue
+    dom="${extra##*/extra-}"; dom="${dom%.json}"
+    [ "$dom" = "$siteroot" ] && continue
+    if ! api-anything login "$dom" --cookies "$extra" >/dev/null 2>"$dir/extra.err"; then
+      say "couldn't import the $dom sign-in cookies: $(tail -1 "$dir/extra.err")" >&2
+    fi
+  done
+  local warm jar="$dir/cookies.json"
+  warm="$(sso_warmup_url "$1")"
+  if [ -n "$warm" ]; then
+    # shellcheck disable=SC2046 # the check is two words on purpose
+    if ! node "${CHEWBACCA_SSO_WARMUP:-$ROOT/bin/lib/sso_warmup.mjs}" "$warm" "$dir/cookies.json" "$dir/warm.json" \
+      $(sso_warmup_check "$1") 2>"$dir/warm.err"; then
+      # A half sign-in is not a sign-in: say why and import nothing.
+      say "$1: $(tail -1 "$dir/warm.err")" >&2
+      rm -rf "$dir"; trap - INT TERM
+      return 1
+    fi
+    jar="$dir/warm.json"
+  fi
+  api-anything login "$1" --cookies "$jar" >/dev/null; rc=$?
+  rm -rf "$dir"; trap - INT TERM
+  [ "$rc" -eq 0 ] && say "$1 session imported for 12 hours"
   return "$rc"
 }
 
@@ -261,9 +430,9 @@ case "$cmd" in
     # A login changes which kit specs are safe, so re-check them after it,
     # not only before the next call.
     need_engine || exit 1
-    if [ "${1:-}" = brightspace ]; then
+    if [ -n "${1:-}" ] && [ -n "$(profile_login_row "$1")" ]; then
       sync_sites --quiet
-      login_brightspace; rc=$?
+      login_from_profile "$1"; rc=$?
     else
       api-anything login "$@"; rc=$?
     fi
@@ -273,11 +442,92 @@ case "$cmd" in
   mcp)
     # Agents reach the engine through this, never `api-anything mcp` directly,
     # so the kit's specs are re-checked each time a server starts.
+    # Through the proxy, so a lapsed Chrome-imported session renews itself
+    # and no agent can put a sign-in window on screen.
     need_engine || exit 1
     sync_sites --quiet
+    if have node && [ -f "$ROOT/bin/lib/api_mcp_proxy.mjs" ]; then
+      CHEWBACCA_RENEWABLE_SITES="$(printf '%s\n' "$PROFILE_LOGIN_SITES" | awk '{print $1}' | tr '\n' ' ')" \
+        exec node "$ROOT/bin/lib/api_mcp_proxy.mjs" bash "$ROOT/bin/chewbacca-api" renew -- api-anything mcp "$@"
+    fi
     exec api-anything mcp "$@"
     ;;
-  sites|ops|call|logout|capture|inspect|verify|heal|export|add)
+  renew)
+    # Re-import Chrome sessions for the sites that sign in through Chrome's
+    # cookie file, never opening anything. No site named: every such site
+    # that has a session now. The keepalive service runs this every 15 min.
+    need_engine || exit 1
+    sites="$*"
+    if [ -z "$sites" ]; then
+      sites="$(printf '%s\n' "$PROFILE_LOGIN_SITES" | awk '{print $1}' | while read -r s; do
+        [ -f "$ENGINE_HOME/sessions/$s.json" ] && echo "$s"; done | tr '\n' ' ')"
+    fi
+    rc=0
+    for s in $sites; do
+      [ -n "$(profile_login_row "$s")" ] || { say "$s: not a Chrome-session site" >&2; rc=1; continue; }
+      # Brightspace: a whoami with Chrome's own cookies also keeps that
+      # server session from idling out, so he never has to open the site to
+      # wake it. It never opens a window, signed out or not.
+      [ "$s" = brightspace ] && CHEWBACCA_NO_OPEN=1 python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
+      if login_from_profile "$s" quiet >/dev/null 2>&1; then say "$s renewed"; else say "$s: signed out in Chrome" >&2; rc=1; fi
+    done
+    sync_sites --quiet
+    exit "$rc"
+    ;;
+  keepalive)
+    # Guessed, never measured: USC's D2L idle timeout. Tonight's 403 came
+    # after hours with no Brightspace tab, and 15 min is well inside any
+    # idle window D2L ships with while costing one GET per site.
+    python3 - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin/lib")
+import daemon_register
+print(daemon_register.register("site-sessions", ["/bin/bash", sys.argv[1] + "/bin/chewbacca-api", "renew"], every=900))
+PY
+    ;;
+  call)
+    need_engine || exit 1
+    sync_sites --quiet
+    # A profile-login site's imported session lasts 12 hours, and the engine
+    # then answers auth, a challenge, or a bare 302 (WebReg, 2026-10-10) and
+    # says to run `api-anything login`, which is not how these sessions get in.
+    # Re-import from Chrome once, silently, and retry: the same read a student
+    # would do by hand, so a session they hold in Chrome never looks signed out.
+    if [ -n "${1:-}" ] && [ -n "$(profile_login_row "$1")" ] && [ -z "${CHEWBACCA_API_NO_RELOGIN:-}" ]; then
+      errf="$(mktemp)"
+      out="$(api-anything call "$@" 2>"$errf")"; rc=$?
+      if printf '%s\n' "$out" | tail -1 | python3 -c '
+import json, re, sys
+try:
+    r = json.loads(sys.stdin.read())
+except ValueError:
+    sys.exit(1)
+why = str(r.get("reason") or "")
+warm = sys.argv[1] == "1"
+data = r.get("data")
+lapsed = (r.get("ok") is False and (
+    r.get("class") == "auth"
+    or re.search(r"HTTP (30[12]|40[13])\b", why)
+    or (r.get("class") == "blocked" and re.search(r"challeng|sign.?in|log.?in", why, re.I))
+    # A signed-out handoff site answers guest pages, not 401s: AIMS returns an
+    # error page where the JSON was, which the engine calls drift.
+    or (warm and r.get("class") == "drift"))
+    # An op that reports its own sign-in state says so plainly: a guest answer
+    # with ok true is still not the student data.
+    or (isinstance(data, dict) and data.get("signedIn") is False))
+sys.exit(0 if lapsed else 1)' "$([ -n "$(sso_warmup_url "$1")" ] && echo 1 || echo 0)" && login_from_profile "$1" quiet >/dev/null 2>&1; then
+        rm -f "$errf"
+        sync_sites --quiet
+        exec api-anything call "$@"
+      fi
+      printf '%s\n' "$out"
+      cat "$errf" >&2; rm -f "$errf"
+      exit "$rc"
+    fi
+    exec api-anything call "$@"
+    ;;
+  grow) exec "$ROOT/bin/api-grow" "$@" ;;
+  sites|ops|logout|capture|inspect|verify|heal|export|add)
     need_engine || exit 1
     sync_sites --quiet
     exec api-anything "$cmd" "$@"

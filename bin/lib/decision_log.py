@@ -5,7 +5,7 @@ route or a missed click left nothing to look at and every floor stayed a
 guess. `jev.ask(..., decision="route")` appends one row here; a verifier or a
 correction later writes an outcome row against the same id. `bin/decisions`
 reads both, and joins them into accuracy by confidence bucket, which is the
-evidence a floor needs (see docs/JEV-EVERYWHERE.md, "Calibration").
+evidence a floor needs (see docs/plans/JEV-EVERYWHERE.md, "Calibration").
 
 Local only: ~/.bob/decisions.jsonl never leaves the machine and is not in any
 repo. The state is kept as a short excerpt, enough to label a row by hand.

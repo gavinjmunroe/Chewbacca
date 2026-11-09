@@ -1,7 +1,7 @@
 {
   "schema": "clay-ops/1",
-  "revision": "2026-10-09.1",
-  "notes": "Every Clay job `chewbacca clay` answers, and the surfaces that answer it. A surface is tried only when every arg it needs was given; the fastest measured one goes first, and the next is tried when it fails or comes back truncated. ms is end-to-end wall time for one call from a shell on Caleb's Mac on 2026-10-09, load average 60 to 90 from other agents, so read them as relative, not absolute. Writes are listed with a gate class; only three are callable and they refuse without --allow-writes and a person typing the op name at a real terminal, which agent shells don't have.",
+  "revision": "2026-10-10.1",
+  "notes": "Every Clay job `chewbacca clay` answers, and the surfaces that answer it. A surface is tried only when every arg it needs was given; the fastest measured one goes first, and the next is tried when it fails or comes back truncated. ms is end-to-end wall time for one call from a shell on Caleb's Mac on 2026-10-09, load average 60 to 90 from other agents, so read them as relative, not absolute. Every write refuses without --allow-writes and a person typing the op name at a real terminal, which agent shells don't have; --dry-run prints the exact request instead and sends nothing. Writes with verified:false were derived from Clay's frontend bundle or CLI help, never sent; their first live uses print a readback.",
   "engine": {
     "name": "api-anything",
     "repo": "https://github.com/goodnight000/api-anything",
@@ -15,10 +15,68 @@
     "dist_sha256": "a595b981ce1de4663f4ebc2eb1c9fe5ba64f5b96206e5776fab6e5331ebf21ca",
     "dist_sha256_of": "dist/*.js in name order, concatenated; built with npm ci --ignore-scripts && npm run build at sha"
   },
-  "defaults": {
-    "ws": "1372623"
-  },
   "ops": [
+    {
+      "name": "campaign-restrict",
+      "kind": "write",
+      "gate": "write:audience-protection",
+      "summary": "Protectively subtract exact held email/entity IDs from a paused campaign base audience. Reads full pages for preview, preserves the original AST, refuses shared audiences, and verifies enrollment pauses. Never resumes a campaign.",
+      "args": ["ws", "campaign", "audience", "holds"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["audiences", "update", "{audience}", "--filter", "{filter}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay audiences update --help",
+        "semantics": "Replacement filter AST; derived AND restriction only, with live membership and enrollment proof required"
+      },
+      "verified": false
+    },
+    {
+      "name": "campaigns-page",
+      "kind": "read",
+      "gate": "read",
+      "summary": "A campaign list page preserving data and cursor metadata for complete scans.",
+      "args": ["ws", "limit?", "cursor?"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "list"],
+          "optional": {
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "audience-record-ids-page",
+      "kind": "read",
+      "gate": "read",
+      "summary": "An unsorted audience ID page preserving data and cursor metadata for complete scans.",
+      "args": ["ws", "audience", "limit?", "cursor?"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "records",
+            "search-ids",
+            "--entity-type",
+            "people",
+            "--audience-id",
+            "{audience}"
+          ],
+          "optional": {
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
+          }
+        }
+      ]
+    },
     {
       "name": "workspaces",
       "kind": "read",
@@ -39,9 +97,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "every folder, workbook and table in a workspace, one call",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -58,9 +114,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "tables in the workspace",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -74,12 +128,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "tables",
-            "list",
-            "--limit",
-            "100"
-          ],
+          "argv": ["tables", "list", "--limit", "100"],
           "extract": "data"
         }
       ],
@@ -90,9 +139,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "workbooks in the workspace",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -106,12 +153,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "workbooks",
-            "list",
-            "--limit",
-            "100"
-          ],
+          "argv": ["workbooks", "list", "--limit", "100"],
           "extract": "data"
         }
       ],
@@ -122,9 +164,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "folders in the workspace",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -138,12 +178,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "folders",
-            "list",
-            "--filter",
-            "resourceType=FOLDER"
-          ],
+          "argv": ["folders", "list", "--filter", "resourceType=FOLDER"],
           "extract": "data"
         }
       ],
@@ -154,9 +189,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "a table's settings: AUTO_RUN_ON, AUTO_RUN_MODE, scheduled runs, firstViewId, views. The CLI fallback has row count but no auto-run settings",
-      "args": [
-        "table"
-      ],
+      "args": ["table"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -167,11 +200,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "tables",
-            "get",
-            "{table}"
-          ]
+          "argv": ["tables", "get", "{table}"]
         }
       ],
       "ui": "clay-go table-settings --table {table}",
@@ -182,9 +211,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "a table's columns with type and full settings: enrichment action, inputs binding, run condition, formula",
-      "args": [
-        "table"
-      ],
+      "args": ["table"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -195,26 +222,57 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "tables",
-            "columns",
-            "get",
-            "{table}"
-          ],
+          "argv": ["tables", "columns", "get", "{table}"],
           "extract": "data"
         }
       ],
       "ui": "clay-go column-settings --table {table}"
     },
     {
+      "name": "actions",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every enrichment the workspace can run, with inputs, outputs and credit cost; feed it to tools/enrich_catalog.py build",
+      "args": ["ws"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getActions",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": ["workflows", "actions", "list"],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "views",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's views with sort, filter and per-column visibility (isVisible), as Clay stores them",
+      "args": ["table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getTableViews",
+          "args": {
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
       "name": "table-status",
       "kind": "read",
       "gate": "read",
       "summary": "per-column enrichment status counts (success, error, running, queued)",
-      "args": [
-        "ws",
-        "table"
-      ],
+      "args": ["ws", "table"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -231,14 +289,15 @@
       "name": "rows",
       "kind": "read",
       "gate": "read",
-      "summary": "a page of rows with every cell; pass after=<last row id> (api) or cursor= (cli) for the next page",
+      "summary": "a page of rows with every cell. after=<row id> with view= pages in the view's own order (its row ids, then rows by id), because Clay's own afterrecordid skipped and repeated rows on 2026-10-16; cursor= pages the cli surface. fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender.",
       "args": [
         "ws",
         "table",
         "view?",
         "limit?",
         "after?",
-        "cursor?"
+        "cursor?",
+        "fields?"
       ],
       "surfaces": [
         {
@@ -261,47 +320,28 @@
             "viewId": "view",
             "limit": "limit"
           },
-          "unless": [
-            "after",
-            "cursor"
-          ]
+          "unless": ["after", "cursor"]
         },
         {
           "type": "cli",
-          "argv": [
-            "tables",
-            "rows",
-            "list",
-            "{table}"
-          ],
+          "argv": ["tables", "rows", "list", "{table}"],
           "optional": {
-            "limit": [
-              "--limit",
-              "{limit}"
-            ],
-            "cursor": [
-              "--cursor",
-              "{cursor}"
-            ]
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
           },
-          "unless": [
-            "after"
-          ],
+          "unless": ["after"],
           "extract": "data"
         }
       ],
-      "ui": "clay-go table --table {table}"
+      "ui": "clay-go table --table {table}",
+      "narrow": "cells"
     },
     {
       "name": "row",
       "kind": "read",
       "gate": "read",
-      "summary": "one row: every cell with its status (success, error, running, queued, empty)",
-      "args": [
-        "ws",
-        "table",
-        "row"
-      ],
+      "summary": "one row: every cell with its status (success, error, running, queued, empty); fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender, so a big people cell reads in full.",
+      "args": ["ws", "table", "row", "fields?"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -314,25 +354,78 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "tables",
-            "rows",
-            "get",
-            "{table}",
-            "{row}"
-          ]
+          "argv": ["tables", "rows", "get", "{table}", "{row}"]
         }
       ],
-      "ui": "clay-go row-detail --table {table}"
+      "ui": "clay-go row-detail --table {table}",
+      "narrow": "cells"
+    },
+    {
+      "name": "rows-by-id",
+      "kind": "read",
+      "gate": "read",
+      "summary": "rows by id (rows=r_a,r_b, 100 at most), every cell. fields=f_a,f_b keeps only those cells. A read over the engine's 20,000-char cap is fetched again whole through the pinned sender, so a big people cell reads in full.",
+      "args": ["ws", "table", "rows", "fields?"],
+      "limits": {
+        "rows": 100
+      },
+      "narrow": "cells",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "bulkFetchRecords",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "recordIds": "rows"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "bulkFetchRecordsByIdForWorkspace",
+        "contract_offset": 1990479,
+        "body_schema": "inline: {recordIds[], includeExternalContentFieldIds?}"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "row-ids",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every row id in a view, in the view's sort order; read the rows 100 at a time with rows-by-id",
+      "args": ["ws", "table", "view"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getViewRecordIds",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getViewRecordIds",
+        "contract_offset": 2012085,
+        "ui_call": "nf @351080: `${view}/records/ids`"
+      },
+      "ui": "clay-go table --table {table}"
     },
     {
       "name": "audiences",
       "kind": "read",
       "gate": "read",
       "summary": "people audiences (segments) with estimated size",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -343,27 +436,31 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "audiences",
-            "list",
-            "--entity-type",
-            "people"
-          ],
+          "argv": ["audiences", "list", "--entity-type", "people"],
           "extract": "data"
         }
       ],
       "ui": "clay-go people-segments"
     },
     {
+      "name": "audience",
+      "kind": "read",
+      "gate": "read",
+      "args": ["audience"],
+      "summary": "One audience (saved segment) with its filter.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["audiences", "get", "{audience}"]
+        }
+      ]
+    },
+    {
       "name": "audience-record-ids",
       "kind": "read",
       "gate": "read",
       "summary": "record ids in an audience, paged (then audience-records ids=...)",
-      "args": [
-        "audience",
-        "limit?",
-        "cursor?"
-      ],
+      "args": ["audience", "limit?", "cursor?"],
       "surfaces": [
         {
           "type": "cli",
@@ -377,14 +474,8 @@
             "{audience}"
           ],
           "optional": {
-            "limit": [
-              "--limit",
-              "{limit}"
-            ],
-            "cursor": [
-              "--cursor",
-              "{cursor}"
-            ]
+            "limit": ["--limit", "{limit}"],
+            "cursor": ["--cursor", "{cursor}"]
           },
           "extract": "data"
         }
@@ -396,9 +487,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "field values for up to 100 people records by id",
-      "args": [
-        "ids"
-      ],
+      "args": ["ids"],
       "surfaces": [
         {
           "type": "cli",
@@ -421,19 +510,11 @@
       "kind": "read",
       "gate": "read",
       "summary": "every campaign with status and lifetime leads, sent, replies, bounces. The api-anything fallback has status and settings but no counts (campaign-stats has them)",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "cli",
-          "argv": [
-            "campaigns",
-            "list",
-            "--with-analytics",
-            "--limit",
-            "100"
-          ],
+          "argv": ["campaigns", "list", "--with-analytics", "--limit", "100"],
           "extract": "data"
         },
         {
@@ -452,9 +533,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "lifetime leads, sent, replies and bounces for every campaign, one call",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -471,10 +550,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "a campaign's settings, sequence steps and variants",
-      "args": [
-        "ws",
-        "campaign"
-      ],
+      "args": ["ws", "campaign"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -486,11 +562,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "campaigns",
-            "get",
-            "{campaign}"
-          ]
+          "argv": ["campaigns", "get", "{campaign}"]
         }
       ],
       "ui": "clay-go campaign --campaign {campaign}"
@@ -500,17 +572,11 @@
       "kind": "read",
       "gate": "read",
       "summary": "funnel, daily stats, reply categories and senders for one campaign",
-      "args": [
-        "campaign"
-      ],
+      "args": ["campaign"],
       "surfaces": [
         {
           "type": "cli",
-          "argv": [
-            "campaigns",
-            "analytics",
-            "{campaign}"
-          ]
+          "argv": ["campaigns", "analytics", "{campaign}"]
         }
       ],
       "ui": "clay-go campaign-analytics --campaign {campaign}"
@@ -520,10 +586,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "per-variant sends, replies, bounces and rates for one campaign",
-      "args": [
-        "ws",
-        "campaign"
-      ],
+      "args": ["ws", "campaign"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -541,12 +604,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "leads enrolled in a campaign, newest first; pass cursor= from nextCursor for the next page",
-      "args": [
-        "ws",
-        "campaign",
-        "limit?",
-        "cursor?"
-      ],
+      "args": ["ws", "campaign", "limit?", "cursor?"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -566,9 +624,7 @@
             "campaignId": "campaign",
             "limit": "limit"
           },
-          "unless": [
-            "cursor"
-          ]
+          "unless": ["cursor"]
         }
       ],
       "ui": "clay-go campaign-activity --campaign {campaign}"
@@ -578,10 +634,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "master inbox replies, 20 a page (offset=20, 40...); clay-inbox reads every page with threads",
-      "args": [
-        "ws",
-        "offset?"
-      ],
+      "args": ["ws", "offset?"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -593,11 +646,7 @@
         },
         {
           "type": "bin",
-          "argv": [
-            "clay-inbox",
-            "--workspace",
-            "{ws}"
-          ],
+          "argv": ["clay-inbox", "--workspace", "{ws}"],
           "drives_browser": true
         }
       ],
@@ -608,11 +657,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "one lead's full thread: every message with stats_id and message_id",
-      "args": [
-        "ws",
-        "campaign_id",
-        "lead_id"
-      ],
+      "args": ["ws", "campaign_id", "lead_id"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -631,9 +676,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "workspace credit balance",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -644,16 +687,11 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "credits",
-            "balance"
-          ]
+          "argv": ["credits", "balance"]
         },
         {
           "type": "bin",
-          "argv": [
-            "clay-balance"
-          ]
+          "argv": ["clay-balance"]
         }
       ],
       "ui": "clay-go credits"
@@ -663,10 +701,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "credits spent in the last days=N (default 7) by table, workflow and column",
-      "args": [
-        "ws",
-        "days?"
-      ],
+      "args": ["ws", "days?"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -684,9 +719,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "signals with destination, schedule and run status",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -697,10 +730,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "signals",
-            "list"
-          ],
+          "argv": ["signals", "list"],
           "extract": "data"
         }
       ],
@@ -711,9 +741,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "workflows with last run and stats",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -724,12 +752,7 @@
         },
         {
           "type": "cli",
-          "argv": [
-            "workflows",
-            "list",
-            "--limit",
-            "200"
-          ],
+          "argv": ["workflows", "list", "--limit", "200"],
           "extract": "data"
         }
       ],
@@ -740,9 +763,7 @@
       "kind": "read",
       "gate": "read",
       "summary": "every blocked email or domain and where it came from",
-      "args": [
-        "ws"
-      ],
+      "args": ["ws"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -755,15 +776,224 @@
       "ui": "clay-go blocklist"
     },
     {
+      "name": "sender-accounts",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every sending mailbox: address, daily limit, sent today, SMTP/IMAP errors, warmup reputation. The CLI fallback has addresses and status only (gtme-grade --senders takes it)",
+      "order": "fixed",
+      "args": ["ws"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "senderAccounts",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": ["campaigns", "options", "sender-accounts"]
+        }
+      ],
+      "ui": "clay-go email-accounts"
+    },
+    {
+      "name": "bounce-health",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one campaign's bounce rate and whether Clay would auto-pause it",
+      "args": ["ws", "campaign"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "bounceHealth",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign"
+          }
+        }
+      ],
+      "ui": "clay-go campaign --campaign {campaign}"
+    },
+    {
+      "name": "campaign-activity",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one campaign's activity feed, newest first: sends, opens, replies and bounces per lead",
+      "args": ["ws", "campaign", "limit?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "campaignActivity",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "limit": "limit"
+          }
+        }
+      ],
+      "ui": "clay-go campaign-activity --campaign {campaign}"
+    },
+    {
+      "name": "table-count",
+      "kind": "read",
+      "gate": "read",
+      "summary": "how many rows a table holds, without reading them",
+      "args": ["ws", "table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableCount",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "table-history",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's change log: who changed which column or setting, and when",
+      "args": ["ws", "table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableHistory",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go table-history --table {table}"
+    },
+    {
+      "name": "table-sources",
+      "kind": "read",
+      "gate": "read",
+      "summary": "the sources feeding a table (webhook, import, find leads) with their ids",
+      "args": ["ws", "table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableSources",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go sources-panel --table {table}"
+    },
+    {
+      "name": "segment-history",
+      "kind": "read",
+      "gate": "read",
+      "summary": "an audience segment's history: when its filter or size changed",
+      "args": ["ws", "audience", "limit?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "segmentHistory",
+          "args": {
+            "ws": "ws",
+            "segmentId": "audience",
+            "limit": "limit"
+          }
+        }
+      ],
+      "ui": "clay-go people-segment --audience {audience}"
+    },
+    {
+      "name": "workflow",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow: triggers and webhook status, published version, last run",
+      "args": ["ws", "workflow"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getWorkflow",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": ["workflows", "get", "{workflow}"]
+        }
+      ],
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-graph",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow's nodes, edges and triggers (add detail=full for every node's config)",
+      "args": ["workflow", "detail?"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["workflows", "graph", "get", "{workflow}"],
+          "optional": {
+            "detail": ["--mode", "{detail}"]
+          }
+        }
+      ],
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-runs",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a workflow's recent runs with status: did the webhook fire, did a step fail",
+      "args": ["workflow"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["workflows", "runs", "list", "{workflow}"]
+        }
+      ],
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-run",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow run: status, inputs, timing",
+      "args": ["run"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["workflows", "runs", "get", "{run}"]
+        }
+      ],
+      "ui": "clay-go workflow"
+    },
+    {
+      "name": "workflow-run-steps",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow run step by step: each node's output or error",
+      "args": ["workflow", "run"],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["workflows", "runs", "steps", "{workflow}", "{run}"]
+        }
+      ],
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
       "name": "reply",
       "kind": "write",
       "gate": "write:sends-email",
       "summary": "reply in a lead's thread; reply_data is JSON {email_stats_id, email_body, reply_message_id, reply_email_time, reply_email_body}",
-      "args": [
-        "ws",
-        "campaign_id",
-        "reply_data"
-      ],
+      "args": ["ws", "campaign_id", "reply_data"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -783,11 +1013,7 @@
       "kind": "write",
       "gate": "write:sends-email",
       "summary": "forward a reply; forward_data is JSON {message_id, stats_id, to_emails, forward_email_body?} with the REPLY's ids (our SENT message 500s)",
-      "args": [
-        "ws",
-        "campaign_id",
-        "forward_data"
-      ],
+      "args": ["ws", "campaign_id", "forward_data"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -807,10 +1033,7 @@
       "kind": "write",
       "gate": "write:suppression",
       "summary": "never email this address or domain again",
-      "args": [
-        "ws",
-        "emailOrDomain"
-      ],
+      "args": ["ws", "emailOrDomain"],
       "surfaces": [
         {
           "type": "api-anything",
@@ -823,6 +1046,1394 @@
       ],
       "ui": "clay-go blocklist",
       "verified": "body verified by clay-navigation in the signed-in tab 2026-10-09; never sent from here"
+    },
+    {
+      "name": "add-column",
+      "kind": "write",
+      "gate": "write:schema",
+      "args": ["ws", "table", "name", "data_type", "view"],
+      "summary": "Add a plain column (text, number, email, ...). Enrichment columns stay in the UI.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createField",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "name": "name",
+            "dataType": "data_type",
+            "viewId": "view"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "createField",
+        "contract_offset": 1940656,
+        "body_schema": "EEt @1231987: {name, type, typeSettings{dataTypeSettings{type}}, activeViewId?, viewSettings?, groupId?, options?}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "U2 @5416857: body = {...FL(field), activeViewId, attributionData, options}; FL @2963902 sets type from dataTypeSettings.type"
+      },
+      "readback": {
+        "op": "columns",
+        "args": {
+          "table": "table"
+        },
+        "expect": "contains",
+        "key": "name",
+        "value": "name"
+      },
+      "confidence": "high: contract, body schema and the UI's own body builder agree",
+      "verified": false
+    },
+    {
+      "name": "add-enrichment-column",
+      "kind": "write",
+      "gate": "write:schema",
+      "args": ["ws", "table", "spec"],
+      "summary": "Add any column from a whole body spec={name, type, typeSettings, activeViewId} (not field=, which is a column id): an action (actionKey, actionPackageId, inputsBinding, conditionalRunFormulaText, runAsButton) or a waterfall formula (formulaType waterfall, formulaWaterfall). tools/waterfall_copy.py builds these from an existing waterfall. Never run it without runAsButton:true on an action, or the new column fills every row.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createFieldRaw",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "field": "spec"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "createField",
+        "contract_offset": 1940656,
+        "body_schema": "EEt @1231987: {name, type, typeSettings, activeViewId?}",
+        "observed": "action and waterfall typeSettings read from Zeutara table t_0tmju95pkBPQmMJvubE via getTableColumns, 2026-10-17"
+      },
+      "readback": {
+        "op": "columns",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: the body is the shape Clay stores and the UI builder sends; first live use reads it back",
+      "verified": false
+    },
+    {
+      "name": "update-column",
+      "kind": "write",
+      "gate": "write:schema",
+      "args": ["ws", "table", "field", "update"],
+      "summary": "Patch a column: {name?, description?, typeSettings?} (typeSettings is the full object). Runs nothing (skipActionFieldRuns=true).",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateField",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "fieldId": "field",
+            "update": "update"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "updateField",
+        "contract_offset": 1940843,
+        "body_schema": "OEt @1232310: {name?, typeSettings? (full CEt|wEt|TEt), description?, groupId?}; query kEt {skipActionFieldRuns?}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "@5418761: Z.fields.updateField.mutate({params, query:{skipActionFieldRuns}, body: FL(...)})"
+      },
+      "readback": {
+        "op": "columns",
+        "args": {
+          "table": "table"
+        },
+        "expect": "contains",
+        "key": "id",
+        "value": "field"
+      },
+      "confidence": "medium: shape is certain; a typeSettings patch must carry the column's whole typeSettings",
+      "verified": false
+    },
+    {
+      "name": "table-auto-run",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "table", "on", "mode?", "settings"],
+      "summary": "Turn table auto-run on or off. settings= is the table's current tableSettings from `chewbacca clay table`; only AUTO_RUN_ON (and AUTO_RUN_MODE) change.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateTableSettings",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "tableSettings": "table_settings"
+          }
+        }
+      ],
+      "compose": "table-settings",
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "updateTable",
+        "contract_offset": 1969385,
+        "body_schema": "W2t @1967863: {tableSettings? (R2t record), name?, ...}; bSe @327552: AUTO_RUN_ON bool, AUTO_RUN_MODE all|keep_existing",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "@5397106 and @6885174: updateTable({tableSettings:{...current, autoRunOn}}), mapped to AUTO_RUN_ON by PXn @4723570"
+      },
+      "readback": {
+        "op": "table",
+        "args": {
+          "table": "table"
+        },
+        "expect": "equals",
+        "path": "tableSettings.AUTO_RUN_ON",
+        "value": "on"
+      },
+      "confidence": "medium: the UI always resends the whole tableSettings, so a partial one may replace it; settings= is required for that reason",
+      "verified": false
+    },
+    {
+      "name": "run-cells",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "table", "fields", "rows"],
+      "summary": "Run columns on at most five named rows (forceRun, as the cell Run button). Never a view or all rows.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "runCells",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "fieldIds": "fields",
+            "recordIds": "rows"
+          }
+        }
+      ],
+      "limits": {
+        "rows": 5
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "runRecordsForWorkspace",
+        "contract_offset": 1956004,
+        "body_schema": "r1t @1922544: {fieldIds[], runRecords{recordIds?|viewId?|viewIdTopRecords?}, forceRun?, callerName?, skipActionFieldRuns?}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "X7 @6739563 and @6730283: runRecords({fieldIds:[id], runRecords:{recordIds:[row]}, forceRun:true})"
+      },
+      "readback": {
+        "op": "table-status",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: same body the per-cell Run button sends; the five-row cap is ours",
+      "verified": false
+    },
+    {
+      "name": "cancel-run",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": ["ws", "table"],
+      "summary": "Cancel every running action in a table.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "cancelRuns",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "cancelRuns",
+        "contract_offset": 1971049,
+        "body_schema": "t4t @1968757: {} (empty object)",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "VUr @6845325: Z.table.cancelRuns.mutate({params, body:{}})"
+      },
+      "readback": {
+        "op": "table-status",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "add-rows",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": ["ws", "table", "records"],
+      "summary": "Add rows: records=[{\"f_id\": value, ...}, ...], 100 at most. Auto-run columns fire on new rows if the table has auto-run on.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createRecords",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "records": "records_body"
+          }
+        }
+      ],
+      "compose": "new-records",
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "createRecordsForWorkspace",
+        "contract_offset": 1954501,
+        "body_schema": "e1t @1922444: {records:[{id?, cells: record<string, any>}]}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "Iza @11663630 (store chunk): body {records:[{id: client uuid, cells}]}; id is optional in the contract",
+        "ui_file": "store-D9TAa6Zj.js",
+        "ui_sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      "readback": {
+        "op": "rows",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: contract certain; the UI also sends a client-made id, which this omits",
+      "verified": false
+    },
+    {
+      "name": "update-rows",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": ["ws", "table", "records"],
+      "summary": "Write cells: records=[{\"id\":\"r_...\",\"cells\":{\"f_id\": value}}], 100 at most.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateRecords",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "records": "records"
+          }
+        }
+      ],
+      "limits": {
+        "records": 100
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "updateRecordsForWorkspace",
+        "contract_offset": 1954956,
+        "body_schema": "n1t @1922503: {records:[{id, cells: record<string, any>}]}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "oba @10613998 (store chunk): body {records}",
+        "ui_file": "store-D9TAa6Zj.js",
+        "ui_sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      "readback": {
+        "op": "row",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "delete-rows",
+      "kind": "write",
+      "gate": "write:destructive",
+      "args": ["ws", "table", "rows"],
+      "summary": "Delete the named rows, 100 at most. deleteAll is never sent.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "deleteRecords",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "recordIds": "rows"
+          }
+        }
+      ],
+      "limits": {
+        "rows": 100
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "deleteRecordsForWorkspace",
+        "contract_offset": 1955431,
+        "body_schema": "inline: {recordIds[], deleteAll?, viewId?, omitDeletingRecordIds?, viewFiltersHash?}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "BXr @7168522: body {recordIds}"
+      },
+      "readback": {
+        "op": "row",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "import",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": ["ws", "config"],
+      "summary": "Start an import job for a CSV already uploaded through imports/multi-part-upload (+/complete), which this op does not do.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createImportJob",
+          "args": {
+            "ws": "ws",
+            "config": "config"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "createImportJobForWorkspace",
+        "contract_offset": 1764385,
+        "body_schema": "qUt @1763755: {config: any} passthrough; source zd @348000 {type:S3_CSV, filename, key, recordKeys, records<=6, hasHeader?, fieldDelimiter?, uploadMode?}; destination.type TABLE|NOOP|BULK_ENRICHMENT",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "oZr @7179290: Ig.post(/workspaces/{ws}/imports, {config:{source, destination, map, isImportWithoutRun}, workspaceId})"
+      },
+      "readback": {
+        "op": "tables",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "low: config is untyped in the contract and needs a prior S3 upload; shape from the UI only",
+      "verified": false
+    },
+    {
+      "name": "add-leads",
+      "kind": "write",
+      "gate": "write:audience",
+      "args": ["audience", "filter", "campaign"],
+      "required_why": {
+        "campaign": "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked"
+      },
+      "summary": "Change which leads a campaign's base segment holds by replacing that audience's filter (the documented CLI way). A live campaign emails whoever enters its segment, so it needs campaign=cam_... (required) and a passing gtme-grade for add-leads on it, whose base segment must be this audience; checked after the person approves, before the send.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["audiences", "update", "{audience}", "--filter", "{filter}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay audiences update <audienceId> --filter <json>",
+        "cli_version": "1.9.1+d5d2187f50a5",
+        "help": "replaces the entire filter AST; read-modify-write, last write wins",
+        "bundle_alternative": "updateAudienceSegment PUT /workspaces/:workspaceId/audiences/segments/:segmentId, rat @1047216 {name?, description?, filterAst?, order?}, app-pcUNqd80.js @1176125; not used, the CLI is documented"
+      },
+      "readback": {
+        "op": "audience",
+        "args": {
+          "audience": "audience"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: the CLI is documented; that the campaign's base segment id is this audience id is from getCampaign (audience.baseSegment.id)",
+      "verified": false
+    },
+    {
+      "name": "csv-upload",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": ["trigger", "csv"],
+      "summary": "Link a CSV to a workflow's csv_upload trigger (does not run it). Loading leads into Audiences goes through 'Zeutara - Load Wave 1 investors into Audiences'.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "workflows",
+            "triggers",
+            "csv",
+            "upload",
+            "{trigger}",
+            "--file",
+            "{csv}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay workflows triggers csv upload <triggerId> --file <csv>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/workflows/csv-triggers.md"
+      },
+      "readback": {
+        "op": "workflows",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented in the Clay plugin's csv-triggers reference",
+      "verified": false
+    },
+    {
+      "name": "csv-run",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["trigger", "limit"],
+      "summary": "Run a workflow once per row of the CSV linked to its trigger, first limit= rows. Not idempotent: a retry runs every row again, so read the workflow's runs before rerunning.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "workflows",
+            "triggers",
+            "csv",
+            "run",
+            "{trigger}",
+            "--limit",
+            "{limit}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay workflows triggers csv run <triggerId> --limit <n>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/workflows/csv-triggers.md"
+      },
+      "readback": {
+        "op": "workflows",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented in the Clay plugin's csv-triggers reference",
+      "verified": false
+    },
+    {
+      "name": "audience-create",
+      "kind": "write",
+      "gate": "write:audience",
+      "args": ["name", "filter"],
+      "summary": "Create a people audience (segment) from a filter AST, to be a draft campaign's base segment.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "create",
+            "--entity-type",
+            "people",
+            "--name",
+            "{name}",
+            "--filter",
+            "{filter}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay audiences create --entity-type people --name <name> --filter <json>",
+        "cli_version": "1.9.1",
+        "help": "used by zeutara-gtme scripts/midweek_drafts.py on 2026-10-07"
+      },
+      "readback": {
+        "op": "audiences",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: built the 2026-10-07 midweek segments",
+      "verified": false
+    },
+    {
+      "name": "campaign-create",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": ["name"],
+      "summary": "Create an empty DRAFT campaign. It sends nothing until it has a segment, a sequence and a Start.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "create", "--name", "{name}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns create --name <name>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaigns",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and built the 2026-10-07 midweek drafts",
+      "verified": false
+    },
+    {
+      "name": "campaign-sender-isolate",
+      "kind": "write",
+      "gate": "write:campaign-protection",
+      "args": ["ws", "campaign"],
+      "summary": "Remove only the two incident senders from an original paused Zeutara recovery campaign. Derives the exact settings payload from a fresh pinned read and verifies all other campaign fields. Never resumes.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "update", "{campaign}", "--input", "{input}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns update <campaignId> --input <json>",
+        "semantics": "Only settings.senderAccountIds changes, verified against provider readback"
+      },
+      "verified": false
+    },
+    {
+      "name": "campaign-recovery-resume",
+      "kind": "write",
+      "gate": "write:campaign-state",
+      "args": ["ws", "campaign"],
+      "summary": "Resume one of the three paused original Zeutara recovery campaigns (status active), only after a fresh read proves the incident senders are gone and all 16 holds are out of the base audience and either finished or blocklisted. Nothing but status changes, verified against provider readback.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "setCampaignStatus",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "status": "status"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "command": "PATCH /v3/workspaces/:ws/campaigns/:cam_id {\"status\":\"active\"}, the Campaigns UI's own resume request and the same endpoint Togari's bounce guard pauses with",
+        "semantics": "Only status changes from paused to active, verified against provider readback. On 2026-10-16 clay campaigns update refused a status key (validation_error, nothing changed)."
+      },
+      "verified": false
+    },
+    {
+      "name": "campaign-update",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": ["campaign", "input"],
+      "summary": "Set a DRAFT campaign's settings, base segment, exclusions or name (input={settings?, leadBaseSegmentId?, leadExclusionSegmentIds?, name?}). Refused on any campaign that is not a draft, and a status key is never accepted.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "update", "{campaign}", "--input", "{input}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns update <campaignId> --input <json>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and set the 2026-10-07 midweek drafts",
+      "verified": false
+    },
+    {
+      "name": "campaign-sequence",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": ["campaign", "input"],
+      "summary": "Edit a DRAFT campaign's sequence (input={ops:[addStep|updateStep|deleteStep...]}). Refused on any campaign that is not a draft.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "sequence",
+            "edit",
+            "{campaign}",
+            "--input",
+            "{input}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns sequence edit <campaignId> --input <json>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and wrote the 2026-10-07 midweek sequences",
+      "verified": false
+    },
+    {
+      "name": "campaign-variant-test",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": ["campaign"],
+      "summary": "Turn a DRAFT campaign's one sequence into an even two-variant test (clones the sequence as variant B; edit B with campaign-sequence, subjectLinked/bodyLinked false). Refused on any campaign that is not a draft.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": ["campaigns", "variants", "start-test", "{campaign}"]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns variants start-test <campaignId>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.32.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented; Sagar's 2 variants of 3 messages per offer (2026-10-04) needs it",
+      "verified": false
+    },
+    {
+      "name": "campaign-status",
+      "kind": "write",
+      "gate": "write:campaign-state",
+      "args": ["ws", "campaign", "status"],
+      "summary": "Start, pause or stop a campaign (status=START|PAUSED|STOPPED). START goes only to a DRAFT (a launch, never a resume) and only with a passing gtme-grade --action launch and a fresh pre-send gate on it; the agent sends it, nobody clicks Start in Clay.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "setCampaignStatus",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "status": "status"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "CampaignPage-BP6tVvis.js",
+        "sha256": "500d91ebfa2054fab8b8af7b1fafbb81038795db072bd7a7d003c769c9551954",
+        "contract_offset": 168419,
+        "contract": "updateCampaign",
+        "body_schema": "kNt partial strict object: status Lo = draft|active|paused|completed",
+        "base": "https://api.clay.com/v3; PATCH /workspaces/:workspaceId/campaigns/:campaignId",
+        "ui_call": "nu launch calls submitPatch({...getDirtySectionPatch, status:active})",
+        "ui_file": "CampaignPage-BP6tVvis.js",
+        "observed_at": "2026-10-14",
+        "correction": "Legacy setCampaignStatus targets provider ids, not cam_ v2 resource ids; returned 403 Campaign does not belong to this workspace."
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "equals",
+        "path": "status",
+        "value": "status"
+      },
+      "confidence": "medium: body certain; whether campaignId is the cam_ id or the sequencer's numeric id is unconfirmed",
+      "verified": false
+    },
+    {
+      "name": "lead-category",
+      "kind": "write",
+      "gate": "write:inbox-state",
+      "args": ["ws", "lead_map_id", "category_id"],
+      "summary": "Set a reply's lead category (email_lead_map_id from inbox).",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "setLeadCategory",
+          "args": {
+            "ws": "ws",
+            "email_lead_map_id": "lead_map_id",
+            "category_id": "category_id"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "setLeadCategory",
+        "contract_offset": 1644368,
+        "body_schema": "u$e @900313: {email_lead_map_id: number, category_id: number}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "FOn @3302727: body passed through"
+      },
+      "readback": {
+        "op": "inbox",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "mark-read",
+      "kind": "write",
+      "gate": "write:inbox-state",
+      "args": ["ws", "lead_map_id", "read_status"],
+      "summary": "Mark a master-inbox thread READ or UNREAD.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "setLeadReadStatus",
+          "args": {
+            "ws": "ws",
+            "email_lead_map_id": "lead_map_id",
+            "new_read_status": "read_status"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "setLeadReadStatus",
+        "contract_offset": 1644564,
+        "body_schema": "g$e @901496: {email_lead_map_id: number, new_read_status: READ|UNREAD}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "IOn @3303052: body passed through"
+      },
+      "readback": {
+        "op": "inbox",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "blocklist-remove",
+      "kind": "write",
+      "gate": "write:suppression",
+      "args": ["ws", "entry"],
+      "summary": "Remove one global blocklist entry by id (from `chewbacca clay blocklist`): that address can be emailed again.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "blocklistRemove",
+          "args": {
+            "ws": "ws",
+            "entryId": "entry"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "deleteFromGlobalBlocklist",
+        "contract_offset": 1650278,
+        "body_schema": "inline: {} (empty object)",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "nBi @8900442 (store chunk): params {entryId: e.id.toString()}, body {}",
+        "ui_file": "store-D9TAa6Zj.js",
+        "ui_sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      "readback": {
+        "op": "blocklist",
+        "args": {},
+        "expect": "absent",
+        "value": "entry"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "blocklist-add-bulk",
+      "kind": "write",
+      "gate": "write:suppression",
+      "args": ["ws", "emails"],
+      "summary": "Add up to 1,000 emails or bare domains to the global blocklist (emails=a@x.com,y.com).",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "blocklistAddBulk",
+          "args": {
+            "ws": "ws",
+            "emailsOrDomains": "emails"
+          }
+        }
+      ],
+      "limits": {
+        "emails": 1000
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "addBulkToGlobalBlocklist",
+        "contract_offset": 1335704,
+        "body_schema": "S$e @901895: {emailsOrDomains: string[1..1000]}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "aBi @8901575 (store chunk): body {emailsOrDomains}",
+        "ui_file": "store-D9TAa6Zj.js",
+        "ui_sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      "readback": {
+        "op": "blocklist",
+        "args": {},
+        "expect": "contains-all",
+        "value": "emails"
+      },
+      "confidence": "high",
+      "verified": false
+    },
+    {
+      "name": "page-view-activity",
+      "kind": "write",
+      "gate": "write:telemetry",
+      "args": ["ws", "resource", "resource_type"],
+      "summary": "Record a LAST_OPENED view of a resource, as loading its page does.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "trackResourceActivity",
+          "args": {
+            "ws": "ws",
+            "resourceId": "resource",
+            "resourceType": "resource_type"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead",
+        "contract": "trackResourceActivity",
+        "contract_offset": 1827021,
+        "body_schema": "inline: {resourceType: FOLDER|TABLE|WORKBOOK|WORKFLOW|AUDIENCE_SEGMENT (ej @1826852), activityType: LAST_OPENED (rO @1316358)}",
+        "base": "base https://api.clay.com/v3 (ts-rest client, app-pcUNqd80.js @2145128)",
+        "ui_call": "s$ @9292460 (store chunk)",
+        "ui_file": "store-D9TAa6Zj.js",
+        "ui_sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6",
+        "crawl": "routes.json: POST /v3/workspaces/{n}/resources/{t|wb|f|wf|audseg}/activity, body keys activityType, resourceType"
+      },
+      "readback": {
+        "op": "resources",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: the only one of the 16 the crawl also recorded",
+      "verified": false
+    },
+    {
+      "name": "view-sort",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Set a view's sort: sort=[{\"fieldId\":\"f_...\",\"direction\":\"DESC\"}], [] clears it. Changes what everyone sees in that view; runs and sends nothing.",
+      "args": ["ws", "table", "view", "sort"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewSort",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "sortItems": "sort"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewSortSettings",
+        "contract_offset": 2010341,
+        "body_schema": "XEt @1251701: {items:[{fieldId, direction ASC|DESC}]}"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and body schema read from the bundle; views shows the same shape stored",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: sort=[f_updated_at DESC] sent live (the value it already held, so nothing a viewer sees changed); Clay answered 200 with the view holding that sort"
+    },
+    {
+      "name": "view-filter",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Set a view's filter: view_filter={\"combinationMode\":\"AND\",\"items\":[{\"fieldId\":\"f_...\",\"type\":\"NOT_EMPTY\"}]}, {} clears it. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "view_filter"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFilter",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "viewFilter": "view_filter"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewFilterSettings",
+        "contract_offset": 2010588,
+        "body_schema": "P8t @2009626: {combinationMode AND|OR, items:[M8t {fieldId,type,value?} | N8t group]} or a record"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and schema from the bundle; the item types (EMPTY, HAS_ERROR, RESULTS...) are the ones views already returns",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: view_filter={} sent live while the view had no filter; Clay answered 200 with filter still null and sort and columns unchanged"
+    },
+    {
+      "name": "view-columns",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Show, hide, pin or size columns in one view: columns={\"f_...\":{\"isVisible\":false}}. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "columns"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFields",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "viewFields": "columns"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewFieldsSettingsForWorkspace",
+        "contract_offset": 2017688,
+        "body_schema": "O8t @2009626: record<fieldId, {isVisible?, color?, isPinned?, width?, beforeFieldId?, afterFieldId?}>"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and schema from the bundle",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table t_0tmyzmzxwt5tTMoyeQp Default view: Creator column f_0tmz0jaHBtAn6tyAiab set isVisible false, the value it already held; Clay answered 200 with that column still hidden and the rest unchanged"
+    },
+    {
+      "name": "view-move-columns",
+      "kind": "write",
+      "gate": "write:view-settings",
+      "summary": "Move columns in one view: fields=f_a,f_b go, in that order, right after after_field=f_x. The fields must already sit next to each other (Clay answers 400 'Fields are not adjacent in the view'), so move non-adjacent ones one call each. Runs and sends nothing.",
+      "args": ["ws", "table", "view", "fields", "after_field"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "updateViewFieldOrder",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "fieldIds": "fields",
+            "afterFieldId": "after_field"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "updateViewContiguousFieldsOrderForWorkspace",
+        "contract_offset": 2017871,
+        "body_schema": "k8t @2009626: {fieldIds:[f_...], beforeFieldId?, afterFieldId?}"
+      },
+      "readback": {
+        "op": "views",
+        "args": {
+          "table": "table"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: contract and body schema read from the bundle",
+      "verified": true,
+      "verified_by": "2026-10-16, Sabo table Default view: Person and Title moved after Brand, then Why this person after Title; views read back Brand, Person, Title, Why this person. A 3-column call with Why not adjacent got 400."
+    },
+    {
+      "name": "column-status",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one column's run status counts in one view (success, error, queued, not run), the numbers under a column header",
+      "args": ["ws", "table", "view", "field"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "viewColumnRunStatus",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "fieldId": "field"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getViewRunStatusCountsForFieldForWorkspace",
+        "contract_offset": 2016711,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "running-columns",
+      "kind": "read",
+      "gate": "read",
+      "summary": "the columns with a run in progress on a table right now; empty means nothing is running",
+      "args": ["ws", "table"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableActiveRuns",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getTableFieldRun",
+        "contract_offset": 2006591,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "run-credits",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's enrichment run history for the last days=N (default 7): each run and the credits it spent",
+      "args": ["ws", "table", "days?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableRunCredits",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "days": "days"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getRecentRealtimeCreditUsageByRunForWorkspace",
+        "contract_offset": 1852774,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go credits"
+    },
+    {
+      "name": "scheduled-runs",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's scheduled run history, newest first; empty when the table has no schedule",
+      "args": ["ws", "table", "limit?"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableScheduledRuns",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "limit": "limit"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getScheduledTableRunHistory",
+        "contract_offset": 1996684,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "workflow-run-summary",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a workflow's runs counted by status plus the data and action credits they spent, in one call",
+      "args": ["ws", "workflow"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "workflowRunSummary",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowRunsAggregateSummary",
+        "contract_offset": 2101545,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-cost",
+      "kind": "read",
+      "gate": "read",
+      "summary": "Clay's own estimate of what one run of a workflow costs in credits, before running it",
+      "args": ["ws", "workflow"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "workflowCreditEstimate",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowCreditEstimate",
+        "contract_offset": 2071170,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-run-detail",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one workflow run's steps over the frontend API: node name, status, outputs (workflow-run-steps reads the same through the CLI's own login)",
+      "args": ["ws", "workflow", "run"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getWorkflowRunSteps",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow",
+            "runId": "run"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getWorkflowRun",
+        "contract_offset": 2102418,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go workflow --workflow {workflow}"
+    },
+    {
+      "name": "workflow-test-run",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "workflow", "email"],
+      "summary": "Run a workflow once with one email as its input, the way `clay workflows runs test` does. Spends the workflow's per-run credits (workflow-cost). verify-emails runs this for a whole CSV.",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createWorkflowTestRun",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow",
+            "email": "email"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "createWorkflowRun",
+        "contract_offset": 2099632,
+        "body_schema": "{inputs, pinToLive?}: the clay CLI 1.9.1 binary sends {inputs:V} for `workflows runs test` (read 2026-10-17)",
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "readback": {
+        "op": "workflow-run-summary",
+        "args": {
+          "workflow": "workflow"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: the contract and the CLI's body are read from code; scripts/zb_verify.py ran the same test runs through the CLI on 2026-10-10",
+      "verified": false
+    },
+    {
+      "name": "verify-emails",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": ["ws", "workflow?", "csv", "out", "max_credits?"],
+      "summary": "Verify every address in csv= (an email column) through a ZeroBounce verify workflow, one test run each, and write email,verification,sub_status to out=. Addresses already verified in out=, or marked verified=valid in csv=, are skipped. Prices the batch with workflow-cost first. workflow= defaults to the workspace's own verify workflow (Zeutara: wf_0tmevkaRdsp2XHUwD8X).",
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "createWorkflowTestRun",
+          "args": {
+            "ws": "ws",
+            "workflowId": "workflow"
+          }
+        }
+      ],
+      "required_why": {
+        "out": "the verdicts file, also how a rerun knows which addresses are already paid for"
+      },
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "createWorkflowRun",
+        "contract_offset": 2099632,
+        "body_schema": "{inputs:{email}} per address, then getWorkflowRun until the Verify node is completed or failed (zeutara-gtme scripts/zb_verify.py)",
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "readback": {
+        "op": "workflow-run-summary",
+        "args": {
+          "workflow": "workflow"
+        },
+        "expect": "manual"
+      },
+      "confidence": "medium: same request as workflow-test-run; the verdict is read from the Verify node's stepOutputs.result the way zb_verify.py read it",
+      "verified": false
+    },
+    {
+      "name": "audience-segment",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one audience segment with its filter and size, read over the frontend API (audience reads it through the CLI)",
+      "args": ["ws", "audience"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getAudienceSegment",
+          "args": {
+            "ws": "ws",
+            "segmentId": "audience"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getAudienceSegmentById",
+        "contract_offset": 1200105,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go people-segment --audience {audience}"
+    },
+    {
+      "name": "signal-list",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every signal in the workspace as the Signals page lists it; signals reads the trigger definitions behind them",
+      "args": ["ws"],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listSignalsV2",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "evidence": {
+        "source": "bundle",
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "base": "base https://api.clay.com/v3 (ts-rest client); clay_version v20261015_231758Z_05ad0bc21e",
+        "contract": "getSignals",
+        "contract_offset": 1885802,
+        "inventory": "library/clay-api/contracts.json"
+      },
+      "ui": "clay-go signals"
     }
   ],
   "ui_only": [
@@ -843,135 +2454,32 @@
       "gate": "write:schema",
       "route": "clay-go column-settings --table {table} --column {column}",
       "why": "native column config with tokens bound to row fields; untaught as an API write"
-    },
-    {
-      "name": "start-campaign",
-      "gate": "write:campaign-state",
-      "route": "clay-go campaign --campaign {campaign}",
-      "why": "launch-guard.sh refuses a start without a full pre-send gate pass, and agents never press it"
     }
   ],
-  "untaught_writes": [
-    {
-      "name": "add-column",
-      "gate": "write:schema",
-      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/fields",
-      "contract": "createField",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "update-column",
-      "gate": "write:schema",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/fields/:fieldId",
-      "contract": "updateField",
-      "seen_in": "frontend bundle contract",
-      "note": "column config, inputs binding, run condition and per-column auto-run live here"
-    },
-    {
-      "name": "table-auto-run",
-      "gate": "write:spends-credits",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId",
-      "contract": "updateTable",
-      "seen_in": "frontend bundle contract",
-      "note": "tableSettings.AUTO_RUN_ON; turning it on spends credits on every new row"
-    },
-    {
-      "name": "run-cells",
-      "gate": "write:spends-credits",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/run",
-      "contract": "runRecordsForWorkspace",
-      "seen_in": "frontend bundle contract",
-      "note": "the standing rule caps a live test at five selected rows"
-    },
-    {
-      "name": "cancel-run",
-      "gate": "write:table-data",
-      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/cancelrun",
-      "contract": "cancelRuns",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "add-rows",
-      "gate": "write:table-data",
-      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/records",
-      "contract": "createRecordsForWorkspace",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "update-rows",
-      "gate": "write:table-data",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/records",
-      "contract": "updateRecordsForWorkspace",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "delete-rows",
-      "gate": "write:destructive",
-      "endpoint": "DELETE /v3/workspaces/:workspaceId/tables/:tableId/records",
-      "contract": "deleteRecordsForWorkspace",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "import",
-      "gate": "write:table-data",
-      "endpoint": "POST /v3/workspaces/:workspaceId/imports",
-      "contract": "createImportJobForWorkspace",
-      "seen_in": "frontend bundle contract",
-      "note": "a CSV import first goes through imports/multi-part-upload and its /complete"
-    },
-    {
-      "name": "add-leads",
-      "gate": "write:audience",
-      "endpoint": "none direct: a campaign enrolls its base segment (leadBaseSegmentId); leads enter by changing that audience, PUT /v3/workspaces/:workspaceId/audiences/segments/:segmentId (updateAudienceSegment) or a workflow audience writeback",
-      "contract": "updateAudienceSegment",
-      "seen_in": "frontend bundle contract; getCampaign output",
-      "note": "the CLI cannot do it either; clay-navigation routes it to the UI"
-    },
-    {
-      "name": "campaign-status",
-      "gate": "write:campaign-state",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/campaigns/:campaignId/status",
-      "contract": "setCampaignStatus",
-      "seen_in": "frontend bundle contract",
-      "note": "starting or resuming a campaign; launch-guard.sh must pass first and Caleb's standing rule is never from an agent"
-    },
-    {
-      "name": "lead-category",
-      "gate": "write:inbox-state",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/master-inbox/lead-category",
-      "contract": "setLeadCategory",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "mark-read",
-      "gate": "write:inbox-state",
-      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/master-inbox/lead-read-status",
-      "contract": "setLeadReadStatus",
-      "seen_in": "frontend bundle contract",
-      "note": "opening a thread in the UI fires this, which is why thread reads go through the API"
-    },
-    {
-      "name": "blocklist-remove",
-      "gate": "write:suppression",
-      "endpoint": "DELETE /v3/workspaces/:workspaceId/clay-sequencer/global-blocklist/:entryId",
-      "contract": "deleteFromGlobalBlocklist",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "blocklist-add-bulk",
-      "gate": "write:suppression",
-      "endpoint": "POST /v3/workspaces/:workspaceId/campaigns/global-blocklist/add-bulk",
-      "contract": "addBulkToGlobalBlocklist",
-      "seen_in": "frontend bundle contract"
-    },
-    {
-      "name": "page-view-activity",
-      "gate": "write:telemetry",
-      "endpoint": "POST /v3/workspaces/:workspaceId/resources/:resourceId/activity",
-      "contract": "trackResourceActivity",
-      "seen_in": "clay-navigation crawl: fired on page load and blocked by its guard",
-      "note": "the reason page captures are avoided: loading a page records a view"
-    }
-  ],
-  "untaught_reason": "Teaching a write means making Clay's page send it, which changes real data, and every workspace this login reaches holds client or firm data. Each needs a sandbox workspace with throwaway rows before it can be taught and verified."
+  "untaught_writes": [],
+  "untaught_reason": null,
+  "bundle": {
+    "url": "https://app.clay.com/assets/",
+    "files": [
+      {
+        "file": "CampaignPage-BP6tVvis.js",
+        "sha256": "500d91ebfa2054fab8b8af7b1fafbb81038795db072bd7a7d003c769c9551954"
+      },
+      {
+        "file": "app-pcUNqd80.js",
+        "sha256": "c7b1dab12c33ce0794c3e03039aa16c41082cdf6a8b4f699f9afafb243a65ead"
+      },
+      {
+        "file": "store-D9TAa6Zj.js",
+        "sha256": "dae6829dfa84c83c9d4f456fca6c2b69405c716321dfd5a93016105b9bd076a6"
+      },
+      {
+        "file": "app-3TgCQQBH.js",
+        "sha256": "da441f6cfd48b2e15629f8d0bb4268947a27798414f2345ed5922d6c0a76255b",
+        "read_at": "2026-10-16"
+      }
+    ],
+    "read_at": "2026-10-09",
+    "how": "ts-rest contracts in the public frontend bundle: method, path and zod body schema per contract name, then the UI call site that builds the body"
+  }
 }

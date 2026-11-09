@@ -1,0 +1,464 @@
+{
+ "_": "Numbers a generator should not re-derive. Every value traces to research/. Where a widely-repeated figure has no primary source it is absent from this file rather than guessed; see research/ for the list of what was rejected and why.",
+ "response_budget_ms": {
+  "instant": 100,
+  "instant_source": "web.dev RAIL; Paul Buchheit. NOT Miller 1968 (see _attribution_correction).",
+  "input_handling_only": 50,
+  "input_handling_note": "Half of the 100ms is reserved: idle work runs in 50ms chunks and input can queue behind one.",
+  "flow_of_thought": 1000,
+  "attention_limit": 10000,
+  "inp_good_p75": 200,
+  "inp_poor_p75": 500,
+  "doherty": 400,
+  "doherty_caveat": "Provenance contested. Do not present as settled empirical fact.",
+  "_attribution_correction": "The 0.1 / 1 / 10 second triad is NIELSEN 1993 (Usability Engineering), citing Miller 1968 AND Card/Robertson/Mackinlay 1991. Miller's own numbers are 0.1, 2, 4 and 15 seconds, given PER TASK TYPE across 17 task types. His paper opens by arguing the opposite of a universal threshold: 'It will be shown that two-second response is not a universal requirement.' He also states the numbers are 'the best calculated guesses by the author' and 'indicative rather than conclusive'. An earlier version of this file cited the triad to Miller and told the reader NOT to cite Nielsen. That was backwards.",
+  "miller_1968_actual": {
+   "control_activation": 100,
+   "keyboard_echo": [
+    100,
+    200
+   ],
+   "routine_request": 2000,
+   "understand_confirmation": [
+    2000,
+    4000
+   ],
+   "complex_inquiry_tabular": 4000,
+   "conversation_ends": 15000,
+   "_shape": "Miller's claim is not a slope. 'Sudden drops in mental efficiency occur when delays exceed a given point... psychological step-down discontinuities.'",
+   "_closure_rule": "More extended delays may be made AFTER a closure than in the process of obtaining one. Place an unavoidable wait between tasks, never inside one.",
+   "_past_15s": "Free the user from captivity: hand the work back with an estimate rather than holding them."
+  }
+ },
+ "frame_budget_ms": {
+  "total_at_60fps": 16.66,
+  "yours": 10,
+  "note": "The browser needs roughly 6ms of every frame for its own work. A missed frame is a defect, not a degradation."
+ },
+ "measurement": {
+  "rule": "Measure the percentage of interactions under 100ms, not percentile latency. Percentiles hide the shape of the distribution.",
+  "buckets_ms": [
+   50,
+   100,
+   1000
+  ],
+  "bucket_labels": [
+   "fast",
+   "ok",
+   "slow",
+   "terrible"
+  ],
+  "clock": "performance.now()",
+  "clock_reason": "\u00b1100\u00b5s vs \u00b11ms for new Date(). At a 100ms budget, 1ms of clock error is 1% of the budget.",
+  "source": "https://blog.superhuman.com/performance-metrics-for-blazingly-fast-web-apps/"
+ },
+ "motion_ms": {
+  "_source": "Material 2, m1.material.io/motion/duration-easing.html",
+  "desktop_standard": 150,
+  "desktop_max": 200,
+  "mobile_standard": 300,
+  "mobile_complex": 375,
+  "tablet_multiplier": 1.3,
+  "wearable_multiplier": 0.7,
+  "enter": 225,
+  "exit": 195,
+  "ceiling": 400,
+  "rules": [
+   "Exits are faster than entrances. Leaving should not cost the user time.",
+   "Scale duration to screen size, not to taste.",
+   "Duration is a function of distance travelled, not a constant (IBM Carbon).",
+   "Never linear. Never symmetric ease-in-out for an entrance."
+  ],
+  "by_interaction": {
+   "hover_or_color": [
+    50,
+    150
+   ],
+   "button_press": [
+    100,
+    160
+   ],
+   "button_press_transform": "scale(0.97)",
+   "tooltip": [
+    125,
+    200
+   ],
+   "dropdown": [
+    150,
+    250
+   ],
+   "modal_or_drawer": [
+    200,
+    500
+   ],
+   "stagger_between_list_items": [
+    30,
+    80
+   ],
+   "_stagger_note": "Longer than 80ms feels slow."
+  },
+  "shipped": {
+   "_": "What the people who wrote the rules actually ship, which contradicts the rules.",
+   "vaul_drawer": 500,
+   "sonner_toast_transform": 400,
+   "sonner_toast_swipe_out": 200,
+   "sonner_toast_lifetime": 4000
+  },
+  "real_ceiling_rule": "Under 300ms for anything the user triggers and waits on. 400 to 500ms for a large surface moving a long distance. Material says 400 max, Kowalski says 300 max, and Kowalski's own drawer ships at 500."
+ },
+ "easing": {
+  "_source": "Material 2/3 and IBM Carbon. Use the entrance curve for things arriving and the exit curve for things leaving.",
+  "standard": "cubic-bezier(0.4, 0, 0.2, 1)",
+  "entrance": "cubic-bezier(0, 0, 0.2, 1)",
+  "exit": "cubic-bezier(0.4, 0, 1, 1)",
+  "sharp": "cubic-bezier(0.4, 0, 0.6, 1)",
+  "m3_standard": "cubic-bezier(0.2, 0, 0, 1)",
+  "m3_emphasized_decelerate": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+  "carbon_productive_standard": "cubic-bezier(0.2, 0, 0.38, 0.9)",
+  "carbon_expressive_standard": "cubic-bezier(0.4, 0.14, 0.3, 1)",
+  "m3_standard_accelerate": "cubic-bezier(0.3, 0, 1, 1)",
+  "m3_emphasized_accelerate": "cubic-bezier(0.3, 0, 0.8, 0.15)",
+  "_emphasized_note": "easing-emphasized and easing-standard are byte-identical in Google's own web tokens. Flutter ships no plain emphasized constant because the spec curve is a multi-part path CSS cannot express.",
+  "kowalski_ease_out": "cubic-bezier(0.23, 1, 0.32, 1)",
+  "kowalski_ease_in_out": "cubic-bezier(0.77, 0, 0.175, 1)",
+  "vaul_drawer_shipped": "cubic-bezier(0.32, 0.72, 0, 1)",
+  "_apple": "Apple publishes no cubic-bezier values anywhere in the HIG. Their guidance is spring-based.",
+  "_replace_keywords": "Replace built-in CSS keywords on any deliberate animation. They are too weak. Use linear only for constant-rate motion."
+ },
+ "carbon_duration_ms": {
+  "_source": "https://v10.carbondesignsystem.com/guidelines/motion/overview/",
+  "fast_01": 70,
+  "fast_01_use": "button, toggle",
+  "fast_02": 110,
+  "fast_02_use": "fade",
+  "moderate_01": 150,
+  "moderate_01_use": "small expansion",
+  "moderate_02": 240,
+  "moderate_02_use": "expansion, system communication",
+  "slow_01": 400,
+  "slow_01_use": "large expansion, notifications",
+  "slow_02": 700,
+  "slow_02_use": "background dimming"
+ },
+ "material3_duration_ms": {
+  "_source": "https://api.flutter.dev/flutter/material/Durations-class.html",
+  "short1": 50,
+  "short2": 100,
+  "short3": 150,
+  "short4": 200,
+  "medium1": 250,
+  "medium2": 300,
+  "medium3": 350,
+  "medium4": 400,
+  "long1": 450,
+  "long2": 500,
+  "long3": 550,
+  "long4": 600,
+  "extraLong1": 700,
+  "extraLong2": 800,
+  "extraLong3": 900,
+  "extraLong4": 1000
+ },
+ "loading": {
+  "_source": "https://www.nngroup.com/articles/skeleton-screens/",
+  "show_nothing_below_ms": 2000,
+  "spinner_or_skeleton_range_ms": [
+   2000,
+   10000
+  ],
+  "progress_bar_above_ms": 10000,
+  "spinner_when": "a single module: a card, a video",
+  "skeleton_when": "a full-page load, and only then",
+  "never": [
+   "frame-display skeletons: outlines with no content shape",
+   "rendering an empty list before data arrives, which flashes a No results state"
+  ],
+  "best": "No loading state at all. Sync in the background so there is nothing to wait for."
+ },
+ "empty_state": {
+  "_source": "NN/g and Shopify Polaris",
+  "must": [
+   "Say which of the three it is: loading, error, or genuinely no data",
+   "Teach something",
+   "Offer a direct path to the key task"
+  ],
+  "heading": "forward-looking. 'Create your first product', never 'You haven't added any products yet'",
+  "no_jokes": "Humor reads as mockery to someone who is already stuck.",
+  "max_text_width_px": 450,
+  "max_illustration_px": 200,
+  "whitespace_above_px": 40
+ },
+ "errors": {
+  "_source": "https://www.nngroup.com/articles/error-message-guidelines/",
+  "place": "adjacent to the source of the error",
+  "never_color_alone": true,
+  "toast_when": "low severity",
+  "modal_when": "high severity",
+  "preserve_input": "always. Never make the user re-enter.",
+  "no_humor": "It goes stale on repeat.",
+  "say": "what to do next, not only what went wrong"
+ },
+ "command_palette": {
+  "_source": "Superhuman and Retool",
+  "key": "Cmd+K",
+  "help_key": "?",
+  "toggle": "the same shortcut must close it",
+  "restore_focus": true,
+  "one_palette_one_key": "Never Cmd+K for some actions and Cmd+P for others",
+  "visible_results": 5,
+  "fifth_cut_off": "intentionally, to signal scrollability",
+  "fuzzy": "lnik finds link",
+  "score_against": "title and aliases, taking the max",
+  "every_command_needs": [
+   "an icon",
+   "aliases",
+   "a default score",
+   "a scale multiplier"
+  ],
+  "do_not": "make the user choose between search mode and action mode",
+  "a11y": {
+   "dom_focus": "stays on the input, always",
+   "at_focus": "aria-activedescendant",
+   "source": "https://www.w3.org/WAI/ARIA/apg/patterns/combobox/"
+  }
+ },
+ "optimistic_ui": {
+  "write_rollback_first": true,
+  "never_silent_rollback": "A silent rollback looks like a broken button rather than a rejected request.",
+  "do_not_use_for": [
+   "payments",
+   "destructive operations",
+   "irreversible sends"
+  ],
+  "done_means": "the matching delta arrived, not that the server returned 200"
+ },
+ "motion_frequency_rule": {
+  "_": "The best single rule found. Match motion to how often the user sees it.",
+  "100_plus_per_day": "none",
+  "tens_per_day": "reduced",
+  "occasional": "standard",
+  "rare_or_first_time": "delight",
+  "example": "Raycast ships no open/close animation, correct for something opened hundreds of times a day.",
+  "apple_agrees": "In apps, generally avoid adding motion to UI interactions that occur frequently."
+ },
+ "gpu": {
+  "animate_only": [
+   "transform",
+   "opacity"
+  ],
+  "paint_cost": [
+   "background-image",
+   "color",
+   "box-shadow",
+   "border-radius"
+  ],
+  "layout_cost_never_animate": [
+   "width",
+   "height",
+   "top",
+   "left",
+   "margin",
+   "padding"
+  ],
+  "compositing_budget_ms": 4.5,
+  "never": [
+   "transition: all",
+   "* { will-change: transform }",
+   "will-change in a static stylesheet for an element that changes occasionally",
+   "setting a CSS variable on a parent to drive child transforms, it restyles every child",
+   "filter: blur() over 20px"
+  ],
+  "prefer": [
+   "translateY(100%) over hardcoded pixel offsets",
+   "CSS animations over requestAnimationFrame for predetermined motion",
+   "the full transform string over Framer Motion's x/y shorthands when the page may be busy"
+  ]
+ },
+ "spring": {
+  "apple_rule": "Start at 100% damping, zero overshoot. Add overshoot only when the driving gesture carried momentum. Apple's Music app uses 100% damping on tap and 80% on swipe.",
+  "apple_on_duration": "Avoid the word duration for elastic behaviour. The spring is always moving and ready to move somewhere else.",
+  "swiftui": {
+   "response": 0.5,
+   "dampingFraction": 0.825,
+   "smooth_bounce": 0,
+   "snappy_bounce": 0.15,
+   "bouncy_bounce": 0.3,
+   "_extraBounce": "additive on the base bounce, so bouncy(extraBounce: 0.1) is 0.4"
+  },
+  "framer_motion": {
+   "stiffness": 100,
+   "damping": 10,
+   "mass": 1.0,
+   "duration_ms": 800,
+   "bounce": 0.3,
+   "_docs_disagree": "motion.dev says bounce defaults to 0.25. The shipped source says 0.3."
+  },
+  "react_spring": {
+   "default": [
+    170,
+    26
+   ],
+   "gentle": [
+    120,
+    14
+   ],
+   "wobbly": [
+    180,
+    12
+   ],
+   "stiff": [
+    210,
+    20
+   ],
+   "slow": [
+    280,
+    60
+   ],
+   "molasses": [
+    280,
+    120
+   ],
+   "_format": "[tension, friction], all mass 1"
+  },
+  "recommended": {
+   "type": "spring",
+   "duration": 0.5,
+   "bounce": 0.2
+  },
+  "bounce_range": [
+   0.1,
+   0.3
+  ],
+  "use_springs_for": [
+   "drag with momentum",
+   "interruptible gestures",
+   "alive elements",
+   "decorative mouse tracking"
+  ],
+  "use_transitions_for": "everything predetermined",
+  "gesture_thresholds_shipped": {
+   "vaul_velocity": 0.4,
+   "vaul_close": 0.25,
+   "sonner_swipe_px": 45,
+   "sonner_velocity_px_per_ms": 0.11,
+   "_rule": "Dismiss on distance OR velocity. A flick should be enough; never require distance alone."
+  }
+ },
+ "scroll": {
+  "native_support_pct": 87.22,
+  "first_version": {
+   "chrome": 115,
+   "safari": 26.0,
+   "firefox": 159
+  },
+  "gate": "@supports (animation-timeline: scroll())",
+  "keep_decorative": "12.8 percent of traffic will not see it",
+  "gotcha": "Declare animation-timeline AFTER the animation shorthand. It is a reset-only value in the shorthand, which silently resets it to auto.",
+  "set_duration": "auto",
+  "hijacking": {
+   "nng_finding": "The majority of participants experienced at least mild disorientation.",
+   "never": [
+    "change scroll direction",
+    "hijack a section with body copy",
+    "hijack on mobile",
+    "hijack above the fold"
+   ],
+   "source": "https://www.nngroup.com/articles/scrolljacking-101/"
+  }
+ },
+ "reduced_motion": {
+  "values": [
+   "no-preference",
+   "reduce"
+  ],
+  "spec_wording": "removes, reduces, or replaces motion. Not removes.",
+  "rule": "Reduce, do not delete. Keep opacity and colour, drop transforms.",
+  "prefer": "shortening durations over animation: none, because some sites rely on animation events",
+  "listen": "matchMedia(...).addEventListener('change'), do not read once at boot",
+  "hover_gate": "@media (hover: hover) and (pointer: fine)",
+  "vestibular_triggers": [
+   "parallax",
+   "scrolljacking",
+   "full-screen wipes",
+   "3D zooms over large virtual distance",
+   "horizontal scroll conflicting with vertical"
+  ],
+  "safe": "opacity, colour and blur are unlikely to be problematic",
+  "the_variable": "virtual distance covered, not duration. No published pixel or time threshold exists. Do not invent one.",
+  "wcag_2_2_2_level_A": "Anything moving that starts automatically, lasts over 5 seconds, and sits alongside other content needs a pause control. This is the legally load-bearing one.",
+  "wcag_2_3_3_level_AAA": "Motion triggered by interaction must be disableable unless essential. Hover and scroll-into-view both count."
+ },
+ "origin": {
+  "never": "scale(0)",
+  "why": "Nothing in the real world appears from nothing.",
+  "use": "scale(0.9) to scale(0.97) plus opacity 0",
+  "popovers_dropdowns_tooltips": "scale from their trigger via transform-origin",
+  "modals": "the exception, keep transform-origin: center"
+ },
+ "interruptible": {
+  "rule": "CSS transitions retarget mid-flight. @keyframes restart from zero.",
+  "use_transitions_for": "anything triggered rapidly, such as toasts and toggles",
+  "entry_without_js": "@starting-style"
+ },
+ "fix_priority": [
+  "delete it",
+  "reduce it",
+  "fix the easing",
+  "fix the origin",
+  "make it interruptible",
+  "move it to the GPU",
+  "make the timing asymmetric",
+  "polish",
+  "accessibility and cohesion"
+ ],
+ "award_corpus": {
+  "_": "Measured, not recalled: 33 winner sites fetched, 131 JS and 65 CSS files grepped. All counts are floors. See research/01.",
+  "awwwards_weights": {
+   "design": 0.4,
+   "usability": 0.3,
+   "creativity": 0.2,
+   "content": 0.1
+  },
+  "awwwards_score_range_observed": [
+   7.45,
+   8.25
+  ],
+  "awwwards_note": "Nobody cleared 8.3 in three years. Plan to a 7.9, not a 9.",
+  "no_rubric_publishes": [
+   "a performance budget",
+   "a Core Web Vitals threshold",
+   "a WCAG conformance level"
+  ],
+  "library_frequency": {
+   "lenis": "18/23",
+   "scrolltrigger": "13/23",
+   "gsap": "12/23",
+   "splittext": "11/23",
+   "nuxt": "10/23",
+   "webflow": "6/23",
+   "threejs": "5/23 strict",
+   "nextjs": "2/23"
+  },
+  "zero_footprint": {
+   "framer_motion": "0/32",
+   "react_three_fiber": "0/32",
+   "spline": "0/32",
+   "_": "Contradicts ~/.claude/rules/design-system.md, which mandates Framer Motion."
+  },
+  "winning_stack": "Nuxt or Webflow, Lenis driven from gsap.ticker, ScrollTrigger normalising scroll to 0-1, that value into Three.js shader uniforms, SplitText on type, Draco glTF, Web Audio coupled to visuals.",
+  "the_rule": "Pick one mechanism, couple everything to it, skip the rest. The corpus does not say 3D wins; it says a single committed mechanism wins.",
+  "counter_evidence": {
+   "reduced_motion_referenced": "11/23 sites only",
+   "under_60_words_initial_html": "8/32",
+   "no_h1_in_initial_html": "13/32",
+   "largest_single_bundle_mb": 4.7,
+   "median_first_response_js_kb": 555
+  },
+  "winners_without_webgl": [
+   "Dropbox Brand (CSSDA WOTY 2025 + Best UX + Webby)",
+   "Terminal Industries (SOTM)",
+   "Zentry (SOTM + Developer Award, deliberately DOM/CSS)",
+   "Don't Board Me (SOTY Users' Choice, copywriting and a funny 404)"
+  ]
+ }
+}

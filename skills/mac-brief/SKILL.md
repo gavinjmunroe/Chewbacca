@@ -1,6 +1,8 @@
 ---
 name: mac-brief
-description: Generate the morning operator brief - triage the user's email, texts, and calendar into what is urgent, what needs a reply, and a suggested order for the day. Use when the user asks for their brief, their morning rundown, what they need to handle today, what is urgent, or who is waiting on them. Runs on a schedule at 8am via launchd.
+description: "The morning operator brief: triage email, texts and calendar into urgent, needs a reply, and an order for the day. Use for my brief, morning rundown, what's urgent, who's waiting on me."
+triggers: >-
+  Generate the morning operator brief - triage the user's email, texts, and calendar into what is urgent, what needs a reply, and a suggested order for the day. Use when the user asks for their brief, their morning rundown, what they need to handle today, what is urgent, or who is waiting on them. Runs on a schedule at 8am via launchd.
 requires: [chewie, people, coursework]
 ---
 
@@ -15,10 +17,11 @@ user, in his voice.
 chewie brief --json
 ```
 
-Returns three reliable sources:
+Returns four sources:
 - **calendar**: today's events, from the Calendar DB directly (layer 1, fast)
 - **texts**: threads where someone spoke last and is waiting, decoded from chat.db
 - **email**: recent inbox, newest first, with unread flags (bounded AppleScript)
+- **whoop**: recovery, sleep and strain for the current cycle. `connected: false` means WHOOP was never set up, so leave it out. `connected: true` with `available: false` means say why, usually a sign-in to redo. A low recovery or short night is a reason to order the day lighter.
 
 If a source reports `available: false`, say so in the brief rather than inventing.
 

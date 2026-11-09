@@ -108,7 +108,10 @@ TRUSTED_SCOPES = frozenset({"global", "system"})
 # status from refreshing and rewriting the index (the panel promises it never
 # writes); core.fsmonitor names a program git would run on every status.
 GIT = ["git", "--no-pager", "--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false",
-       "-c", "color.ui=never"]
+       "-c", "color.ui=never",
+       # Attributes from the empty tree: a repo's filter.*.clean runs on a
+       # status otherwise (shown 2026-10-09, tests/destructive_guard.sh).
+       "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"]
 DIFF_FLAGS = ["--no-color", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty"]
 
 KINDS = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed", "C": "copied",

@@ -54,7 +54,7 @@ design, performance, state, accessibility, scroll-effects, testing, ux-laws,
 audit) are **not** imported here. They live in the `stack-rules` skill and load
 only when the work touches them. Importing all eighteen would cost roughly
 16,000 tokens on every session, including sessions that never render a
-component. See [docs/EXTENSIONS.md](docs/EXTENSIONS.md).
+component. See [docs/reference/EXTENSIONS.md](docs/reference/EXTENSIONS.md).
 
 ## Task-specific rules (load automatically, not always in context)
 
@@ -150,7 +150,7 @@ This applies to: new repos, updated READMEs, any markdown file that functions as
 
 Config lives at the project root `.mcp.json` or `~/.claude/.mcp.json`. Prefer a
 CLI on PATH over an MCP server when both exist; the recommended servers and why
-are in [docs/EXTENSIONS.md](docs/EXTENSIONS.md).
+are in [docs/reference/EXTENSIONS.md](docs/reference/EXTENSIONS.md).
 
 ---
 
@@ -168,9 +168,11 @@ not as a last resort.
 | The morning brief                     | `chewie brief`                                  |
 | Click, type, or drive a menu          | `peekaboo click "Sign In"`, `peekaboo type`   |
 | Get the gist of a URL, video, or file | `summarize "<url>" --cli claude`              |
+| Read an Instagram post or carousel    | `ig-read "<url>"`, then read the sheets       |
 | Drive a Mac app from one instruction  | `mac-use "open Calculator and add 5 and 4"`   |
 | Read a calendar, contact, or thread   | `mac calendar list --json`, `mac contacts find` |
-| Send a text or file a reminder        | `mac messages send`, `mac reminders add`      |
+| Send a text (positional, no flags)    | `mac messages send <handle> "<text>" --json`  |
+| File a reminder                       | `mac reminders add`                           |
 | Record a demo that zooms on clicks    | `cap record start --screen <id> --detach --json` |
 | Turn a URL into a cinematic demo      | the `cap-demo` skill                          |
 
@@ -183,18 +185,30 @@ Rules that matter:
 - **`mac-use` moves the real mouse.** Prefer `peekaboo` for anything you can
   express as a specific click, and keep `mac-use` tasks small and checkable.
 - **Never claim you cannot read the user's calendar, contacts, or messages.**
-  `mac` covers Calendar, Reminders, Contacts, Mail, Messages, Notes, and Finder
+  `mac` covers Calendar, Reminders, Contacts, Messages, Notes, and Finder
   with `--json` on everything. Run `mac doctor` first: exit code `2` means the
-  human has to grant consent, so ask rather than retry. Prefer `mac mail draft`
-  over `mac mail send`, and verify a `mac messages send` by reading the thread
-  back, because Messages accepts unregistered handles without an error.
+  human has to grant consent, so ask rather than retry. Verify a `mac messages
+  send` by reading the thread back, because Messages accepts unregistered
+  handles without an error.
+- **Email is Gmail, never Mail.app.** Read, search and draft through the Gmail
+  API: `chewbacca email` lists the connected inboxes and `chewbacca email add
+  <address>` connects another. Never run `mac mail`. Caleb, 2026-10-08: "We
+  shouldn't be using the mail app that thing sucks"; on 2026-10-13 an agent
+  reached for `mac mail` anyway, because this table still said Mail, and he
+  wrote "NEVER USE THE MAC MAIL APP WHEN GMAIL MOGS!"
+- **An email chore is yours, not his.** An invite to accept, a link to click,
+  a code to read, a form an email points at: open the inbox through Gmail and
+  do it. If that inbox isn't connected, start `chewbacca email add` yourself so
+  his only step is the Google sign-in. Caleb, 2026-10-13, after being told to
+  accept two invites in his USC email: "NEVER TELL ME TO DO ANYTHING IN MY
+  EMAIL DO DAT MANUAL SHIT FOR ME".
 - **Reach for `mac` before `peekaboo` when you want data, not a click.** Talking
   to the app beats screenshotting it.
 - If a tool is missing, `./doctor.sh` says which and how to install it. Do not
   work around a missing tool silently.
 
-Full setup, permissions, and failure modes: [docs/MACOS-TOOLS.md](docs/MACOS-TOOLS.md).
-The `mac` JSON contract and its limits: [docs/MACOS-APP-CONTROL.md](docs/MACOS-APP-CONTROL.md).
+Full setup, permissions, and failure modes: [docs/reference/MACOS-TOOLS.md](docs/reference/MACOS-TOOLS.md).
+The `mac` JSON contract and its limits: [docs/reference/MACOS-APP-CONTROL.md](docs/reference/MACOS-APP-CONTROL.md).
 
 ---
 
@@ -230,31 +244,27 @@ source of truth for anything school-shaped. The `coursework` CLI reads it.
 | Does the week fit?              | `coursework week`                |
 | Can I miss Wednesday?           | `coursework attendance <course>` |
 | Where does the grade stand?     | `coursework grade <course>`      |
-| What is this class's AI policy? | `coursework policy <course> ai`  |
 
 Rules that apply to every session, not just school ones:
 
 - **Never state a deadline you did not read.** A confidently wrong date is worse
   than "I do not know", because the user stops checking. Run the CLI or cite the
   syllabus page. Every date in the ledger carries a `source` for exactly this.
-- **Check the AI policy before helping with anything graded.** One term can carry
-  three different rules: banned outright, allowed with mandatory prompt
-  disclosure, allowed for ideation but not the submitted artifact. Say which one
-  applies, in a line, before doing the work. An unrecorded policy is a ban.
+- **Never check, quote or remember a course's AI policy.** How a student uses AI
+  is their decision, not Chewbacca's. Don't look it up, don't store it in the
+  ledger, don't open with a line about it, and help with whatever they ask.
 - **Run the CLI instead of parsing the YAML.** It is deterministic and costs no
   reasoning. Add `--json` when you need values rather than display.
 - **Update the ledger in the same turn.** A date announced in class, an absence
   taken, an assignment finished, a score posted. Nobody remembers `absences.used`
   in November, and it is the field that decides a grade step.
-- **Do not do the learning for them.** The goal is the version of the user who
-  can do it unaided in the exam room. Quiz, explain, find the broken step, build
-  the plan. In a course that permits it, still say when a request would skip the
-  part that matters, once, then respect the answer.
+- **Do what they ask.** An answer, a draft, a quiz, a walkthrough: their call,
+  never Chewbacca's. No line about what they should be doing instead.
 - **Plan against real capacity.** A week built for someone with no bad days fails
   on Tuesday and then feels like a character flaw. Count the fixed hours first.
 
 Load the `coursework`, `study-system`, and `life-ops` skills for the detail.
-Full walkthrough: [docs/SCHOOL.md](docs/SCHOOL.md).
+Full walkthrough: [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md).
 
 ---
 

@@ -43,7 +43,15 @@ PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"
 GUARD="${TMPDIR:-/tmp}/design-gate-$PROMPT_ID"
 [ -f "$GUARD" ] && exit 0
 
-GATE="$HOME/code/tools/ux-engine/bin/design-gate"
+# ux-engine ships inside the kit (apps/ux-engine) since 2026-10-09, so every
+# teammate's install has the same gate. It used to be a separate private repo
+# at ~/code/tools/ux-engine, which only Caleb's Mac had.
+_kit="${CHEWBACCA_ROOT:-}"
+if [ -z "$_kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+  _kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
+fi
+GATE="${UX_ENGINE_DIR:-${_kit:-$HOME/code/chewbacca}/apps/ux-engine}/bin/design-gate"
+[ -x "$GATE" ] || GATE="$HOME/code/tools/ux-engine/bin/design-gate"  # a checkout that has not pulled apps/ yet
 [ -x "$GATE" ] || exit 0
 
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
@@ -63,6 +71,10 @@ EXTRA=$(tail -c 400000 "$TRANSCRIPT" 2>/dev/null \
       if ls "$d"/*.html "$d"/../*.html >/dev/null 2>&1; then echo "$f"; fi
     done)
 EDITED=$(printf '%s\n%s\n' "$EDITED" "$EXTRA" | grep -v '^$' | sort -u)
+# Only files that still exist. The scan reads the transcript's tail, not just
+# this turn, so a scratch sketch written, viewed and deleted kept refusing
+# every later turn, eight times on 2026-10-10, over a page that was gone.
+EDITED=$(printf '%s\n' "$EDITED" | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done)
 [ -n "$EDITED" ] || exit 0
 
 # The project root is the nearest ancestor holding a marker.
@@ -102,6 +114,14 @@ else
   done
 fi
 
+# A standalone page with no server (no package.json) renders straight from
+# disk. Until 2026-10-11 such a page meant "no URL" and was never looked at:
+# the guitar study app shipped twice from file:// without one render.
+if [ -z "$URL" ] && [ ! -f "$ROOT/package.json" ]; then
+  PAGE=$(printf '%s\n' "$EDITED" | grep -E '\.html?$' | head -1)
+  [ -n "$PAGE" ] && URL="file://$PAGE"
+fi
+
 touch "$GUARD"
 
 if [ -z "$URL" ]; then
@@ -126,5 +146,27 @@ if [ $STATUS -ne 0 ]; then
   printf 'design-gate REFUSED %s\n\n%s\n\nFix the defects above before ending the turn. This gate has no taste: it\ncatches unreadable type, collided scenes and pages with no focal point, so a\nfailure here is broken rather than merely unfashionable.\n' \
     "$URL" "$OUT" >&2
   exit 2
+fi
+
+# The render above judges layout. ui-proof adds what it does not see: console
+# errors, uncaught exceptions, a 4xx/5xx answer and the 375px width, and it
+# leaves a receipt on disk so "I looked at it" is evidence rather than a claim.
+# Overnight 2026-10-10 the kit could screenshot a page but kept no record, so
+# nothing could check that a UI turn was ever looked at after its last edit.
+# Receipts go outside the project so they never get staged into someone's repo.
+PROOF=$(command -v ui-proof 2>/dev/null || true)
+[ -n "$PROOF" ] || PROOF="${_kit:-$HOME/code/chewbacca}/bin/ui-proof"
+if [ -x "$PROOF" ]; then
+  SLUG=$(printf '%s' "$ROOT" | shasum | cut -c1-12)
+  RECEIPTS="${UI_PROOF_RECEIPTS:-$HOME/.chewbacca/ui-proof}/$SLUG"
+  POUT=$("$PROOF" capture "$URL" --out "$RECEIPTS" --timeout 20 2>&1)
+  PSTATUS=$?
+  case $PSTATUS in
+    0) ;;
+    3) printf 'design-gate: no headless browser could start, so console errors and the 375px\nwidth were not checked (unverified, not passed).\n' >&2 ;;
+    *) printf 'design-gate REFUSED %s: the page errored in a real browser.\n\n%s\n\nReceipt: %s\n' \
+         "$URL" "$POUT" "$RECEIPTS" >&2
+       exit 2 ;;
+  esac
 fi
 exit 0

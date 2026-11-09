@@ -1,0 +1,155 @@
+{
+  "name": "usc-parking",
+  "baseUrl": "https://usc.aimsparking.com",
+  "operations": [
+    {
+      "name": "activePermits",
+      "description": "The student's active USC parking permits: number, permit type, status, active and expiry dates (epoch ms), balance owed, and the vehicles on each",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.aimsparking.com/api/permits/index.php?cmd=get_active_account_permits&_=1791908418684",
+        "headers": {
+          "accept": "*/*",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://usc.aimsparking.com/",
+          "sec-ch-ua": "\"Google Chrome\";v=\"155\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\"",
+          "sec-ch-ua-arch": "\"x86\"",
+          "sec-ch-ua-bitness": "\"64\"",
+          "sec-ch-ua-full-version": "\"155.0.8059.40\"",
+          "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"155.0.8059.40\", \"Chromium\";v=\"155.0.8059.40\", \"Not(A:Brand\";v=\"24.0.0.0\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-model": "\"\"",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-ch-ua-platform-version": "\"10_15_7\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+          "x-csrf-token": "",
+          "x-requested-with": "XMLHttpRequest"
+        }
+      },
+      "slots": [
+        {
+          "ref": "cookie:AW9_CSRF",
+          "at": [
+            "header:x-csrf-token"
+          ],
+          "transform": "url-decode"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://uscauth.aimsparking.com/aimsweb/index.php",
+        "steps": [
+          {
+            "action": "wait",
+            "ms": 1500
+          },
+          {
+            "action": "goto",
+            "value": "https://usc.aimsparking.com/permits/index.php"
+          },
+          {
+            "action": "wait",
+            "ms": 3000
+          }
+        ]
+      },
+      "match": {
+        "method": "GET",
+        "path": "/api/permits/index.php"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json",
+        "extract": "permits",
+        "pick": [
+          "permitNumber=permit_number",
+          "type=ptype.description",
+          "status=status.display_text",
+          "activeMs=active_date.$date.$numberLong",
+          "expiresMs=expiration_date.$date.$numberLong",
+          "balance=balance.$numberDecimal",
+          "vehicles=vehicles[*].long_description"
+        ]
+      },
+      "params": [],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-13T16:20:27.896Z"
+    },
+    {
+      "name": "account",
+      "description": "The student's USC parking account at a glance: balance, unpaid citations and their total, unpaid fees and permits, how many permits are active, waitlists, and the vehicles on file",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.aimsparking.com/api/common/index.php?cmd=get_common_data&_=1791908448705",
+        "headers": {
+          "accept": "*/*",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://usc.aimsparking.com/",
+          "sec-ch-ua": "\"Google Chrome\";v=\"155\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\"",
+          "sec-ch-ua-arch": "\"x86\"",
+          "sec-ch-ua-bitness": "\"64\"",
+          "sec-ch-ua-full-version": "\"155.0.8059.40\"",
+          "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"155.0.8059.40\", \"Chromium\";v=\"155.0.8059.40\", \"Not(A:Brand\";v=\"24.0.0.0\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-model": "\"\"",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-ch-ua-platform-version": "\"10_15_7\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+          "x-csrf-token": "",
+          "x-requested-with": "XMLHttpRequest"
+        }
+      },
+      "slots": [
+        {
+          "ref": "cookie:AW9_CSRF",
+          "at": [
+            "header:x-csrf-token"
+          ],
+          "transform": "url-decode"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://uscauth.aimsparking.com/aimsweb/index.php"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.aimsparking.com",
+        "path": "/api/common/index.php"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json",
+        "extract": ".",
+        "pick": [
+          "signedIn=user.logged_in",
+          "balance=account_balance",
+          "unpaidTickets=unpaid_account_tickets.num_unpaid_tickets",
+          "unpaidTicketsTotal=unpaid_account_tickets.total",
+          "unpaidFees=unpaid_account_fees.num_unpaid_fees",
+          "unpaidFeesTotal=unpaid_account_fees.total",
+          "unpaidPermits=all_account_permits.num_unpaid_permits",
+          "activePermits=active_account_permits_count",
+          "waitlists=all_account_permits.waitlists",
+          "vehicles=account_vehicles[*].long_description",
+          "cartItems=cart.num_cart_items"
+        ]
+      },
+      "params": [],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-13T16:21:42.037Z"
+    }
+  ]
+}

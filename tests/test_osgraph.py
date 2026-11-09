@@ -13,6 +13,9 @@ fixtures). AWAITS_REPLY_FROM(Thread -> me):
   rule 3, groups need his name, automated texts:  8/12 on a held-out 90-day sample
   rule 4, unsaved number + 140+ chars is a blast: fixes the 3 automated misses
           on that sample after the fact; not yet measured on unseen threads.
+  CHW-135 (2026-10-10): hand samples replaced by tools/needs_you_eval.py, which
+          labels from what he did next and scores a sealed set once. Its cases
+          live in tests/test_needs_you.py.
 The cases below are the misses each rule was written against.
 """
 import sys
@@ -253,29 +256,24 @@ def identity_spoofing(tmp: Path) -> None:
     m3 = g.out(fx.mail_id("m3"), "SENT_BY")[0]
     check("mail From 'Karthik Devarakonda' at a stranger's address is not Karthik",
           m3["id"] != karthik and m3["unresolved"] and m3["label"] == "karthik.d@evil.example", m3)
-    check("and the panel shows it as the raw address, unverified",
-          g.node(fx.mail_id("m3"))["props"]["from"] == "karthik.d@evil.example" and m3["props"]["unverified"])
+    check("and the panel shows it as the raw address, an unconfirmed person",
+          g.node(fx.mail_id("m3"))["props"]["from"] == "karthik.d@evil.example" and m3["unresolved"])
     check("Karthik's walk never shows the spoof",
           not any("Wire the funds" in m["text"] for m in W.person(g, ctx.ids, "Karthik Devarakonda", fx.NOW)["timeline"]))
     check("a name lookup still finds the real Karthik", W.find_person(g, ctx.ids, "Karthik Devarakonda")[0] == karthik)
-    senders = {m: g.out(fx.mail_id(m), "SENT_BY")[0]["id"] for m in ("m1", "m4", "m5")}
-    check("Sagar's address with DMARC passing at iCloud is Sagar", senders["m1"] == sagar, senders)
-    check("Sagar's address with DMARC failing is not Sagar", senders["m4"] != sagar, senders)
-    check("a pass header written by the sender, not the receiver, is not Sagar", senders["m5"] != sagar, senders)
+    senders = {m: g.out(fx.mail_id(m), "SENT_BY")[0] for m in ("m1", "m4", "m5")}
+    check("Sagar's address that Gmail's verdict vouched for is Sagar", senders["m1"]["id"] == sagar, senders)
+    check("Sagar's address that Gmail marked unverified is not Sagar",
+          senders["m4"]["id"] != sagar and senders["m5"]["id"] != sagar
+          and senders["m4"]["props"]["unverified"], senders)
+    check("and the unverified sender is its bare address, never the 'unverified:' handle",
+          g.node(fx.mail_id("m4"))["props"]["address"] == "sagar@amber.example"
+          and not g.node(fx.mail_id("m4"))["props"]["verified"])
     row = next(r for r in W.needs_you(g, fx.NOW)["rows"] + W.conversations(g, fx.NOW)["rows"] if r["id"] == fx.mail_id("m3"))
     check("on needs-you or conversations the spoof carries no person's name",
-          all("Karthik" not in c["label"] for c in row["chips"]) and any("unverified" in c["label"] for c in row["chips"]),
+          all("Karthik" not in c["label"] for c in row["chips"])
+          and any("unconfirmed" in c["label"] or "unverified" in c["label"] for c in row["chips"]),
           row["chips"])
-    import osgraph_ingest
-    calls = []
-    ctx.run = lambda argv: calls.append(argv) or (0, "", "")
-    check("a Message-ID with a quote never reaches AppleScript",
-          osgraph_ingest.auth_headers(ctx, 'x" & do shell script "id') == "" and calls == [])
-    calls.clear()
-    ctx.run = lambda argv: calls.append(argv) or ((1, "", "") if argv[0] == "pgrep" else (0, "[]", ""))
-    check("with Mail quit, the ingest never touches Mail (a script would relaunch it)",
-          osgraph_ingest.mail(g, ctx, ctx.ids, days=7) == {"skipped": "Mail is not open"}
-          and calls == [["pgrep", "-xq", "Mail"]], calls)
 
 
 def keys_and_claims(tmp: Path) -> None:
@@ -296,17 +294,19 @@ def keys_and_claims(tmp: Path) -> None:
     g, ctx, run, _ = fx.world(tmp)
     sagar = f"person:{fx.SAGAR}"
     check("m1 is verified Sagar before the attack", g.out(fx.mail_id("m1"), "SENT_BY")[0]["id"] == sagar)
-    # The attacker sends from Sagar's address with no authentication and a
-    # Message-ID that slugged to m1's key ("M1" lowercases to "m1").
-    # First in the list: on the landed code it took m1's slot and its verdict.
-    fx.MAIL.insert(0, {"id": "M1", "from": "Sagar Tiwari <sagar@amber.example>", "subject": "Urgent: new bank details",
-                    "date": fx.NOW.isoformat(), "isRead": False, "account": "iCloud"})
+    # The attacker sends from Sagar's address with no authentication, newest
+    # first, in the same inbox. Each Gmail row is its own node keyed on the
+    # reader's content id, so it can neither take m1's slot nor its verdict.
+    attack_row = {**fx.GMAIL[0], "id": fx.GMAIL[0]["id"] + 99, "handle": "unverified:sagar@amber.example",
+                  "text": "Urgent: new bank details", "at": fx.NOW.strftime("%Y-%m-%dT%H:%M:%S"),
+                  "gmail_id": "19a00000000000ff"}
+    fx.GMAIL.insert(0, attack_row)
     try:
         osgraph_ingest.mail(g, ctx, ctx.ids, days=7)
     finally:
-        fx.MAIL.pop(0)
-    attack = g.out(fx.mail_id("M1"), "SENT_BY")[0]["id"]
-    check("a look-alike Message-ID never inherits another mail's verified sender", attack != sagar, attack)
+        fx.GMAIL.pop(0)
+    attack = g.out(osgraph.node_key("mail", "gmail", "", str(attack_row["id"])), "SENT_BY")[0]["id"]
+    check("an unverified mail never inherits another mail's verified sender", attack != sagar, attack)
     check("and the real mail is still its own node, still Sagar",
           g.node(fx.mail_id("m1"))["label"] == "Terms, see https://github.com/acme/app/issues/12"[:80]
           and g.out(fx.mail_id("m1"), "SENT_BY")[0]["id"] == sagar)
@@ -333,6 +333,84 @@ def keys_and_claims(tmp: Path) -> None:
     check("mail from an address that isn't verified is never me", mail_from_me.id != ME and mail_from_me.unresolved)
 
 
+def gmail_source(tmp: Path) -> None:
+    """CHW-192: mail comes from Gmail through gws, never Mail.app; a press on
+    a mail row drafts in Gmail and can never send; a signed-out Gmail says so
+    on the surface instead of drawing an empty inbox."""
+    import osgraph_ingest
+    import osgraph_walks as W
+    from surfaces import walks as SW
+
+    g, ctx, run, report = fx.world(tmp / "w")
+    check("the mail ingester reads Gmail through gmail.py",
+          any(len(c) > 2 and Path(c[1]).name == "gmail.py" and c[2] == "--json" for c in run.calls), run.calls[:3])
+    check("and never Mail.app or AppleScript",
+          not any(c[:2] == ["mac", "mail"] or c[:1] == ["osascript"] for c in run.calls))
+    items = g.nodes("MailItem")
+    check("every inbound Gmail row in the window is a MailItem, the one he sent is not",
+          len(items) == 6 and all(n["props"]["network"] == "Gmail" for n in items), len(items))
+    check("a MailItem keeps the Gmail id and inbox a draft needs",
+          g.node(fx.mail_id("m1"))["props"]["gmail_id"] == fx.GMAIL_IDS["m1"]
+          and g.node(fx.mail_id("m1"))["props"]["inbox"] == "")
+    waiting = {e["src"] for e in g.edges(verb="AWAITS_REPLY_FROM", dst=ME)}
+    check("a mail he already answered on the same subject waits on no one", fx.mail_id("m6") not in waiting)
+    needs = W.needs_you(g, fx.NOW)
+    check("needs-you carries the Gmail rows", sum(r["type"] == "MailItem" for r in needs["rows"]) >= 2,
+          [r["type"] for r in needs["rows"]])
+    tl = W.timeline(g, f"person:{fx.SAGAR}")
+    check("Sagar's timeline tags his mail as Gmail", any(m["network"] == "Gmail" for m in tl), tl[:2])
+    check("and his reply route is Gmail, to his verified address",
+          W.reply_routes(g, f"person:{fx.SAGAR}")["Gmail"]["props"]["address"] == "sagar@amber.example")
+
+    # Go on a mail row: one `gmail.py draft`, nothing that sends.
+    row = {"id": fx.mail_id("m1"), "type": "MailItem", "label": "Terms", "props": g.node(fx.mail_id("m1"))["props"]}
+    before = len(run.calls)
+    res = SW.draft_mail(ctx, row, "Sending tonight", "/x/draft")
+    made = run.calls[before:]
+    check("Go on a mail row makes a Gmail draft", res.ok and "Gmail" in res.line and len(run.drafts) == 1
+          and made[0][2:] == ["draft", "--gmail-id", fx.GMAIL_IDS["m1"], "--inbox", "", "--to",
+                               "sagar@amber.example", "--text", "Sending tonight"], (res, made))
+    check("and nothing that could send was called", run.sent == [] and len(made) == 1, made)
+    spoof = {"id": fx.mail_id("m4"), "type": "MailItem", "label": "Spoof one",
+             "props": g.node(fx.mail_id("m4"))["props"]}
+    before = len(run.calls)
+    res = SW.draft_mail(ctx, spoof, "hi", "/x/draft")
+    check("an unverified sender gets no draft and no command", not res.ok and len(run.calls) == before, res)
+    import inspect
+    src = inspect.getsource(SW.draft_mail)
+    check("send is unreachable from the mail Go: its code names no send command",
+          not any(w in src for w in ("+send", "+reply", "\"send\"", "messages\", \"send", "mail\", \"send")), src[:60])
+
+    # His own other address (EMAIL_HOME/me) is never someone waiting on him.
+    email_home = tmp / "email"
+    email_home.mkdir()
+    (email_home / "me").write_text("# mine\nfake.me@other.example\n")
+    ctx.env["CHEWBACCA_EMAIL_HOME"] = str(email_home)
+    own = {**fx.GMAIL[0], "id": fx.GMAIL[0]["id"] + 77, "handle": "fake.me@other.example", "text": "test from me",
+           "gmail_id": "19a00000000000ee"}
+    fx.GMAIL.insert(0, own)
+    try:
+        osgraph_ingest.mail(g, ctx, ctx.ids, days=7)
+    finally:
+        fx.GMAIL.pop(0)
+        ctx.env.pop("CHEWBACCA_EMAIL_HOME")
+    check("mail from his own other address is not a MailItem waiting on him",
+          g.node(osgraph.node_key("mail", "gmail", "", str(own["id"]))) is None)
+
+    # Signed out: an error naming Gmail, never an empty inbox.
+    run.gmail_signed_out = True
+    out = osgraph_ingest.ingest_all(g, ctx, days=7, ids=ctx.ids, only=["mail"])
+    check("a signed-out Gmail is the error 'Gmail: not signed in'", out["mail"] == {"error": "Gmail: not signed in"},
+          out["mail"])
+    check("and the last good mail stays rather than an empty inbox", len(g.nodes("MailItem")) == 6)
+    surface = SW.NeedsYou() if hasattr(SW, "NeedsYou") else None
+    if surface is not None:
+        ctx.ingest_errors = {"mail": out["mail"]["error"]}
+        cap = surface.caption_line({"rows": []}, None, [], ctx)
+        check("needs-you's caption names it", "Gmail: not signed in" in cap, cap)
+    run.gmail_signed_out = False
+
+
 def privacy(tmp: Path) -> None:
     import os
     import stat
@@ -357,6 +435,79 @@ def privacy(tmp: Path) -> None:
     check("forget deletes the graph and its sidecars", path in gone and not os.path.exists(path), gone)
 
 
+def home_panel(tmp: Path) -> None:
+    """The desktop home panel's two graph lists (osgraph_walks.home)."""
+    from datetime import timedelta
+    undated = {"id": "R3", "title": "Do the thing for Reagan", "due": None, "isCompleted": False,
+               "list": "Reminders"}
+    fx.REMINDERS.append(undated)
+    try:
+        g, ctx, run, report = fx.world(tmp)
+    finally:
+        fx.REMINDERS.remove(undated)
+    now = fx.NOW
+
+    def event(key: str, label: str, start, end=None, all_day=False, calendar="Home") -> Node:
+        return Node(f"event:{key}", "Event", label,
+                    {"start": start.isoformat(), "end": end.isoformat() if end else "",
+                     "all_day": all_day, "calendar": calendar})
+
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    g.apply("seed-home", [
+        event("ended", "Ended an hour ago", now - timedelta(hours=2), now - timedelta(hours=1)),
+        event("running", "Running now", now - timedelta(minutes=10), now + timedelta(minutes=50)),
+        event("d1", "Lab 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("d2", "Quiz 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("d3", "Post 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("m1", "Standup", now + timedelta(hours=2), now + timedelta(hours=3), calendar="Work"),
+        event("m2", "Dentist", now + timedelta(hours=2), now + timedelta(hours=3), calendar="Work"),
+        event("trip", "Trip", now - timedelta(days=1), now + timedelta(days=2), all_day=True),
+        event("hol1", "Holiday", tomorrow, tomorrow + timedelta(days=1), all_day=True, calendar="US Holidays"),
+        event("hol2", "Holiday", tomorrow, tomorrow + timedelta(days=1), all_day=True, calendar="Family"),
+        event("call", "Call with Bill", tomorrow + timedelta(hours=9), tomorrow + timedelta(hours=10)),
+        event("far", "Next week", now + timedelta(days=6), now + timedelta(days=6, hours=1)),
+    ], [])
+    cal = W.home_calendar(g, now, most=10)
+    titles = [r["title"] for r in cal]
+    check("home calendar drops what ended and what is past tomorrow",
+          "Ended an hour ago" not in titles and "Next week" not in titles, titles)
+    check("home calendar keeps what is running", titles[:1] == ["Running now"], titles)
+    check("three deadlines at one minute on one calendar are one row with a count",
+          any(r["title"] == "3 due" and r.get("count") == 3 and r["detail"] == "Coursework" for r in cal)
+          and "Lab 3" not in titles, cal)
+    check("two meetings at one minute keep their names", "Standup" in titles and "Dentist" in titles, titles)
+    check("every row has its own id", len({r["id"] for r in cal}) == len(cal), [r["id"] for r in cal])
+    check("an all-day event that began yesterday and runs on is still on today", "Trip" in titles, titles)
+    check("today's all-day events come before tomorrow's timed ones",
+          titles.index("Trip") < titles.index("Call with Bill"), titles)
+    check("a holiday on two calendars is one row", titles.count("Holiday") == 1, titles)
+    check("timed events come before all-day ones", titles.index("Call with Bill") < titles.index("Holiday"), titles)
+    running = next((r for r in cal if r["title"] == "Running now"), {})
+    check("a timed row carries its end, so the panel drops it when it ends",
+          running.get("end") == (now + timedelta(minutes=50)).isoformat(), running)
+    quiet = Graph(str(tmp / "quiet.sqlite"))
+    quiet.apply("seed-far", [event("far", "Next week", now + timedelta(days=6), now + timedelta(days=6, hours=1))],
+                [])
+    check("with nothing today or tomorrow, the next thing still shows",
+          [r["title"] for r in W.home_calendar(quiet, now)] == ["Next week"])
+
+    todos, count = W.home_todos(g, now, most=50)
+    labels = [r["title"] for r in todos]
+    check("an undated reminder is a to-do", "Do the thing for Reagan" in labels, labels)
+    check("a two-year-old reminder is not", "lock from high school" not in labels, labels)
+    check("to-dos run overdue first, then by day, undated last",
+          [r["overdue"] for r in todos] == sorted((r["overdue"] for r in todos), reverse=True)
+          and [bool(r["day"]) for r in todos if not r["overdue"]]
+          == sorted((bool(r["day"]) for r in todos if not r["overdue"]), reverse=True), todos)
+    check("the to-do count is all of them, not the rows shown", count == len(todos) and count >= 2, count)
+
+    body = W.home(g, now)
+    check("home carries the calendar and the to-dos, and no reach-out list",
+          {"at", "calendar", "todos", "todoCount"} == set(body), sorted(body))
+    check("home can hand over every to-do, for the panel to cross off and cap",
+          len(W.home(g, now, most_todos=None)["todos"]) == count, count)
+
+
 def main() -> int:
     ontology()
     reply_rule()
@@ -367,9 +518,13 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as d:
         identity_spoofing(Path(d))
     with tempfile.TemporaryDirectory() as d:
+        gmail_source(Path(d))
+    with tempfile.TemporaryDirectory() as d:
         privacy(Path(d))
     with tempfile.TemporaryDirectory() as d:
         keys_and_claims(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        home_panel(Path(d))
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

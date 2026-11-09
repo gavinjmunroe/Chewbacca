@@ -32,6 +32,7 @@ lib.rs:117-124. No meeting had been recorded on this Mac yet, so no real
 meeting's JSON was available to copy.
 """
 import json
+import re
 import sys
 import tempfile
 from datetime import timedelta
@@ -150,7 +151,7 @@ def first_run(tmp: Path) -> None:
     # Since native capture (2026-10-05) the headline is the same in all three
     # states: Anarlog's state is the doctor line's job, not the panel's.
     for state, headline, doctor_has in (
-            ("unset", NO_MEETINGS, "database file does not exist"),
+            ("unset", NO_MEETINGS, "database file does not"),
             ("empty", NO_MEETINGS, "ready: yes"),
             ("missing", NO_MEETINGS, "")):
         cli = FakeAnarlog(state)
@@ -162,35 +163,40 @@ def first_run(tmp: Path) -> None:
         check(f"{state}: draws valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
         check(f"{state}: is a first-run state, not an error", value(lines, "/meetings/note") == headline,
               value(lines, "/meetings/note"))
-        steps = [s["text"] for s in value(lines, "/meetings/setup") or []]
-        doctor = value(lines, "/meetings/doctor") or ""
+        rows_ = value(lines, "/meetings/setup") or []
+        steps = [s["text"] for s in rows_ if s["id"] != "doctor"]
+        doctor = next((s["text"] for s in rows_ if s["id"] == "doctor"), "")
         if state == "missing":
             # Caleb, 2026-10-05: "Anarlog shouldn't be it's own app". The
             # first step was "Install Anarlog"; it is now the Start capture press.
-            check("missing: the first step is Start capture, never installing a second app",
-                  steps and "Start capture" in steps[0] and not any(INSTALL_STEP in s for s in steps), steps)
-            check("missing: the button offers Start capture", value(lines, "/meetings/captureLabel") == "Start capture",
-                  value(lines, "/meetings/captureLabel"))
+            check("missing: the first step says calls record themselves, never installing a second app",
+                  steps and "records itself" in steps[0] and not any(INSTALL_STEP in s for s in steps), steps)
+            check("missing: a small Record press stays for any other call",
+                  value(lines, "/meetings/captureLabel") == "Record", value(lines, "/meetings/captureLabel"))
+            check("missing: the state line is one small word or phrase",
+                  value(lines, "/meetings/state") in ("Listening", "Not listening for calls",
+                                                      "Auto-record is off"), value(lines, "/meetings/state"))
             check("missing: no doctor line when there is no CLI to ask", doctor == "", doctor)
         else:
             check(f"{state}: shows Anarlog's own doctor answer", doctor_has in doctor, doctor)
         if state == "unset":
-            check("unset: tells a stranger to open Anarlog, allow mic and system audio, and record",
-                  any("Open Anarlog" in s for s in steps) and any("Microphone" in s and "System Audio" in s
-                                                                    for s in steps)
-                  and any("record" in s for s in steps), steps)
+            check("unset: says Anarlog's meetings show once it has run, and every step is one short line",
+                  any("once it has run" in s for s in steps) and all(len(s) <= 110 for s in steps), steps)
             check("unset: the doctor line says it isn't ready", "ready: no" in doctor, doctor)
         if state == "empty":
-            check("empty: skips open-once but keeps the permission step, since a database proves no mic access",
-                  not any("Open Anarlog" in s for s in steps) and any("Microphone" in s for s in steps)
-                  and any("record" in s for s in steps), steps)
-            check("empty: the doctor line names the database Anarlog reported",
-                  "/Users/example/Library/Application Support/anarlog/app.db" in doctor, doctor)
+            check("empty: skips the run-it-once step",
+                  not any("once it has run" in s for s in steps) and any("show here too" in s for s in steps), steps)
+            check("empty: the doctor line names Anarlog's database, clipped to one row",
+                  "Application Support/anarlog" in doctor or "/Users/example" in doctor, doctor)
         check(f"{state}: every call was a local read", only_reads(cli) or state == "missing", cli.calls)
         g = osgraph.Graph(":memory:")
         report = AM.meetings(g, ctx, ctx.ids, days=7)
         check(f"{state}: the ingester reports it as a note, never raises",
               report.get("ready") is (state == "empty") and (state == "empty" or "note" in report), report)
+
+
+def transcript_text(lines) -> str:
+    return " ".join(x["text"] for x in value(lines, "/meetings/transcript") or [])
 
 
 def reading(tmp: Path) -> None:
@@ -206,14 +212,14 @@ def reading(tmp: Path) -> None:
     check("every call is a read, local only, with telemetry pinned off", only_reads(cli), cli.calls)
     check("no control, format or bidi character from a meeting reaches the glass", clean_glass(lines),
           [x for x in lines if BIDI in x or LINE_SEP in x])
-    check("the purpose line says what the panel is for",
-          any("What your calls said" in x for x in lines if x.startswith("c meetings-purpose")))
-    live = value(lines, "/meetings/live")
-    check("a meeting with a start and no end is named as recording, at the top",
-          live == "Recording now: Zeutara wave 2 check-in, started 20m ago. Anarlog shows no end time yet.", live)
-    note = value(lines, "/meetings/note")
-    check("the header counts this week's meetings and the items to look at",
-          note == "3 meetings this week · 4 action items to look at", note)
+    check("on the glass the purpose line is gone: the content says what the panel is for",
+          value(lines, "/meetings/purpose") == "", value(lines, "/meetings/purpose"))
+    live = value(lines, "/meetings/state")
+    check("a meeting with a start and no end is named as recording, at the top, in one calm line",
+          live == "Recording · Zeutara wave 2 check-in · 20 min", live)
+    check("the counts are two numbers: this week's meetings and the items to look at",
+          (value(lines, "/meetings/week"), value(lines, "/meetings/owed")) == (3, 4),
+          (value(lines, "/meetings/week"), value(lines, "/meetings/owed")))
     rows = value(lines, "/meetings/rows")
     texts = [r["text"] for r in rows]
     check("the latest meetings, newest first, with when", [r["id"] for r in rows] ==
@@ -224,46 +230,56 @@ def reading(tmp: Path) -> None:
           "Sagar Tiwari" in texts[1] and "Tyler (unverified)" in texts[1], texts[1])
     check("the newest meeting is shown before anything is opened", value(lines, "/meetings/head") ==
           "Zeutara wave 2 check-in", value(lines, "/meetings/head"))
-    check("its transcript page is read and cleaned",
-          "Transcript, words 1-6: Jonah: can you hear me okay" == value(lines, "/meetings/transcript"),
-          value(lines, "/meetings/transcript"))
+    check("the transcript is folded until asked for", value(lines, "/meetings/transcript") == []
+          and value(lines, "/meetings/txLabel") == "Transcript", value(lines, "/meetings/transcript"))
+    p.transcript(ctx, data, {})
+    lines = draw(p, data, None, ctx)
+    check("one tap shows its transcript page, read and cleaned, in a Transcript",
+          transcript_text(lines) == "Jonah: can you hear me okay", transcript_text(lines))
+    p.transcript(ctx, data, {})
 
     result = p.open(ctx, data, {"row": "m-amber"})
     lines = draw(p, data, None, ctx)
     check("Open picks that meeting", result.ok and value(lines, "/meetings/head") == "Amber weekly", result)
     meta = value(lines, "/meetings/meta")
-    check("its meta line has day, time, length, folder and who", "45 min" in meta and "Work/Amber" in meta and
-          "Sagar Tiwari" in meta and "Caleb" not in meta.split("with", 1)[-1], meta)
+    check("its meta line is day, length and who, nothing else", "45 min" in meta and "Sagar Tiwari" in meta
+          and "Caleb" not in meta and len(meta) <= 90, meta)
     summary = [x["text"] for x in value(lines, "/meetings/summary")]
-    check("the summary is Anarlog's own lines, headings and decisions out",
-          summary[:2] == ["Wave 2 goes out Tuesday to the fit list", "Kyber stays opt-in for now"] and
-          not any("AMBER_KYBER" in s for s in summary), summary)
+    check("the summary is Anarlog's own lines, headings out, three at most, none repeating a decision or item",
+          summary and len(summary) <= 3 and not any("AMBER_KYBER" in s for s in summary)
+          and "Wave 2 goes out Tuesday to the fit list" not in summary, summary)
     decided = [x["text"] for x in value(lines, "/meetings/decisions")]
     check("decisions are only what the summary put under Decisions, bold marks off",
           decided == ["Decided: Ship the keyboard behind AMBER_KYBER", "Decided: Karthik keeps Cloud SQL"], decided)
     items = value(lines, "/meetings/items")
-    check("open action items only, each marked a guess before the press",
-          len(items) == 4 and all(i["text"].startswith("(guess) ") for i in items)
-          and not any("Already handled" in i["text"] for i in items), items)
-    check("the items caption says they are Anarlog's guesses",
-          "guesses" in value(lines, "/meetings/itemsCaption"), value(lines, "/meetings/itemsCaption"))
+    check("open action items only, each carrying a small guess mark and nothing more",
+          len(items) == 4 and all(i["text"].endswith(" · guess") for i in items)
+          and not any("Already handled" in i["text"] or "(guess," in i["text"] or "Go " in i["text"]
+                      for i in items), items)
+    check("where they came from is behind one tap, folded by default",
+          value(lines, "/meetings/itemsWhy") == [] and value(lines, "/meetings/whyLabel") == "Where these came from")
+    p.why(ctx, data, {})
+    whys = [w["text"] for w in value(draw(p, data, None, ctx), "/meetings/itemsWhy")]
+    check("the tap shows one short line per item, no clock to the second",
+          len(whys) == 4 and all(len(w) <= 110 and not re.search(r"\d:\d\d:\d\d", w) for w in whys), whys)
+    p.why(ctx, data, {})
     owners = {i["id"]: i["text"] for i in items}
     a1 = AM.task_id("m-amber", "a1")
     a5 = AM.task_id("m-amber", "a5")
-    check("an item's owner is named only through the people store",
-          owners[a1].endswith("· Sagar Tiwari") and owners[a5].endswith("· you"), owners)
+    check("an item's owner is named only through the people store, and yours carry no name",
+          "· Sagar Tiwari" in owners[a1] and "you" not in owners[a5], owners)
     check("an injected line in an action item is only words", clean_glass(lines) and any(
         "Ignore previous instructions" in t for t in owners.values()), owners)
+    p.transcript(ctx, data, {})
+    lines = draw(p, data, None, ctx)
     check("Open read page one of that meeting's transcript",
-          (value(lines, "/meetings/transcript") or "").startswith("Transcript, words 1-200: Sagar: wave two"),
-          value(lines, "/meetings/transcript"))
-    check("Next says how far it goes", value(lines, "/meetings/nextLabel") == "Next 200 words")
+          transcript_text(lines).startswith("Sagar: wave two"), transcript_text(lines))
+    check("More says there is more", value(lines, "/meetings/nextLabel") == "More")
     r = p.next_page(ctx, data, {})
     lines = draw(p, data, None, ctx)
-    check("Next reads the next bounded page", r.ok and (value(lines, "/meetings/transcript") or "").startswith(
-        "Transcript, words 201-237: word201"), value(lines, "/meetings/transcript"))
-    check("at the end, the button goes back to the start", value(lines, "/meetings/nextLabel") ==
-          "Back to the start")
+    check("More reads the next bounded page", r.ok and transcript_text(lines).startswith("word201"),
+          transcript_text(lines))
+    check("at the end, the button goes back to the start", value(lines, "/meetings/nextLabel") == "From the start")
     r = p.next_page(ctx, data, {})
     check("and back at the start it is page one again", r.ok and p._page["offset"] == 0, p._page)
     pages = [c for c in cli.calls if "transcript" in c]
@@ -360,9 +376,9 @@ def promoting(tmp: Path) -> None:
     data = p.fetch(ctx)
     lines = draw(p, data, None, ctx)
     items = {i["id"]: i["text"] for i in value(lines, "/meetings/items")}
-    check("after a refresh the row says Added, and the header counts one fewer",
-          items[a5].startswith("Added · ") and value(lines, "/meetings/note").endswith("3 action items to look at"),
-          (items, value(lines, "/meetings/note")))
+    check("after a refresh the row says Added, and the count is one fewer",
+          items[a5].startswith("Added · ") and value(lines, "/meetings/owed") == 3,
+          (items, value(lines, "/meetings/owed")))
     check("a refresh never drops a promoted task", pid in {n["id"] for n in g.nodes("Task")})
     AM.ingest_details(g, [], ctx.ids, fx.NOW + timedelta(days=9), env=ctx.env)
     check("after its meeting leaves the window, the task stays, with a bare Event and no summary",
@@ -414,10 +430,12 @@ def through_the_daemon(tmp: Path) -> None:
         d.handle_line(f'e action ks-add row="{a1}" surface="meetings"')
         check("Add to tasks through the socket promotes exactly that item", list(AM.promoted(ctx.graph)) == [a1],
               AM.promoted(ctx.graph))
+        d.handle_line('e ks-transcript meetings-txBtn surface="meetings"')
+        hud.take()
         d.handle_line('e ks-next meetings-next surface="meetings"')
         lines = hud.take()
         check("Next through the socket moves the transcript page", any(
-            x.startswith("d /meetings/transcript ") and "words 201-237" in x for x in lines), lines)
+            x.startswith("d /meetings/transcript ") and "word201" in x for x in lines), lines)
         activity = (tmp / "activity.jsonl").read_text()
         check("the activity log records the presses and never a meeting's words",
               '"action": "add"' in activity and "terms one-pager" not in activity and "Amber weekly" not in activity,
@@ -489,9 +507,100 @@ def review_fixes(d: Path) -> None:
         AM.ME_FILE = old
 
 
+def glass_bugs(tmp: Path) -> None:
+    """Caleb's screenshot of the live panel, 2026-10-11 01:56: health care by
+    name on the glass, "&apos;", a zero count, and an empty meeting drawn as
+    a stack of empty parts."""
+    import surfaces.meetings as SM
+
+    ctx = world(tmp, FakeAnarlog())
+    now = fx.NOW
+
+    def row(mid, title, hours, **kw):
+        base = {"id": mid, "title": SM.AM.clean(SM.decode(title), 60), "start": now - timedelta(hours=hours),
+                "live": False, "length": "", "who": ["Sagar Tiwari"], "summary": [], "decisions": [], "items": [],
+                "native": True, "summary_note": "", "has_lines": False, "folder": "", "meeting": {}}
+        base["private"] = SM.is_private(title)
+        base.update(kw)
+        return base
+
+    rows = [row("m1", "Chewbacca", 1), row("m2", "Caleb&apos;s psychiatric intake and medication management", 2),
+            row("m3", "Therapy", 3), row("m4", "SHIPPP", 30, summary=["Ship it"])]
+    data = {"rows": rows, "capture": {"running": False, "watching": True}, "graph_note": "", "live": None}
+    p = Meetings()
+    lines = draw(p, data, None, ctx)
+    drawn = "\n".join(lines)
+    check("health and therapy titles never reach the glass",
+          "psychiatric" not in drawn and "Therapy" not in drawn and "medication" not in drawn,
+          [x for x in lines if "sychiatric" in x or "Therapy" in x])
+    texts = [r["text"] for r in value(lines, "/meetings/rows")]
+    check("they read Private, with no names after them", texts[1] == "Private" and texts[2] == "Private", texts)
+    check("no HTML entity reaches a row", not any("&apos;" in t or "&amp;" in t for t in texts), texts)
+    check("SM.decode turns entities into characters", SM.decode("Caleb&apos;s &amp; co") == "Caleb's & co")
+    # The commit review, 2026-10-11: the check and the drawing must read
+    # one value. Every one of these drew a medical word and passed before.
+    sneaky = ["Caleb&#39;s psych&#x200b;iatric intake", "&#116;&#104;&#101;&#114;&#97;&#112;&#121;",
+              "Caleb&amp;#39;s thera&amp;#112;y", "psych\u200diatric intake", "th\u0435rapy",
+              "\uff34\uff48\uff45\uff52\uff41\uff50\uff59", "T\u200bherapy", "\u202etherapy",
+              "Dr. Kim follow-up", "THERAPY", "t\u0570erapy"]
+    leaks = [t for t in sneaky if not SM.is_private(t)]
+    check("encoded, zero-width, bidi, full-width and lookalike medical titles are all private", not leaks, leaks)
+    check("an ordinary title is not private, lookalike letters and all",
+          not SM.is_private("Chewbacca") and not SM.is_private("SHIPPP") and not SM.is_private("\u041ceeting with Ana"))
+    check("decode draws what the check read: no zero-width, no entity",
+          SM.decode("psych&#x200b;iatric") == "psychiatric" and SM.decode("a&amp;amp;b") == "a&b",
+          SM.decode("psych&#x200b;iatric"))
+    tricky = [row("x1", "Caleb&#39;s psych&#x200b;iatric intake", 4), row("x2", "th\u0435rapy", 5)]
+    trick_lines = draw(Meetings(), {**data, "rows": tricky}, None, ctx)
+    trick_texts = [r["text"] for r in value(trick_lines, "/meetings/rows")]
+    check("they draw as Private on the glass", trick_texts == ["Private", "Private"], trick_texts)
+    check("a zero to-look-at count is not drawn", value(lines, "/meetings/owed") == "", value(lines, "/meetings/owed"))
+    check("idle is a dim dot, never a lit word that reads as a call",
+          (value(lines, "/meetings/state"), value(lines, "/meetings/stateTone")) == ("Listening", "idle"),
+          value(lines, "/meetings/stateTone"))
+    rec = draw(p, {**data, "capture": {"running": True, "since": now - timedelta(minutes=4)}}, None, ctx)
+    check("recording is the one state in colour, with its word",
+          value(rec, "/meetings/stateTone") == "recording" and value(rec, "/meetings/state").startswith("Recording"),
+          value(rec, "/meetings/state"))
+    rail = value(lines, "/meetings/rows")
+    check("the rail names a day only where it changes, and spaces by the gap",
+          [r["day"] for r in rail] == ["Today", "", "", "Yesterday"] and rail[3]["gap"] > rail[1]["gap"] > 0,
+          [(r["day"], r["gap"]) for r in rail])
+    check("the glass is the default and the card is the fallback",
+          p.chrome == "glass" and SM.CHROME in ("glass", "card"))
+    # Pressing a private meeting opens it as Private with one press to show.
+    p.open(ctx, data, {"row": "m2"})
+    lines = draw(p, data, None, ctx)
+    check("an opened private meeting shows only Private and a Show press",
+          value(lines, "/meetings/head") == "Private" and value(lines, "/meetings/revealLabel") == "Show"
+          and value(lines, "/meetings/summary") == [] and "psychiatric" not in "\n".join(lines),
+          (value(lines, "/meetings/head"), value(lines, "/meetings/revealLabel")))
+    p.reveal(ctx, data, {})
+    lines = draw(p, data, None, ctx)
+    check("Show reveals it in the card, and the list row stays Private",
+          "psychiatric" in str(value(lines, "/meetings/head")) and value(lines, "/meetings/rows")[1]["text"] == "Private",
+          value(lines, "/meetings/head"))
+    p.open(ctx, data, {"row": "m3"})
+    check("opening another meeting hides it again", p.revealed == "")
+    # A meeting with nothing in it is one quiet line.
+    p.open(ctx, data, {"row": "m1"})
+    lines = draw(p, data, None, ctx)
+    check("an empty meeting is one quiet line and no empty parts",
+          value(lines, "/meetings/summary") == [{"id": "s0", "text": SM.EMPTY_LINE}]
+          and value(lines, "/meetings/txLabel") == "" and value(lines, "/meetings/itemsCaption") == ""
+          and value(lines, "/meetings/whyLabel") == "" and value(lines, "/meetings/transcript") == [],
+          [(k, value(lines, f"/meetings/{k}")) for k in ("summary", "txLabel", "whyLabel", "transcript")])
+    p.open(ctx, data, {"row": "m4"})
+    lines = draw(p, data, None, ctx)
+    check("a meeting with a summary and no transcript offers no Transcript press",
+          value(lines, "/meetings/summary")[0]["text"] == "Ship it" and value(lines, "/meetings/txLabel") == "",
+          value(lines, "/meetings/txLabel"))
+
+
 def main() -> int:
     helpers()
-    for fn in (first_run, reading, graphing, promoting, row_limit, through_the_daemon, review_fixes):
+    for fn in (first_run, reading, graphing, promoting, row_limit, through_the_daemon, review_fixes,
+               glass_bugs):
         with tempfile.TemporaryDirectory() as d:
             fn(Path(d))
     print("all passed" if not failed else f"{failed} failed")

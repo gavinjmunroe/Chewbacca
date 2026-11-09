@@ -1,0 +1,27 @@
+{
+  "skill": "venture-validation",
+  "cases": [
+    {
+      "prompt": "Is this startup idea any good: an app that splits rent between roommates?",
+      "expect_tools": [
+        "venture-validation"
+      ],
+      "why": "judging an idea runs the validation order, not an opinion"
+    },
+    {
+      "prompt": "Write customer interview questions for my product",
+      "expect_tools": [
+        "venture-validation"
+      ],
+      "why": "interview questions follow the Mom Test rules"
+    },
+    {
+      "prompt": "Our ad got 2% CTR, 18% leads and 4% reservations on $1500, is it working?",
+      "expect_tools": [
+        "venture-validation",
+        "funnel.py"
+      ],
+      "why": "ad test numbers are read by the tool, not by hand"
+    }
+  ]
+}

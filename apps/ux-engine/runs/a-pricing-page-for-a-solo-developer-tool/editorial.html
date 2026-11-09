@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing — Devkit</title>
+    <style>
+      :root {
+        --serif: Georgia, "Times New Roman", serif;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI",
+          sans-serif;
+        --ink: #0e0e0c;
+        --mid: #5a5a54;
+        --dim: #9a9a90;
+        --rule: #d8d8d0;
+        --paper: #f8f7f4;
+        --cream: #f2f1ec;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        font-size: 18px;
+      }
+
+      body {
+        font-family: var(--serif);
+        color: var(--ink);
+        background: var(--paper);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Masthead ── */
+      .masthead {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 1.6rem 4rem;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .masthead-wordmark {
+        font-family: var(--serif);
+        font-size: 0.95rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 400;
+      }
+
+      .masthead-nav {
+        display: flex;
+        gap: 2.4rem;
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+      }
+
+      .masthead-nav a {
+        text-decoration: none;
+        color: var(--mid);
+        transition: color 0.12s;
+      }
+
+      .masthead-nav a:hover {
+        color: var(--ink);
+      }
+
+      /* ── Page body ── */
+      .page-body {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 0 4rem;
+      }
+
+      /* ── Left / main editorial column ── */
+      .editorial {
+        padding: 5.5rem 5rem 5.5rem 0;
+        border-right: 1px solid var(--rule);
+      }
+
+      /* Volume line */
+      .vol-line {
+        font-family: var(--sans);
+        font-size: 0.68rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--dim);
+        margin-bottom: 2.2rem;
+      }
+
+      /* Display headline */
+      .display-hed {
+        font-family: var(--serif);
+        font-size: clamp(3.8rem, 5.5vw, 7.2rem);
+        font-weight: 400;
+        line-height: 0.93;
+        letter-spacing: -0.025em;
+        margin-bottom: 3rem;
+      }
+
+      .display-hed em {
+        font-style: italic;
+      }
+
+      /* Standfirst */
+      .standfirst {
+        font-family: var(--serif);
+        font-size: 1.15rem;
+        line-height: 1.65;
+        color: var(--mid);
+        max-width: 52ch;
+        margin-bottom: 4.5rem;
+        padding-left: 1.1rem;
+        border-left: 2.5px solid var(--ink);
+      }
+
+      /* ── Tier rows ── */
+      .tiers {
+        border-top: 1.5px solid var(--ink);
+      }
+
+      .tier {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 3.5rem;
+        padding: 3.2rem 0;
+        border-bottom: 1px solid var(--rule);
+        align-items: start;
+        position: relative;
+      }
+
+      /* Featured tier: reverse out */
+      .tier--featured {
+        background: var(--ink);
+        color: var(--paper);
+        margin: 0 -5rem 0 -5rem;
+        padding: 3.2rem 5rem;
+        border-bottom: none;
+        border-top: none;
+      }
+
+      /* after featured, don't double-rule */
+      .tier--featured + .tier {
+        border-top: 1px solid var(--rule);
+      }
+
+      .tier-left {
+      }
+
+      .tier-tag {
+        font-family: var(--sans);
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--dim);
+        margin-bottom: 0.7rem;
+      }
+
+      .tier--featured .tier-tag {
+        color: #888;
+      }
+
+      .tier-price {
+        font-family: var(--serif);
+        font-size: 3.8rem;
+        font-weight: 400;
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+
+      .tier-price sup {
+        font-size: 1.1rem;
+        vertical-align: top;
+        margin-top: 0.5rem;
+        display: inline-block;
+        letter-spacing: 0;
+      }
+
+      .tier-cadence {
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        color: var(--dim);
+        margin-top: 0.35rem;
+        line-height: 1.4;
+      }
+
+      .tier--featured .tier-cadence {
+        color: #888;
+      }
+
+      .tier-right {
+      }
+
+      .tier-name {
+        font-family: var(--serif);
+        font-size: 1.55rem;
+        font-style: italic;
+        font-weight: 400;
+        margin-bottom: 0.7rem;
+      }
+
+      .tier-body {
+        font-family: var(--serif);
+        font-size: 1rem;
+        line-height: 1.72;
+        color: #3a3a38;
+        max-width: 50ch;
+        margin-bottom: 1.4rem;
+      }
+
+      .tier--featured .tier-body {
+        color: #b8b8b0;
+      }
+
+      .tier-list {
+        list-style: none;
+        font-family: var(--sans);
+        font-size: 0.8rem;
+        line-height: 1.95;
+        color: var(--mid);
+        margin-bottom: 1.8rem;
+      }
+
+      .tier--featured .tier-list {
+        color: #888;
+      }
+
+      .tier-list li {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+      }
+
+      .tier-list li::before {
+        content: "—";
+        flex-shrink: 0;
+        color: var(--dim);
+      }
+
+      .tier--featured .tier-list li::before {
+        color: #666;
+      }
+
+      /* CTA: underline link */
+      .cta-link {
+        font-family: var(--sans);
+        font-size: 0.75rem;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: var(--ink);
+        border-bottom: 1.5px solid var(--ink);
+        padding-bottom: 1px;
+        transition: opacity 0.14s;
+      }
+
+      .cta-link:hover {
+        opacity: 0.45;
+      }
+
+      /* CTA: outline rect — NOT a pill, NOT filled */
+      .cta-rect {
+        display: inline-block;
+        font-family: var(--sans);
+        font-size: 0.75rem;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: var(--paper);
+        border: 1.5px solid var(--paper);
+        padding: 0.52rem 1.3rem;
+        border-radius: 0;
+        transition:
+          background 0.14s,
+          color 0.14s;
+      }
+
+      .cta-rect:hover {
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      /* ── Right / sidebar ── */
+      .sidebar {
+        padding: 5.5rem 0 5.5rem 3.2rem;
+      }
+
+      .sidebar-kicker {
+        font-family: var(--sans);
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+        margin-bottom: 0.6rem;
+      }
+
+      .sidebar-hed {
+        font-family: var(--serif);
+        font-size: 1.25rem;
+        font-weight: 400;
+        line-height: 1.35;
+        margin-bottom: 1.2rem;
+      }
+
+      .sidebar-body {
+        font-family: var(--serif);
+        font-size: 0.88rem;
+        line-height: 1.72;
+        color: var(--mid);
+      }
+
+      .sidebar-hr {
+        border: none;
+        border-top: 1px solid var(--rule);
+        margin: 2.4rem 0;
+      }
+
+      .pull-quote {
+        font-family: var(--serif);
+        font-size: 1.35rem;
+        font-style: italic;
+        line-height: 1.35;
+        color: var(--ink);
+        margin-bottom: 0.6rem;
+      }
+
+      .pull-attr {
+        font-family: var(--sans);
+        font-size: 0.7rem;
+        letter-spacing: 0.04em;
+        color: var(--dim);
+      }
+
+      /* Compare table */
+      .compare {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: var(--sans);
+        font-size: 0.76rem;
+        margin-top: 1rem;
+      }
+
+      .compare thead th {
+        text-align: left;
+        padding: 0 0 0.55rem;
+        border-bottom: 1.5px solid var(--ink);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .compare thead th:not(:first-child) {
+        text-align: right;
+      }
+
+      .compare tbody td {
+        padding: 0.55rem 0;
+        border-bottom: 1px solid var(--rule);
+        color: var(--mid);
+        vertical-align: middle;
+      }
+
+      .compare tbody td:not(:first-child) {
+        text-align: right;
+        color: var(--ink);
+      }
+
+      .check {
+        color: var(--ink);
+      }
+      .dash {
+        color: var(--rule);
+      }
+
+      .sidebar-fine {
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        line-height: 1.65;
+        color: var(--dim);
+      }
+
+      /* ── FAQ band ── */
+      .faq-band {
+        border-top: 2px solid var(--ink);
+        padding: 5rem 4rem;
+        max-width: 1380px;
+        margin: 0 auto;
+      }
+
+      .faq-eyebrow {
+        font-family: var(--sans);
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+        margin-bottom: 3.2rem;
+      }
+
+      .faq-grid {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 6rem;
+      }
+
+      .faq-item {
+        margin-bottom: 2.8rem;
+      }
+
+      .faq-q {
+        font-family: var(--serif);
+        font-size: 1.05rem;
+        font-weight: 400;
+        margin-bottom: 0.45rem;
+      }
+
+      .faq-a {
+        font-family: var(--serif);
+        font-size: 0.9rem;
+        line-height: 1.7;
+        color: var(--mid);
+        max-width: 48ch;
+      }
+
+      /* ── Footer ── */
+      .footer {
+        border-top: 1px solid var(--rule);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.8rem 4rem;
+        max-width: 1380px;
+        margin: 0 auto;
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        color: var(--dim);
+      }
+
+      .footer a {
+        color: var(--dim);
+        text-decoration: none;
+      }
+
+      .footer a:hover {
+        color: var(--ink);
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 1.6rem;
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 960px) {
+        .masthead {
+          padding: 1.4rem 1.8rem;
+        }
+
+        .page-body {
+          grid-template-columns: 1fr;
+          padding: 0 1.8rem;
+        }
+
+        .editorial {
+          padding: 3.5rem 0;
+          border-right: none;
+          border-bottom: 1px solid var(--rule);
+        }
+
+        .tier {
+          grid-template-columns: 1fr;
+          gap: 1.4rem;
+        }
+
+        .tier--featured {
+          margin: 0 -1.8rem;
+          padding: 3rem 1.8rem;
+        }
+
+        .sidebar {
+          padding: 3.5rem 0;
+        }
+
+        .faq-band {
+          padding: 3.5rem 1.8rem;
+        }
+
+        .faq-grid {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+
+        .footer {
+          padding: 1.6rem 1.8rem;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.6rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <span class="masthead-wordmark">Devkit</span>
+      <nav class="masthead-nav">
+        <a href="#">Docs</a>
+        <a href="#">Changelog</a>
+        <a href="#">GitHub</a>
+        <a href="#">Sign in</a>
+      </nav>
+    </header>
+
+    <div class="page-body">
+      <!-- Left: editorial -->
+      <main class="editorial">
+        <p class="vol-line">Pricing — as of September 2026</p>
+
+        <h1 class="display-hed">
+          One tool.<br />
+          <em>Three ways</em><br />
+          to own it.
+        </h1>
+
+        <p class="standfirst">
+          Most pricing pages try to convince you to upgrade. This one just
+          describes what each tier is actually for, so you pick once and stop
+          thinking about it.
+        </p>
+
+        <div class="tiers">
+          <!-- Free -->
+          <div class="tier">
+            <div class="tier-left">
+              <div class="tier-tag">Free</div>
+              <div class="tier-price">$0</div>
+              <div class="tier-cadence">forever,<br />no card</div>
+            </div>
+            <div class="tier-right">
+              <div class="tier-name">Local, no account</div>
+              <p class="tier-body">
+                The full tool running entirely on your machine. Nothing phones
+                home. Works offline the same as online. Designed for the project
+                that doesn't need to move anywhere.
+              </p>
+              <ul class="tier-list">
+                <li>Unlimited local projects</li>
+                <li>Full CLI and editor integrations</li>
+                <li>Local persistence, nothing synced</li>
+                <li>Community support on GitHub</li>
+              </ul>
+              <a href="#" class="cta-link">Download and start →</a>
+            </div>
+          </div>
+
+          <!-- Pro / featured -->
+          <div class="tier tier--featured">
+            <div class="tier-left">
+              <div class="tier-tag">Pro</div>
+              <div class="tier-price"><sup>$</sup>12</div>
+              <div class="tier-cadence">per month,<br />billed annually</div>
+            </div>
+            <div class="tier-right">
+              <div class="tier-name">Sync, anywhere you sit</div>
+              <p class="tier-body">
+                For when you move between machines, want a backup that isn't a
+                hard drive, or need to browse history from a browser. Everything
+                in Free, plus encrypted sync and the web dashboard.
+              </p>
+              <ul class="tier-list">
+                <li>Encrypted sync across all your machines</li>
+                <li>Web dashboard for searching history</li>
+                <li>Priority email support, same-day response</li>
+                <li>Beta access to features before release</li>
+                <li>Export to any format at any time</li>
+              </ul>
+              <a href="#" class="cta-rect">Start free for 14 days</a>
+            </div>
+          </div>
+
+          <!-- Team -->
+          <div class="tier">
+            <div class="tier-left">
+              <div class="tier-tag">Team</div>
+              <div class="tier-price"><sup>$</sup>9</div>
+              <div class="tier-cadence">per seat / month,<br />no minimum</div>
+            </div>
+            <div class="tier-right">
+              <div class="tier-name">Shared workspace</div>
+              <p class="tier-body">
+                For two to twenty people who want shared config, a joint
+                workspace, or an audit log. Each person has their own account.
+                No enterprise contracts, no annual commitment required.
+              </p>
+              <ul class="tier-list">
+                <li>Shared workspace with per-member permissions</li>
+                <li>Full audit log and activity history</li>
+                <li>SSO and SCIM provisioning</li>
+                <li>Slack and Linear integrations</li>
+                <li>Dedicated onboarding call included</li>
+              </ul>
+              <a href="#" class="cta-link">Talk to us about your team →</a>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right: sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-kicker">Worth knowing</div>
+        <h2 class="sidebar-hed">Built for one person making something real.</h2>
+        <p class="sidebar-body">
+          The free tier has no usage cap because local compute is yours. Pro
+          pricing covers the actual cost of reliable sync — no VC math baked in.
+        </p>
+
+        <hr class="sidebar-hr" />
+
+        <blockquote class="pull-quote">
+          "Been on Pro eight months. Haven't thought about it once."
+        </blockquote>
+        <p class="pull-attr">— A. Kowalski, independent developer</p>
+
+        <hr class="sidebar-hr" />
+
+        <div class="sidebar-kicker">At a glance</div>
+        <table class="compare">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Free</th>
+              <th>Pro</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Local, offline use</td>
+              <td class="check">✓</td>
+              <td class="check">✓</td>
+            </tr>
+            <tr>
+              <td>Encrypted sync</td>
+              <td class="dash">—</td>
+              <td class="check">✓</td>
+            </tr>
+            <tr>
+              <td>Web dashboard</td>
+              <td class="dash">—</td>
+              <td class="check">✓</td>
+            </tr>
+            <tr>
+              <td>Beta features</td>
+              <td class="dash">—</td>
+              <td class="check">✓</td>
+            </tr>
+            <tr>
+              <td>Support</td>
+              <td>GitHub</td>
+              <td>Email</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <hr class="sidebar-hr" />
+
+        <p class="sidebar-fine">
+          Prices in USD. Annual billing saves two months versus monthly. Monthly
+          available at $15/mo for Pro. Cancel anytime; annual plans are
+          non-refundable. Student discount: 50% off Pro with a .edu address,
+          applied from account settings.
+        </p>
+      </aside>
+    </div>
+
+    <!-- FAQ band -->
+    <section class="faq-band">
+      <p class="faq-eyebrow">Common questions</p>
+      <div class="faq-grid">
+        <div>
+          <div class="faq-item">
+            <h3 class="faq-q">What happens to my data if I cancel Pro?</h3>
+            <p class="faq-a">
+              Your local data stays local — nothing is deleted. Sync pauses. You
+              have 90 days to export anything stored in the cloud before it is
+              removed.
+            </p>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q">Can I use this on a machine I don't own?</h3>
+            <p class="faq-a">
+              The free tier works anywhere without an account. Pro requires a
+              login on shared or employer machines. Data stays encrypted and
+              tied to your account, not the machine.
+            </p>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q">Is the core open source?</h3>
+            <p class="faq-a">
+              The CLI is MIT licensed and on GitHub. The sync infrastructure and
+              web dashboard are closed. Contributions to the core are welcome.
+            </p>
+          </div>
+        </div>
+        <div>
+          <div class="faq-item">
+            <h3 class="faq-q">How does Team billing work?</h3>
+            <p class="faq-a">
+              One invoice per month for the number of active seats. Adding a
+              seat mid-month is prorated. There is no minimum seat count and no
+              annual commitment required.
+            </p>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q">Can I switch plans mid-year?</h3>
+            <p class="faq-a">
+              Yes. Upgrades take effect immediately and are prorated. Downgrades
+              take effect at the next billing date.
+            </p>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q">Do you offer refunds?</h3>
+            <p class="faq-a">
+              Annual plans are non-refundable. Monthly plans can be cancelled
+              before the next billing date for a full credit toward a future
+              purchase.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>© 2026 Devkit</span>
+      <div class="footer-links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Status</a>
+        <a href="#">Contact</a>
+      </div>
+    </footer>
+  </body>
+</html>

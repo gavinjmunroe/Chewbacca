@@ -1,0 +1,5198 @@
+{
+  "app" : "Font Book",
+  "bundle" : "com.apple.FontBook",
+  "elements" : [
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        14,
+        54,
+        31,
+        14
+      ],
+      "i" : 0,
+      "label" : "Fonts",
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXHeading"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        77,
+        118,
+        16
+      ],
+      "i" : 1,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "All Fonts"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        105,
+        118,
+        16
+      ],
+      "i" : 2,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "My Fonts"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        14,
+        142,
+        60,
+        14
+      ],
+      "i" : 3,
+      "label" : "Languages",
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXHeading"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        165,
+        118,
+        16
+      ],
+      "i" : 4,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "English"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        14,
+        202,
+        61,
+        14
+      ],
+      "i" : 5,
+      "label" : "Collections",
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXHeading"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        225,
+        118,
+        16
+      ],
+      "i" : 6,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Fun"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        253,
+        118,
+        16
+      ],
+      "i" : 7,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        7,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Modern"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        281,
+        118,
+        16
+      ],
+      "i" : 8,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "PDF"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        309,
+        118,
+        16
+      ],
+      "i" : 9,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        9,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Traditional"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        337,
+        118,
+        16
+      ],
+      "i" : 10,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        10,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Web"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        14,
+        374,
+        97,
+        14
+      ],
+      "i" : 11,
+      "label" : "Smart Collections",
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        11,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXHeading"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        16,
+        397,
+        118,
+        16
+      ],
+      "i" : 12,
+      "path" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        12,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Fixed Width"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        78,
+        115,
+        115
+      ],
+      "i" : 13,
+      "label" : "Show Academy Engraved LET",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        201,
+        110,
+        66,
+        64
+      ],
+      "i" : 14,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        219,
+        170,
+        31,
+        13
+      ],
+      "i" : 15,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        198,
+        200,
+        72,
+        28
+      ],
+      "i" : 16,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "Academy Engraved LET"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        74,
+        115,
+        119
+      ],
+      "i" : 17,
+      "label" : "Show Adelle Sans Devanagari",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        349,
+        74,
+        43,
+        106
+      ],
+      "i" : 18,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "क"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        352,
+        170,
+        37,
+        13
+      ],
+      "i" : 19,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "7 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        338,
+        200,
+        64,
+        28
+      ],
+      "i" : 20,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      "role" : "AXStaticText",
+      "value" : "Adelle Sans Devanagari"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        78,
+        115,
+        115
+      ],
+      "i" : 21,
+      "label" : "Show AkayaKanadaka",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        4
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        493,
+        95,
+        29,
+        98
+      ],
+      "i" : 22,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ಕ"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        492,
+        170,
+        31,
+        13
+      ],
+      "i" : 23,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        4,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        466,
+        201,
+        82,
+        26
+      ],
+      "i" : 24,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      "role" : "AXStaticText",
+      "value" : "AkayaKanadaka"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        78,
+        115,
+        115
+      ],
+      "i" : 25,
+      "label" : "Show AkayaTelivigala",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        6
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        629,
+        95,
+        27,
+        98
+      ],
+      "i" : 26,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        6,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "క"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        628,
+        170,
+        31,
+        13
+      ],
+      "i" : 27,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        6,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        603,
+        201,
+        79,
+        26
+      ],
+      "i" : 28,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        7
+      ],
+      "role" : "AXStaticText",
+      "value" : "AkayaTelivigala"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        78,
+        115,
+        115
+      ],
+      "i" : 29,
+      "label" : "Show Al Bayan",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        8
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        722,
+        78,
+        115,
+        115
+      ],
+      "i" : 30,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        8,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "2 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        757,
+        201,
+        45,
+        26
+      ],
+      "i" : 31,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        9
+      ],
+      "role" : "AXStaticText",
+      "value" : "Al Bayan"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        78,
+        115,
+        115
+      ],
+      "i" : 32,
+      "label" : "Show Al Nile",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        10
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        859,
+        78,
+        115,
+        115
+      ],
+      "i" : 33,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        10,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "2 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        899,
+        201,
+        34,
+        26
+      ],
+      "i" : 34,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        11
+      ],
+      "role" : "AXStaticText",
+      "value" : "Al Nile"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        245,
+        115,
+        115
+      ],
+      "i" : 35,
+      "label" : "Show Al Tarikh",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        12
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        177,
+        245,
+        115,
+        115
+      ],
+      "i" : 36,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        12,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        211,
+        368,
+        45,
+        26
+      ],
+      "i" : 37,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        13
+      ],
+      "role" : "AXStaticText",
+      "value" : "Al Tarikh"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        245,
+        115,
+        115
+      ],
+      "i" : 38,
+      "label" : "Show American Typewriter",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        14
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        334,
+        264,
+        72,
+        64
+      ],
+      "i" : 39,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        14,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        352,
+        337,
+        37,
+        13
+      ],
+      "i" : 40,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        14,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "7 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        316,
+        368,
+        108,
+        26
+      ],
+      "i" : 41,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        15
+      ],
+      "role" : "AXStaticText",
+      "value" : "American Typewriter"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        245,
+        115,
+        115
+      ],
+      "i" : 42,
+      "label" : "Show Andale Mono",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        16
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        474,
+        264,
+        66,
+        62
+      ],
+      "i" : 43,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        16,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        492,
+        337,
+        31,
+        13
+      ],
+      "i" : 44,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        16,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        473,
+        368,
+        69,
+        26
+      ],
+      "i" : 45,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        17
+      ],
+      "role" : "AXStaticText",
+      "value" : "Andale Mono"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        245,
+        115,
+        115
+      ],
+      "i" : 46,
+      "label" : "Show Annai MN",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        18
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        608,
+        252,
+        69,
+        83
+      ],
+      "i" : 47,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        18,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        628,
+        337,
+        31,
+        13
+      ],
+      "i" : 48,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        18,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        618,
+        368,
+        50,
+        26
+      ],
+      "i" : 49,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        19
+      ],
+      "role" : "AXStaticText",
+      "value" : "Annai MN"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        245,
+        115,
+        115
+      ],
+      "i" : 50,
+      "label" : "Show Apple Braille",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        20
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        761,
+        271,
+        37,
+        57
+      ],
+      "i" : 51,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        20,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "⠝"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        761,
+        337,
+        38,
+        13
+      ],
+      "i" : 52,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        20,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        747,
+        368,
+        66,
+        26
+      ],
+      "i" : 53,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        21
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple Braille"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        245,
+        115,
+        115
+      ],
+      "i" : 54,
+      "label" : "Show Apple Chancery",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        22
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        882,
+        253,
+        67,
+        86
+      ],
+      "i" : 55,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        22,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        901,
+        337,
+        31,
+        13
+      ],
+      "i" : 56,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        22,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        874,
+        368,
+        83,
+        26
+      ],
+      "i" : 57,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        23
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple Chancery"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        412,
+        115,
+        115
+      ],
+      "i" : 58,
+      "label" : "Show Apple Color Emoji",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        24
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        207,
+        426,
+        55,
+        72
+      ],
+      "i" : 59,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        24,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "😀"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        219,
+        504,
+        31,
+        12
+      ],
+      "i" : 60,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        24,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        187,
+        535,
+        93,
+        26
+      ],
+      "i" : 61,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        25
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple Color Emoji"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        412,
+        115,
+        115
+      ],
+      "i" : 62,
+      "label" : "Show Apple LiGothic",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        26
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        313,
+        412,
+        115,
+        115
+      ],
+      "i" : 63,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        26,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        332,
+        535,
+        77,
+        26
+      ],
+      "i" : 64,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        27
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple LiGothic"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        412,
+        115,
+        115
+      ],
+      "i" : 65,
+      "label" : "Show Apple LiSung",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        28
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        450,
+        412,
+        115,
+        115
+      ],
+      "i" : 66,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        28,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        472,
+        535,
+        69,
+        26
+      ],
+      "i" : 67,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        29
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple LiSung"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        412,
+        115,
+        115
+      ],
+      "i" : 68,
+      "label" : "Show Apple SD Gothic Neo",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        30
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        619,
+        432,
+        47,
+        65
+      ],
+      "i" : 69,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        30,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "동"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        624,
+        504,
+        38,
+        12
+      ],
+      "i" : 70,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        30,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "9 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        588,
+        535,
+        110,
+        26
+      ],
+      "i" : 71,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        31
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple SD Gothic Neo"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        412,
+        115,
+        115
+      ],
+      "i" : 72,
+      "label" : "Show Apple Symbols",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        32
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        730,
+        445,
+        99,
+        50
+      ],
+      "i" : 73,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        32,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "☎☺"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        764,
+        504,
+        31,
+        12
+      ],
+      "i" : 74,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        32,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        740,
+        535,
+        78,
+        26
+      ],
+      "i" : 75,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        33
+      ],
+      "role" : "AXStaticText",
+      "value" : "Apple Symbols"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        412,
+        115,
+        115
+      ],
+      "i" : 76,
+      "label" : "Show AppleGothic",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        34
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        889,
+        432,
+        55,
+        67
+      ],
+      "i" : 77,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        34,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "동"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        901,
+        504,
+        31,
+        12
+      ],
+      "i" : 78,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        34,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        884,
+        535,
+        65,
+        26
+      ],
+      "i" : 79,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        35
+      ],
+      "role" : "AXStaticText",
+      "value" : "AppleGothic"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        579,
+        115,
+        115
+      ],
+      "i" : 80,
+      "label" : "Show AppleMyungjo",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        36
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        207,
+        600,
+        55,
+        65
+      ],
+      "i" : 81,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        36,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "동"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        219,
+        671,
+        31,
+        13
+      ],
+      "i" : 82,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        36,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        196,
+        702,
+        75,
+        26
+      ],
+      "i" : 83,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        37
+      ],
+      "role" : "AXStaticText",
+      "value" : "AppleMyungjo"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        579,
+        115,
+        115
+      ],
+      "i" : 84,
+      "label" : "Show Arial",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        38
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        337,
+        598,
+        67,
+        62
+      ],
+      "i" : 85,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        38,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        352,
+        671,
+        38,
+        13
+      ],
+      "i" : 86,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        38,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "4 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        359,
+        702,
+        23,
+        26
+      ],
+      "i" : 87,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        39
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        579,
+        115,
+        115
+      ],
+      "i" : 88,
+      "label" : "Show Arial Black",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        40
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        467,
+        588,
+        79,
+        77
+      ],
+      "i" : 89,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        40,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        492,
+        671,
+        31,
+        13
+      ],
+      "i" : 90,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        40,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        479,
+        702,
+        55,
+        26
+      ],
+      "i" : 91,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        41
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Black"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        579,
+        115,
+        115
+      ],
+      "i" : 92,
+      "label" : "Show Arial Hebrew",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        42
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        628,
+        608,
+        31,
+        58
+      ],
+      "i" : 93,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        42,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "א"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        624,
+        671,
+        38,
+        13
+      ],
+      "i" : 94,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        42,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "3 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        609,
+        702,
+        67,
+        26
+      ],
+      "i" : 95,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        43
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Hebrew"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        579,
+        115,
+        115
+      ],
+      "i" : 96,
+      "label" : "Show Arial Hebrew Scholar",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        44
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        764,
+        608,
+        31,
+        58
+      ],
+      "i" : 97,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        44,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "א"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        761,
+        671,
+        38,
+        13
+      ],
+      "i" : 98,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        44,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "3 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        725,
+        702,
+        110,
+        26
+      ],
+      "i" : 99,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        45
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Hebrew Scholar"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        579,
+        115,
+        115
+      ],
+      "i" : 100,
+      "label" : "Show Arial Narrow",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        46
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        889,
+        597,
+        55,
+        63
+      ],
+      "i" : 101,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        46,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        897,
+        671,
+        38,
+        13
+      ],
+      "i" : 102,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        46,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "4 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        884,
+        702,
+        64,
+        26
+      ],
+      "i" : 103,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        47
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Narrow"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        746,
+        115,
+        115
+      ],
+      "i" : 104,
+      "label" : "Show Arial Rounded MT Bold",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        48
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        198,
+        763,
+        72,
+        64
+      ],
+      "i" : 105,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        48,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        219,
+        838,
+        31,
+        13
+      ],
+      "i" : 106,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        48,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        174,
+        869,
+        120,
+        26
+      ],
+      "i" : 107,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        49
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Rounded MT Bold"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        746,
+        115,
+        115
+      ],
+      "i" : 108,
+      "label" : "Show Arial Unicode MS",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        50
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        337,
+        756,
+        67,
+        74
+      ],
+      "i" : 109,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        50,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        355,
+        838,
+        31,
+        13
+      ],
+      "i" : 110,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        50,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        326,
+        869,
+        90,
+        26
+      ],
+      "i" : 111,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        51
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arial Unicode MS"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        746,
+        115,
+        115
+      ],
+      "i" : 112,
+      "label" : "Show Arima Koshi",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        52
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        479,
+        756,
+        57,
+        90
+      ],
+      "i" : 113,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        52,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ക"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        488,
+        838,
+        38,
+        13
+      ],
+      "i" : 114,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        52,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "8 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        476,
+        869,
+        62,
+        26
+      ],
+      "i" : 115,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        53
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arima Koshi"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        746,
+        115,
+        115
+      ],
+      "i" : 116,
+      "label" : "Show Arima Madurai",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        54
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        621,
+        756,
+        44,
+        90
+      ],
+      "i" : 117,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        54,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "க"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        624,
+        838,
+        38,
+        13
+      ],
+      "i" : 118,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        54,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "8 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        605,
+        869,
+        76,
+        26
+      ],
+      "i" : 119,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        55
+      ],
+      "role" : "AXStaticText",
+      "value" : "Arima Madurai"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        746,
+        115,
+        115
+      ],
+      "i" : 120,
+      "label" : "Show Avenir",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        56
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        747,
+        760,
+        66,
+        75
+      ],
+      "i" : 121,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        56,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        758,
+        838,
+        42,
+        13
+      ],
+      "i" : 122,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        56,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "12 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        763,
+        869,
+        32,
+        26
+      ],
+      "i" : 123,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        57
+      ],
+      "role" : "AXStaticText",
+      "value" : "Avenir"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        746,
+        115,
+        115
+      ],
+      "i" : 124,
+      "label" : "Show Avenir Next",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        58
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        882,
+        760,
+        67,
+        75
+      ],
+      "i" : 125,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        58,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        895,
+        838,
+        42,
+        13
+      ],
+      "i" : 126,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        58,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "12 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        886,
+        869,
+        60,
+        26
+      ],
+      "i" : 127,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        59
+      ],
+      "role" : "AXStaticText",
+      "value" : "Avenir Next"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        913,
+        115,
+        115
+      ],
+      "i" : 128,
+      "label" : "Show Avenir Next Condensed",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        60
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        210,
+        927,
+        48,
+        75
+      ],
+      "i" : 129,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        60,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Aa"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        213,
+        1005,
+        42,
+        13
+      ],
+      "i" : 130,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        60,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "12 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        203,
+        1035,
+        63,
+        28
+      ],
+      "i" : 131,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        61
+      ],
+      "role" : "AXStaticText",
+      "value" : "Avenir Next Condensed"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        913,
+        115,
+        115
+      ],
+      "i" : 132,
+      "label" : "Show Ayuthaya",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        62
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        354,
+        924,
+        33,
+        76
+      ],
+      "i" : 133,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        62,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ก"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        355,
+        1005,
+        31,
+        13
+      ],
+      "i" : 134,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        62,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        347,
+        1036,
+        48,
+        26
+      ],
+      "i" : 135,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        63
+      ],
+      "role" : "AXStaticText",
+      "value" : "Ayuthaya"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        913,
+        115,
+        115
+      ],
+      "i" : 136,
+      "label" : "Show Baghdad",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        64
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        450,
+        913,
+        115,
+        115
+      ],
+      "i" : 137,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        64,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        484,
+        1036,
+        47,
+        26
+      ],
+      "i" : 138,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        65
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baghdad"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        913,
+        115,
+        115
+      ],
+      "i" : 139,
+      "label" : "Show Bai Jamjuree",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        66
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        627,
+        927,
+        33,
+        69
+      ],
+      "i" : 140,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        66,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ก"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        622,
+        1005,
+        42,
+        13
+      ],
+      "i" : 141,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        66,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "12 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        609,
+        1036,
+        67,
+        26
+      ],
+      "i" : 142,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        67
+      ],
+      "role" : "AXStaticText",
+      "value" : "Bai Jamjuree"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        913,
+        115,
+        115
+      ],
+      "i" : 143,
+      "label" : "Show Baloo 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        68
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        758,
+        924,
+        43,
+        87
+      ],
+      "i" : 144,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        68,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "क"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        761,
+        1005,
+        38,
+        13
+      ],
+      "i" : 145,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        68,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        760,
+        1036,
+        39,
+        26
+      ],
+      "i" : 146,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        69
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        913,
+        115,
+        115
+      ],
+      "i" : 147,
+      "label" : "Show Baloo Bhai 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        70
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        901,
+        924,
+        31,
+        88
+      ],
+      "i" : 148,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        70,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ક"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        897,
+        1005,
+        38,
+        13
+      ],
+      "i" : 149,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        70,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        883,
+        1036,
+        65,
+        26
+      ],
+      "i" : 150,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        71
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Bhai 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        1080,
+        115,
+        115
+      ],
+      "i" : 151,
+      "label" : "Show Baloo Bhaijaan",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        72
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        177,
+        1080,
+        115,
+        115
+      ],
+      "i" : 152,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        72,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        196,
+        1203,
+        77,
+        26
+      ],
+      "i" : 153,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        73
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Bhaijaan"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        1080,
+        115,
+        115
+      ],
+      "i" : 154,
+      "label" : "Show Baloo Bhaina 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        74
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        348,
+        1084,
+        45,
+        110
+      ],
+      "i" : 155,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        74,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "କ"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        352,
+        1172,
+        38,
+        13
+      ],
+      "i" : 156,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        74,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        332,
+        1203,
+        78,
+        26
+      ],
+      "i" : 157,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        75
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Bhaina 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        1080,
+        115,
+        115
+      ],
+      "i" : 158,
+      "label" : "Show Baloo Chettan 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        76
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        481,
+        1091,
+        53,
+        79
+      ],
+      "i" : 159,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        76,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ക"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        488,
+        1172,
+        38,
+        13
+      ],
+      "i" : 160,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        76,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        465,
+        1203,
+        84,
+        26
+      ],
+      "i" : 161,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        77
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Chettan 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        1080,
+        115,
+        115
+      ],
+      "i" : 162,
+      "label" : "Show Baloo Da 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        78
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        623,
+        1089,
+        41,
+        92
+      ],
+      "i" : 163,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        78,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ক"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        624,
+        1172,
+        38,
+        13
+      ],
+      "i" : 164,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        78,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        615,
+        1203,
+        57,
+        26
+      ],
+      "i" : 165,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        79
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Da 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        1080,
+        115,
+        115
+      ],
+      "i" : 166,
+      "label" : "Show Baloo Paaji 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        80
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        763,
+        1086,
+        33,
+        96
+      ],
+      "i" : 167,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        80,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ਕ"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        761,
+        1172,
+        38,
+        13
+      ],
+      "i" : 168,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        80,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        746,
+        1203,
+        67,
+        26
+      ],
+      "i" : 169,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        81
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Paaji 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        1080,
+        115,
+        115
+      ],
+      "i" : 170,
+      "label" : "Show Baloo Tamma 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        82
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        899,
+        1091,
+        35,
+        95
+      ],
+      "i" : 171,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        82,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ಕ"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        897,
+        1172,
+        38,
+        13
+      ],
+      "i" : 172,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        82,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        876,
+        1203,
+        80,
+        26
+      ],
+      "i" : 173,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        83
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Tamma 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        177,
+        1247,
+        115,
+        126
+      ],
+      "i" : 174,
+      "label" : "Show Baloo Tammudu 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        84
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        218,
+        1252,
+        33,
+        121
+      ],
+      "i" : 175,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        84,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "క"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        215,
+        1339,
+        38,
+        13
+      ],
+      "i" : 176,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        84,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        187,
+        1370,
+        94,
+        26
+      ],
+      "i" : 177,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        85
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Tammudu 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        313,
+        1247,
+        115,
+        115
+      ],
+      "i" : 178,
+      "label" : "Show Baloo Thambi 2",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        86
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        350,
+        1258,
+        40,
+        85
+      ],
+      "i" : 179,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        86,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "க"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        352,
+        1339,
+        38,
+        13
+      ],
+      "i" : 180,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        86,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "5 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        330,
+        1370,
+        81,
+        26
+      ],
+      "i" : 181,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        87
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baloo Thambi 2"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        450,
+        1247,
+        115,
+        115
+      ],
+      "i" : 182,
+      "label" : "Show Bangla MN",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        88
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        487,
+        1258,
+        40,
+        101
+      ],
+      "i" : 183,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        88,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ক"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        488,
+        1339,
+        38,
+        13
+      ],
+      "i" : 184,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        88,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "2 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        479,
+        1370,
+        57,
+        26
+      ],
+      "i" : 185,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        89
+      ],
+      "role" : "AXStaticText",
+      "value" : "Bangla MN"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        586,
+        1247,
+        115,
+        115
+      ],
+      "i" : 186,
+      "label" : "Show Bangla Sangam MN",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        90
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        623,
+        1272,
+        41,
+        65
+      ],
+      "i" : 187,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        90,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "ক"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        624,
+        1339,
+        38,
+        13
+      ],
+      "i" : 188,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        90,
+        1
+      ],
+      "role" : "AXStaticText",
+      "value" : "2 styles"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        592,
+        1370,
+        102,
+        26
+      ],
+      "i" : 189,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        91
+      ],
+      "role" : "AXStaticText",
+      "value" : "Bangla Sangam MN"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        722,
+        1247,
+        115,
+        115
+      ],
+      "i" : 190,
+      "label" : "Show Baoli SC",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        92
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        722,
+        1247,
+        115,
+        115
+      ],
+      "i" : 191,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        92,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        758,
+        1370,
+        44,
+        26
+      ],
+      "i" : 192,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        93
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baoli SC"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        859,
+        1247,
+        115,
+        115
+      ],
+      "i" : 193,
+      "label" : "Show Baoli TC",
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        94
+      ],
+      "role" : "AXGroup"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        859,
+        1247,
+        115,
+        115
+      ],
+      "i" : 194,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        94,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "1 style"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        894,
+        1370,
+        43,
+        26
+      ],
+      "i" : 195,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        95
+      ],
+      "role" : "AXStaticText",
+      "value" : "Baoli TC"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        984,
+        52,
+        0,
+        0
+      ],
+      "i" : 196,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        1
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        984,
+        52,
+        0,
+        0
+      ],
+      "i" : 197,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        988,
+        90,
+        12,
+        559
+      ],
+      "i" : 198,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        988,
+        52,
+        12,
+        1
+      ],
+      "i" : 199,
+      "path" : [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        4
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXIncrement",
+        "AXDecrement",
+        "AXDelete",
+        "AXShowMenu",
+        "AXCancel",
+        "AXPress"
+      ],
+      "frame" : [
+        87,
+        0,
+        42,
+        52
+      ],
+      "i" : 200,
+      "label" : "Hide Sidebar",
+      "path" : [
+        1,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        91,
+        12,
+        33,
+        28
+      ],
+      "i" : 201,
+      "label" : "Hide Sidebar",
+      "path" : [
+        1,
+        0,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        413,
+        12,
+        30,
+        28
+      ],
+      "i" : 202,
+      "label" : "Toggle filter bar",
+      "path" : [
+        1,
+        1,
+        0
+      ],
+      "role" : "AXCheckBox",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        445,
+        6,
+        48,
+        40
+      ],
+      "i" : 203,
+      "label" : "Grid View",
+      "path" : [
+        1,
+        2,
+        0,
+        0
+      ],
+      "role" : "AXRadioButton",
+      "value" : "1"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        493,
+        6,
+        42,
+        40
+      ],
+      "i" : 204,
+      "label" : "rectangle.grid.1x2",
+      "path" : [
+        1,
+        2,
+        0,
+        1
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        535,
+        6,
+        47,
+        40
+      ],
+      "i" : 205,
+      "label" : "list.triangle",
+      "path" : [
+        1,
+        2,
+        0,
+        2
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "Name:Decrease Font Size\nTarget:0x0\nSelector:(null)"
+      ],
+      "frame" : [
+        586,
+        21,
+        8,
+        10
+      ],
+      "i" : 206,
+      "path" : [
+        1,
+        3,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "Name:Increase Font Size\nTarget:0x0\nSelector:(null)"
+      ],
+      "frame" : [
+        674,
+        21,
+        10,
+        10
+      ],
+      "i" : 207,
+      "path" : [
+        1,
+        3,
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        693,
+        12,
+        30,
+        28
+      ],
+      "i" : 208,
+      "label" : "Toggle Info Pane",
+      "path" : [
+        1,
+        4,
+        0
+      ],
+      "role" : "AXCheckBox",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXConfirm"
+      ],
+      "editable" : true,
+      "frame" : [
+        739,
+        12,
+        250,
+        30
+      ],
+      "i" : 209,
+      "path" : [
+        1,
+        5,
+        0
+      ],
+      "role" : "AXTextField"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        741,
+        16,
+        25,
+        22
+      ],
+      "i" : 210,
+      "label" : "Search",
+      "path" : [
+        1,
+        5,
+        0,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        18,
+        18,
+        16,
+        16
+      ],
+      "i" : 211,
+      "path" : [
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "AXZoomWindow",
+        "AXShowMenu"
+      ],
+      "frame" : [
+        58,
+        18,
+        16,
+        16
+      ],
+      "i" : 212,
+      "label" : "this button also has an action to zoom the window",
+      "path" : [
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        38,
+        18,
+        16,
+        16
+      ],
+      "i" : 213,
+      "path" : [
+        4
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "frame" : [
+        159,
+        0,
+        250,
+        52
+      ],
+      "i" : 214,
+      "path" : [
+        5
+      ],
+      "role" : "AXStaticText",
+      "value" : "All Fonts"
+    },
+    {
+      "frame" : [
+        159,
+        0,
+        250,
+        52
+      ],
+      "i" : 215,
+      "path" : [
+        6
+      ],
+      "role" : "AXStaticText",
+      "value" : "370 typefaces"
+    }
+  ],
+  "frame_origin" : "window top-left, points",
+  "title" : "All Fonts – 370 typefaces",
+  "window" : 56568
+}

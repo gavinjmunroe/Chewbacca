@@ -7,8 +7,7 @@ process.removeAllListeners("warning");
 /**
  * people: everything you know about the people in your life, in one place you own.
  *
- * The design here is ported from Amber's identity service with the permission of
- * its authors, Karthik Devarakonda and Sagar Tiwari. The good ideas are theirs:
+ * The design started from Amber's identity service (upstream: `amber/id/`):
  * one observations table instead of seven, modality as a column rather than a
  * tag, scoring knobs as rows rather than constants, and permissions where the
  * absence of a grant means no. What changed is the setting. Amber is a
@@ -55,8 +54,9 @@ const {
 const { cmdImport } = require("./lib/people/import");
 const { cmdTexts } = require("./lib/people/texts");
 const { cmdSend } = require("./lib/people/send");
+const { cmdCalls } = require("./lib/people/calls");
 const {
-  cmdPurge, cmdDedupe, cmdMerge, cmdOrgs, cmdPruneBroadcasts,
+  cmdPurge, cmdDedupe, cmdMerge, cmdMerges, cmdUnmerge, cmdOrgs, cmdPruneBroadcasts,
 } = require("./lib/people/cleanup");
 const { cmdBrief } = require("./lib/people/brief");
 const { cmdDashboard } = require("./lib/people/dashboard");
@@ -71,6 +71,8 @@ const COMMANDS = {
   "prune-broadcasts": cmdPruneBroadcasts,
   brief: cmdBrief,
   merge: cmdMerge,
+  merges: cmdMerges,
+  unmerge: cmdUnmerge,
   note: cmdNote,
   me: cmdMe,
   log: cmdLog,
@@ -94,6 +96,7 @@ const COMMANDS = {
   fact: cmdFact,
   texts: cmdTexts,
   send: cmdSend,
+  calls: cmdCalls,
   msgs: cmdTexts,
   today: cmdToday,
   mine: cmdMine,
@@ -148,6 +151,15 @@ function main() {
     return;
   }
   if (cmd === "--version" || cmd === "version") return say("people 1.0.0");
+  // `people <cmd> --help` ran the command: `people distill --help` started a
+  // real distill over the message store (backlog 26 audit, 2026-10-16). Only
+  // texts reads its own --help, so every other command prints the help lines
+  // that name it and stops.
+  if (cmd !== "texts" && COMMANDS[cmd] && (argv.includes("--help") || argv.includes("-h"))) {
+    const lines = HELP.split("\n").filter((l) => new RegExp(`\\bpeople ${cmd}\\b|^\\s+${cmd}\\b`).test(l));
+    process.stdout.write((lines.length ? lines.join("\n") : HELP) + "\n");
+    return;
+  }
   const fn = COMMANDS[cmd];
   if (!fn) {
     process.stderr.write(c.red(`people: unknown command "${cmd}"\n\n`));

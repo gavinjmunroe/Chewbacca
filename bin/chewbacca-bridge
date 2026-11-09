@@ -26,7 +26,6 @@ Log:     ~/.chewbacca/bridge.log, one line per job, arguments included, keys nev
 import json
 import os
 import pathlib
-import plistlib
 import re
 import shutil
 import subprocess
@@ -39,7 +38,6 @@ BASE = pathlib.Path(os.environ.get("CHEWBACCA_BRIDGE_DIR", "/tmp/chewbacca-bridg
 INBOX, OUTBOX = BASE / "in", BASE / "out"
 LOG = pathlib.Path.home() / ".chewbacca" / "bridge.log"
 LABEL = "com.chewbacca.bridge"
-PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 POLL_S = 0.25
 MAX_OUT = 200_000
 PATH = f"{pathlib.Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -228,7 +226,9 @@ REGISTRY = {
     "work-ledger": spec("work-ledger"), "backlog": spec("backlog"),
     "task-graph": spec("task-graph", timeout=600),
     # --- quality gates and the kit's memory ---------------------------------
-    "model-route": spec("model-route", timeout=30), "slop-check": spec("slop-check"),
+    # accept runs a plan's checks and --out/--save write files: the person's, not a browser model's.
+    "model-route": spec("model-route", timeout=30, deny=("accept", "--out", "--save")),
+    "slop-check": spec("slop-check"),
     "prose-check": spec("prose-check"), "code-slop": spec("code-slop"),
     "secret-scan": spec("secret-scan"), "skill-scan": spec("skill-scan"),
     "craft-gate": spec("craft-gate"), "method": spec("method"), "scars": spec("scars"),
@@ -306,9 +306,45 @@ def ensure_dirs() -> None:
         os.chmod(d, 0o700)
 
 
-def run_job(path: pathlib.Path) -> None:
+def claim(path: pathlib.Path):
+    """Take a job so no other serve loop runs it too. On a kit move the daemon
+    starts the new bridge beside the old one (reengineer step 10), and both
+    globbed the same inbox: a rename is atomic, so exactly one of them wins."""
+    claimed = path.with_name(f".{path.stem}.{os.getpid()}.claim")
+    try:
+        path.rename(claimed)
+    except FileNotFoundError:
+        return None
+    return claimed
+
+
+def reclaim_orphans() -> None:
+    """Put back a job whose claimer died mid-run. The daemon stops the old
+    bridge 3 s after the new one starts, whether or not it is mid-job, and
+    SIGTERM skips run_job's cleanup. Before claims existed the job file sat in
+    the inbox and the next bridge ran it, so a re-run is what callers expect."""
+    for claimed in INBOX.glob(".*.claim"):
+        parts = claimed.name.split(".")
+        # .<id>.<pid>.claim
+        if len(parts) != 4 or not parts[2].isdigit():
+            continue
+        try:
+            os.kill(int(parts[2]), 0)
+            continue
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            continue
+        try:
+            claimed.rename(INBOX / f"{parts[1]}.json")
+            log(f"reclaimed {parts[1]} from dead pid {parts[2]}")
+        except FileNotFoundError:
+            pass
+
+
+def run_job(path: pathlib.Path, job_id: str = "") -> None:
     started = time.monotonic()
-    job_id = path.stem
+    job_id = job_id or path.stem
     result = {"id": job_id, "rc": 1, "stdout": "", "stderr": ""}
     try:
         st = path.stat()
@@ -344,8 +380,11 @@ def serve() -> int:
     ensure_dirs()
     log("serve: up")
     while True:
+        reclaim_orphans()
         for path in sorted(INBOX.glob("*.json")):
-            run_job(path)
+            claimed = claim(path)
+            if claimed:
+                run_job(claimed, path.stem)
         for old in OUTBOX.glob("*.json"):
             if time.time() - old.stat().st_mtime > 3600:
                 old.unlink(missing_ok=True)
@@ -374,41 +413,53 @@ def call(tool: str, args: list[str], timeout: float = 700.0) -> int:
     return 125
 
 
+def via_current_kit(file: pathlib.Path) -> pathlib.Path:
+    kit = pathlib.Path.home() / ".chewbacca" / "kit"
+    try:
+        rel = file.relative_to((kit / "snapshots").resolve())
+    except (ValueError, OSError):
+        return file
+    return kit / "current" / pathlib.Path(*rel.parts[1:])
+
+
+def _daemon():
+    sys.path.insert(0, str(HERE / "lib"))
+    import daemon_register
+    return daemon_register
+
+
 def install() -> int:
-    PLIST.parent.mkdir(parents=True, exist_ok=True)
-    plist = {
-        "Label": LABEL,
-        "ProgramArguments": [shutil.which("python3") or "/usr/bin/python3", str(pathlib.Path(__file__).resolve()), "serve"],
-        "RunAtLoad": True, "KeepAlive": True,
-        "StandardErrorPath": str(LOG.with_suffix(".err")),
-        "EnvironmentVariables": {"PATH": PATH},
-    }
-    PLIST.write_bytes(plistlib.dumps(plist))
-    uid = os.getuid()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
-    r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)], capture_output=True, text=True)
-    if r.returncode:
-        print(r.stderr.strip(), file=sys.stderr)
-        return r.returncode
-    time.sleep(1.0)
-    rc = call("ping", [], timeout=10)
-    print("chewbacca-bridge: running" if rc == 0 else "chewbacca-bridge: loaded, but ping failed; see ~/.chewbacca/bridge.err")
-    return rc
+    # One Login Items row for all of Chewbacca: the bridge is a service of
+    # chewbacca-daemon now, not its own LaunchAgent (Caleb, 2026-10-11).
+    reg = _daemon()
+    # Registered through kit/current, never the resolved snapshot path: a
+    # service pinned to one snapshot is never swapped onto a new kit. --swap
+    # overlap is safe because claim() keeps two loops off the same job.
+    print(reg.register("bridge", [shutil.which("python3") or "/usr/bin/python3", str(via_current_kit(pathlib.Path(__file__).resolve())), "serve"],
+                       keepalive=True, env={"PATH": PATH}, legacy_label=LABEL, swap="overlap"))
+    for _ in range(30):
+        if call("ping", [], timeout=2) == 0:
+            print("chewbacca-bridge: running")
+            return 0
+        time.sleep(1.0)
+    print("chewbacca-bridge: registered, but ping failed; see ~/Library/Logs/chewbacca/bridge.log")
+    return 1
 
 
 def uninstall() -> int:
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
-    PLIST.unlink(missing_ok=True)
+    reg = _daemon()
+    reg.unregister("bridge")
+    reg.retire(LABEL)
     print("chewbacca-bridge: removed")
     return 0
 
 
 def status() -> int:
-    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True, text=True)
-    print("loaded" if r.returncode == 0 else "not loaded")
+    up = call("ping", [], timeout=3) == 0
+    print("running" if up else "not running")
     if LOG.exists():
         print("".join(LOG.read_text().splitlines(keepends=True)[-10:]), end="")
-    return 0 if r.returncode == 0 else 1
+    return 0 if up else 1
 
 
 def main(argv: list[str]) -> int:

@@ -1,0 +1,4 @@
+SEALED n=65 index=/private/tmp/claude-501/-Users-joelnewton/232b29b1-9054-407e-8428-4da1fad87586/scratchpad/idx files=839
+  shipped rrf3+feedback    r@5  52.3% +/-12.1  MRR 0.385
+  nomic+mxbai 0.5          r@5  56.9% +/-12.0  MRR 0.460  +3 -0
+  run_at 2026-10-13T00:42:13-0700

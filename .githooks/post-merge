@@ -1,0 +1,15 @@
+#!/bin/bash
+# Settle generated files a merge driver deferred (tools/merge_regen.py). This
+# runs before the main-checkout guard below because a worktree merges too.
+# shellcheck source=/dev/null
+. "$(dirname "$0")/lib-regen.sh" 2>/dev/null && chewbacca_settle post-merge
+
+# Install any skill the repo gained since setup last ran. See
+# bin/lib/link-skills.sh for the night 8 skills sat uninstalled.
+#
+# Only from the main checkout: a worktree is removed when its branch lands,
+# and every link pointing into it would dangle.
+[ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] || exit 0
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -x "$ROOT/bin/lib/link-skills.sh" ] && "$ROOT/bin/lib/link-skills.sh" "$ROOT" >&2
+exit 0

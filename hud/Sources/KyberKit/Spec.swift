@@ -200,9 +200,25 @@ public enum Chrome: String, Sendable, CaseIterable {
     /// (typesafe.ai, read 2026-10-08) on Kyber's frosted material, for a panel
     /// that is a working tool rather than a glance.
     case window
+    /// Content on the glass and nothing else: no card, no title bar, no
+    /// pill buttons, no edge. Legibility comes from an edgeless frosted field
+    /// that fades out before it can read as a box, and a press lands on the
+    /// content itself (hud/CLAUDE.md, "Past the window"). Caleb, 2026-10-11:
+    /// "The future of UX does not look like macos".
+    case glass
+    /// Glass with no field under it at all: the content draws its own
+    /// grounds. For a whole app on the glass (the `App` component), whose
+    /// page floats its own surfaces over the desktop and leaves the rest
+    /// clear, so a frosted field the size of the surface would read as a
+    /// window behind it (Realm on the glass, 2026-10-11). Behaves as `glass`
+    /// in every other way.
+    case clear
 
     /// Whether this chrome paints a background the person can grab anywhere.
     public var isFilled: Bool { self == .card || self == .window }
+
+    /// `glass` and `clear`: no card, no title bar, lit words for verbs.
+    public var isGlass: Bool { self == .glass || self == .clear }
 }
 
 /// A surface placed beside a rectangle on the screen rather than in a region.
@@ -247,9 +263,14 @@ public enum Op: Sendable, Equatable {
     /// Open or switch to a named surface. Everything after this targets it.
     case surface(
         id: String, region: Region?, width: Double?,
-        urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?)
+        urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?,
+        from: String? = nil)
     /// Close a surface and take it off the screen.
     case close(id: String)
+    /// `glance <surface>`: a click anywhere off that card takes it down and
+    /// sends `e closed`, the same as its X. For answers read once (search,
+    /// a repo card, a note), where clicking on with your work means done.
+    case glance(id: String)
     /// Say what the assistant is doing. Draws the presence ring.
     case presence(Presence, amplitude: Double?)
     /// Put a mark on the screen at absolute coordinates.
@@ -291,10 +312,10 @@ public enum Op: Sendable, Equatable {
     /// `rim thickness=12 frost=0.4`: set those values without opening it.
     /// Keys are `RimTuning.keys`.
     case tuneRim([String: Double])
-    /// `files [path]`: open the file manager, the active pane at `path`
-    /// when one is given. See `FilesPanel`.
+    /// `files [path]`: the newest few things in a folder, on the glass
+    /// (Downloads when no path is given). See `FilesGlass`.
     case openFiles(path: String?)
-    /// `files off`: put the file manager away.
+    /// `files off`: take that surface down.
     case closeFiles
 }
 

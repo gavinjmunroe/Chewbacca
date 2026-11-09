@@ -2,7 +2,7 @@
 
 Each ingester reads one source through what is already on the machine (chat.db
 read only, the `mac` CLI, `coursework`, the people store, backlog CSVs, the
-agent hook's board) and returns a snapshot of nodes and edges for
+agent hook's board, Gmail through gws) and returns a snapshot of nodes and edges for
 `Graph.apply`. None of them writes anywhere else, sends anything, or reads a
 message for instructions: text is stored as a label to be rendered, and the
 one thing derived from it, a request-shaped sentence becoming a Task, is
@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import osgraph
+import osgraph_missing
 from osgraph import ME, Edge, Graph, Identities, Node, day_node, me_node, person_node, space_node
 
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -60,6 +61,11 @@ ADDRESS = re.compile(r"<([^<>@\s]+@[^<>\s]+)>|([^\s<>]+@[^\s<>]+)")
 SPACE_BY_COMPANY = {"amber": "amber", "zeutara": "amber", "togari": "amber", "medha": "amber",
                     "usc": "school", "university of southern california": "school"}
 BACKLOG_LIVE = {"open", "decision", "blocked", "verify", "proposed"}
+# Undated Reminders let into the graph. Gavin's Mac had one on 2026-10-11 and
+# Caleb's 11 open ones on 2026-10-04 were all dated, so this only stops a
+# list someone uses as an archive from flooding the tasks walk. Guessed,
+# never measured.
+UNDATED_REMINDERS = 20
 
 
 def clip(text, limit: int) -> str:
@@ -107,9 +113,12 @@ ASK = re.compile(
     r"\b(u|you) free\b|free (tmr|tomorrow|today|tonight|this|next)|send (me|over|it)|need (you|u)|"
     r"when (are|r|can) (you|u)|how about\b", re.I)
 # Texts no person typed: political blasts, delivery and bank codes. The
-# U+FFFC object marker leads every rich-link blast in the sample.
+# U+FFFC object marker leads every rich-link blast in the sample. A text that
+# opens on a megaphone is an announcement to a list: on the CHW-135 dev set
+# one club's saved number sent three, each asking "are you coming?", 12 wrong
+# rows, never answered.
 AUTOMATED_TEXT = re.compile(
-    r"^\ufffc|reply stop|text stop|stop to (end|opt|unsubscribe)|\bverification code\b|enter code|"
+    r"^\ufffc|^\s*\U0001F4E2|reply stop|text stop|stop to (end|opt|unsubscribe)|\bverification code\b|enter code|"
     r"never (call|text) you|track (at|your)|your order|package|deposited a new message|"
     r"thank you for (joining|checking|your|being)|friendly reminder|courtesy message|ready for your ticket", re.I)
 
@@ -163,6 +172,99 @@ def awaits_me(burst: list[str], handle: str, group: bool, known: bool = True) ->
     return asks
 
 
+def thread_awaits_me(msgs: list[dict], handle: str, group: bool, known: bool = True,
+                     reached_after=None) -> bool:
+    """Does a thread wait on the person, from its messages newest first, each
+    {"from_me", "text", "reaction", "at"}?
+
+    The burst is every message of theirs since his last move, and a tapback
+    of his IS a move: chat.db files it as an associated message, and the
+    first version dropped those with everyone else's, so a text he had
+    already Loved stayed "waiting on you". On the CHW-135 dev set (dev
+    snapshots scored against what he did next, tools/needs_you_eval.py) that
+    was 12 of 217 wrong rows. Their reactions are skipped, as before.
+
+    `reached_after(at, senders)`, when given, says whether he called or
+    texted one of the burst's senders somewhere else after `at`; the dev set had 9 wrong rows he had
+    already answered in a one-to-one or by phone."""
+    burst: list[str] = []
+    senders: set[str] = set()
+    newest_in = None
+    for m in msgs:
+        if m.get("from_me"):
+            break
+        if m.get("reaction"):
+            continue
+        newest_in = newest_in or m
+        if m.get("handle"):
+            senders.add(m["handle"])
+        if len(burst) < MESSAGES_PER_THREAD:
+            burst.append(m.get("text") or "")
+    if not burst:
+        return False
+    if reached_after and newest_in.get("at") and reached_after(newest_in["at"], senders or {handle}):
+        return False
+    return awaits_me(list(reversed(burst)), handle, group, known)
+
+
+# Calls live in CallHistory, next to chat.db and behind the same Full Disk
+# Access. Read-only; a Mac without it (or without the grant) just has no calls.
+CALL_HISTORY = Path("Library") / "Application Support" / "CallHistoryDB" / "CallHistory.storedata"
+
+
+def my_reach(db: sqlite3.Connection, floor_ns: int, ids: Identities, home: Path | None = None) -> dict:
+    """When he reached each person outside a given thread: his messages in
+    one-to-one chats and calls that connected (or that he placed), keyed by
+    handle_key and by people-store id, so a group sender he answered 1:1, or
+    a person he texted from their email handle, counts as answered."""
+    reach: dict[str, list[datetime]] = {}
+
+    def add(handle: str, at: datetime, chat: str = "") -> None:
+        key = osgraph.handle_key(handle)
+        pid = ids.resolve(handle) if handle else None
+        for k in filter(None, (key, pid and f"pid:{pid}")):
+            reach.setdefault(k, []).append((at, chat))
+
+    for ident, date in db.execute(
+            """SELECT c.chat_identifier, m.date FROM message m
+               JOIN chat_message_join j ON j.message_id = m.ROWID JOIN chat c ON c.ROWID = j.chat_id
+               WHERE m.is_from_me = 1 AND m.item_type = 0 AND m.associated_message_type = 0
+                 AND c.style != ? AND m.date > ?""", (STYLE_GROUP, floor_ns)):
+        add(ident, APPLE_EPOCH + timedelta(seconds=(date or 0) / 1e9), ident)
+    path = (home or Path.home()) / CALL_HISTORY
+    if path.exists():
+        try:
+            calls = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            try:
+                floor_s = floor_ns / 1e9
+                for addr, date, answered, originated, duration in calls.execute(
+                        "SELECT ZADDRESS, ZDATE, ZANSWERED, ZORIGINATED, ZDURATION FROM ZCALLRECORD WHERE ZDATE > ?",
+                        (floor_s,)):
+                    if addr and (originated or answered or (duration or 0) > 0):
+                        add(str(addr), APPLE_EPOCH + timedelta(seconds=date or 0))
+            finally:
+                calls.close()
+        except sqlite3.Error:
+            pass  # no grant for CallHistory: calls simply do not count
+    return reach
+
+
+def reached(reach: dict, handles, ids: Identities, after: datetime, until: datetime | None = None,
+            not_chat: str = "") -> bool:
+    """Did he reach any of `handles` after `after` (and by `until`), outside
+    the chat `not_chat`?"""
+    for h in handles:
+        keys = {osgraph.handle_key(h)}
+        pid = ids.resolve(h) if h else None
+        if pid:
+            keys.add(f"pid:{pid}")
+        for k in keys - {""}:
+            for at, chat in reach.get(k, ()):
+                if at > after and (until is None or at <= until) and (not chat or chat != not_chat):
+                    return True
+    return False
+
+
 def space_for(person: dict | None, mapping: dict) -> str:
     company = ((person or {}).get("props") or {}).get("company", "") if person else ""
     company = (company or "").lower()
@@ -196,10 +298,14 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
         raise FileNotFoundError(f"no chat.db at {path}")
     now = ctx.now()
     floor = int((now - timedelta(days=days) - APPLE_EPOCH).total_seconds() * 1e9)
+    # Nothing after `now`: live there is nothing later anyway, and a replay of
+    # a past day (tools/missing_eval.py) must not read what came after it.
+    ceil = int((now - APPLE_EPOCH).total_seconds() * 1e9)
     snap = Snapshot()
     me = snap.add(me_node())
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
     try:
+        reach = my_reach(db, floor, ids, ctx.home)
         # One conversation can be several chat rows (iMessage and SMS for the
         # same number). The pilot sample caught a thread read as "waiting"
         # because only one of its two rows was looked at, so rows are folded
@@ -209,7 +315,7 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                 """SELECT c.ROWID, c.chat_identifier, c.display_name, c.style, MAX(m.date)
                    FROM chat c JOIN chat_message_join j ON j.chat_id = c.ROWID
                    JOIN message m ON m.ROWID = j.message_id
-                   WHERE m.date > ? GROUP BY c.ROWID""", (floor,)):
+                   WHERE m.date > ? AND m.date <= ? GROUP BY c.ROWID""", (floor, ceil)):
             f = folded.setdefault(ident, {"rows": [], "display": "", "style": style, "last": 0})
             f["rows"].append(rowid)
             f["display"] = f["display"] or display or ""
@@ -225,13 +331,19 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
             for p in people.values():
                 snap.add(p)
             label = display or ", ".join(p.label for p in people.values()) or ident
-            msgs = db.execute(
-                f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, m.is_read, h.id
+            # His own tapbacks come along so they count as his move; nobody
+            # else's do. They never become Message nodes.
+            seen = db.execute(
+                f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, m.is_read, h.id,
+                          m.associated_message_type
                    FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID
                    LEFT JOIN handle h ON h.ROWID = m.handle_id
-                   WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.associated_message_type = 0
-                     AND m.date > ?
-                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, MESSAGES_PER_THREAD)).fetchall()
+                   WHERE j.chat_id IN ({marks}) AND m.item_type = 0
+                     AND m.date > ? AND m.date <= ?
+                     AND (m.associated_message_type = 0
+                          OR (m.is_from_me = 1 AND m.associated_message_type BETWEEN 2000 AND 3999))
+                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, ceil, MESSAGES_PER_THREAD * 4)).fetchall()
+            msgs = [m[:7] for m in seen if not m[7]][:MESSAGES_PER_THREAD]
             if not msgs:
                 continue
             last_at = (APPLE_EPOCH + timedelta(seconds=(last or 0) / 1e9)).astimezone()
@@ -256,7 +368,9 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                                              snap.add(person_node(ids, handle or ident, source_hint="imessage")))
                 mid = snap.add(Node(f"message:imessage:{guid}", "Message",
                                     clip(words, osgraph.SNIPPET_CHARS) or "Attachment",
-                                    {"from_me": bool(from_me), "at": at.isoformat()}, observed_at=at.isoformat()))
+                                    {"from_me": bool(from_me), "at": at.isoformat(),
+                                     **({} if from_me else {"asks": osgraph_missing.asks(words)})},
+                                    observed_at=at.isoformat()))
                 snap.link(mid, "IN_THREAD", tid)
                 snap.link(mid, "SENT_BY", sender)
                 # The same filters as AWAITS_REPLY_FROM, one message at a time:
@@ -274,12 +388,12 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                     snap.link(task, "OWED_TO", sender, confidence=0.6)
                     snap.link(task, "EXTRACTED_FROM", mid)
                     snap.link(task, "BELONGS_TO", f"space:{space}")
-            burst = []
-            for m in msgs:
-                if m[3]:
-                    break
-                burst.append(body_text(m[1], m[2]))
-            if awaits_me(list(reversed(burst)), ident, group, known):
+            commitments(snap, db, rowids, floor, ceil, tid, me, group, space,
+                        first_person if not group else None, people, ids, ident)
+            view = [{"from_me": bool(m[3]), "text": body_text(m[1], m[2]), "reaction": bool(m[7]),
+                     "handle": m[6] or "", "at": APPLE_EPOCH + timedelta(seconds=(m[4] or 0) / 1e9)} for m in seen]
+            if thread_awaits_me(view, ident, group, known, reached_after=lambda at, who, ident=ident: reached(
+                    reach, who, ids, at, not_chat=ident)):
                 snap.link(tid, "AWAITS_REPLY_FROM", me, confidence=0.9 if not group else 0.6,
                           props={"since": last_at.isoformat()})
             elif newest_from_me and "?" in (newest_text or "") and not group and first_person:
@@ -288,6 +402,64 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
     finally:
         db.close()
     return snap.write(graph, "imessage")
+
+
+def commitments(snap: Snapshot, db, rowids: list, floor: int, ceil: int, tid: str, me: str, group: bool,
+                space: str, person: Node | None, people: dict, ids: Identities, ident: str) -> None:
+    """His own promises with a day in them ("I'll send it tonight") as
+    commitment Tasks, and, in a group, a text naming a meeting at a time as an
+    announcement on its Message. Both are guesses read by rule
+    (osgraph_missing.promise_due, announced_at); the `missing` walk decides
+    whether either is a miss. Every message in the window is read, not just
+    the newest five, because a promise is usually buried under the chat that
+    followed it."""
+    marks = ",".join("?" * len(rowids))
+    scan = db.execute(
+        f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, h.id
+           FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID
+           LEFT JOIN handle h ON h.ROWID = m.handle_id
+           WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.associated_message_type = 0
+             AND m.date > ? AND m.date <= ? ORDER BY m.date ASC""", (*rowids, floor, ceil)).fetchall()
+    mine = [(APPLE_EPOCH + timedelta(seconds=(r[4] or 0) / 1e9)).astimezone() for r in scan if r[3]]
+    for guid, text, blob, from_me, date, handle in scan:
+        at = (APPLE_EPOCH + timedelta(seconds=(date or 0) / 1e9)).astimezone()
+        words = body_text(text, blob)
+        mid = f"message:imessage:{guid}"
+        if from_me:
+            due = osgraph_missing.promise_due(words, at)
+            if due is None:
+                continue
+            snap.add(Node(mid, "Message", clip(words, osgraph.SNIPPET_CHARS),
+                          {"from_me": True, "at": at.isoformat()}, observed_at=at.isoformat()))
+            snap.link(mid, "IN_THREAD", tid)
+            snap.link(mid, "SENT_BY", me)
+            followed = next((t for t in mine if t >= at + osgraph_missing.FOLLOW_UP_GAP), None)
+            where = snap.nodes[tid].label
+            task = snap.add(Node(
+                f"task:imessage:promise:{guid}", "Task", clip(words, osgraph.SNIPPET_CHARS),
+                {"kind": "commitment", "status": "ready", "guess": True, "due_at": due.isoformat(),
+                 "followed_at": followed.isoformat() if followed else "",
+                 "provenance": f"your text to {where} {at.strftime('%a %-I:%M%p').lower()}",
+                 "at": at.isoformat()}, confidence=0.6, observed_at=at.isoformat()))
+            snap.link(task, "OWED_BY", me, confidence=0.6)
+            if person is not None:
+                snap.link(task, "OWED_TO", person.id, confidence=0.6)
+            snap.link(task, "EXTRACTED_FROM", mid)
+            snap.link(task, "BELONGS_TO", f"space:{space}")
+        elif group:
+            when = osgraph_missing.announced_at(words, at)
+            if when is None:
+                continue
+            if mid in snap.nodes:
+                snap.nodes[mid].props["announces"] = when.isoformat()
+                continue
+            sender = people[handle].id if handle in people else snap.add(
+                person_node(ids, handle or ident, source_hint="imessage"))
+            snap.add(Node(mid, "Message", clip(words, osgraph.SNIPPET_CHARS),
+                          {"from_me": False, "at": at.isoformat(), "announces": when.isoformat()},
+                          observed_at=at.isoformat()))
+            snap.link(mid, "IN_THREAD", tid)
+            snap.link(mid, "SENT_BY", sender)
 
 
 def address_of(sender: str) -> str:
@@ -303,112 +475,132 @@ def mail_is_person(sender: str) -> bool:
     return bool(addr) and not AUTOMATED_MAIL.search(addr) and " via " not in (sender or "").lower()
 
 
-# The receivers whose Authentication-Results lines are believed. Anyone can
-# put an Authentication-Results header in a message they send; only the line
-# the receiving provider added (its authserv-id, the first token) says what
-# the provider checked. Measured 2026-10-04 on Caleb's iCloud inbox: iCloud
-# writes dmarc.icloud.com, dkim-verifier.icloud.com and spf.icloud.com.
-TRUSTED_AUTHSERV = (".icloud.com", ".me.com", "mx.google.com", ".google.com", ".outlook.com",
-                    ".protection.outlook.com")
-# Mail.app's "whose message id is" search took 9.8 s on one message on
-# 2026-10-04, so only senders the people store already knows are checked,
-# a few per ingest, and each verdict is kept on the MailItem node.
-MOST_AUTH_CHECKS = 3
-MESSAGE_ID_SAFE = re.compile(r"^[A-Za-z0-9._%+=@$<>-]{1,200}$")
+# Mail comes from Gmail through gws (mac/lib/gmail.py), never Mail.app:
+# Caleb, 2026-10-08, "We shouldn't be using the mail app". The reader keeps
+# its own cache, so a 7-day read is one list call plus whatever is new.
+GMAIL_READER = Path(__file__).resolve().parents[2] / "mac" / "lib" / "gmail.py"
+# Every inbound message in the window is a MailItem, newest first, up to
+# this many. Guessed, never measured: a week of Caleb's filtered Gmail was
+# under 100 human messages when the reader was written (2026-10-08).
+MOST_MAIL = 120
+UNVERIFIED = "unverified:"
+# gmail.py prints this on stderr for an inbox with no working sign-in.
+NOT_SIGNED_IN = re.compile(r"^gmail: not signed in: (.+)$", re.M)
 
 
-def auth_headers(ctx, message_id: str) -> str:
-    """Every header of one message, from Mail.app. The id comes from the
-    message itself (its Message-ID), so it is checked against a strict
-    character set before it goes inside an AppleScript string."""
-    if not MESSAGE_ID_SAFE.match(message_id or ""):
-        return ""
-    script = ('tell application "Mail"\n'
-              f'  set ms to (messages of inbox whose message id is "{message_id}")\n'
-              '  if (count of ms) is 0 then return ""\n'
-              '  return all headers of item 1 of ms\n'
-              'end tell')
-    code, out, _ = ctx.run(["osascript", "-e", script])
-    return out if code == 0 else ""
+def mail_subject(row: dict) -> str:
+    """The subject line. gmail.py's text is the subject, a blank line, then
+    the body; with no subject it is the body alone, whose first paragraph
+    stands in for one."""
+    return str(row.get("text") or "").split("\n\n", 1)[0].strip()
 
 
-def sender_verified(headers: str, address: str) -> bool:
-    """DMARC passed for the From domain, as reported by a trusted receiver.
-    Anything else (no header, a fail, a header from an untrusted authserv-id,
-    a different domain) is unverified."""
-    domain = address.rsplit("@", 1)[-1].lower() if "@" in address else ""
-    if not domain:
-        return False
-    unfolded = re.sub(r"\r?\n[ \t]+", " ", headers or "")
-    for line in unfolded.splitlines():
-        name, sep, value = line.partition(":")
-        if not sep or name.strip().lower() != "authentication-results":
-            continue
-        authserv = value.strip().split(";", 1)[0].strip().lower()
-        if not authserv.endswith(TRUSTED_AUTHSERV):
-            continue
-        m = re.search(r"\bdmarc=(\w+)[^;]*?header\.from=([^\s;]+)", value, re.I)
-        if m and m.group(1).lower() == "pass" and m.group(2).strip().lower() == domain:
-            return True
-    return False
+def my_other_addresses(ctx) -> set:
+    """His addresses that are not a connected inbox, one per line in
+    ~/.chewbacca/email/me (gmail.py's me_file). Gmail files mail from them
+    as inbound; the first live run (2026-10-09) showed 2 of 3 needs-you mail
+    rows were his own Blue Modern test mail waiting on him."""
+    home = ctx.env.get("CHEWBACCA_EMAIL_HOME") or str(ctx.home / ".chewbacca" / "email")
+    try:
+        lines = (Path(os.path.expanduser(home)) / "me").read_text().splitlines()
+    except OSError:
+        return set()
+    return {osgraph.email_key(x.strip()) for x in lines
+            if "@" in x and not x.lstrip().startswith("#")} - {""}
+
+
+def gmail_time(stamp) -> datetime | None:
+    """gmail.py writes local wall time with no offset ("%Y-%m-%dT%H:%M:%S"
+    after astimezone()), so a bare stamp is local here, not UTC as
+    osgraph_time would read it: read as UTC, every mail sat hours early."""
+    try:
+        moment = datetime.fromisoformat(str(stamp or ""))
+    except ValueError:
+        return None
+    return moment.astimezone()
+
+
+def conversation_key(address: str, subject: str) -> tuple:
+    return (osgraph.email_key(address) or address.lower(),
+            re.sub(r"^((re|fwd?|aw)\s*:\s*)+", "", subject.strip(), flags=re.I).lower())
 
 
 def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPACE_BY_COMPANY) -> dict:
-    """Unread mail. A sender becomes a known Person only when the address is
-    exactly one the people store holds AND DMARC passed for it; the From
-    name is never trusted (push review, 2026-10-04: "Karthik Devarakonda"
-    <attacker@evil> rendered as Karthik). Everyone else is their raw address,
-    flagged unverified."""
-    # Any AppleScript to Mail launches it. This ran every 60 s from
-    # kyber-surfaces, so on 2026-10-09 Mail kept reopening after Caleb force
-    # quit it. Read mail only while he has Mail open, and leave the last
-    # ingest's nodes alone until then.
-    if ctx.run(["pgrep", "-xq", "Mail"])[0] != 0:
-        return {"skipped": "Mail is not open"}
-    rows = ctx.json(["mac", "mail", "unread", "--limit", "40", "--scan", "60", "--json"], "Mail")
+    """Human Gmail from the last `days`, through gws. A sender becomes a known
+    Person only when Gmail's own verdict vouched for the address (gmail.py
+    marks the rest "unverified:") AND the people store holds that exact
+    address; the From name is never trusted (push review, 2026-10-04:
+    "Karthik Devarakonda" <attacker@evil> rendered as Karthik). Everyone
+    else is their raw address, flagged unverified.
+
+    A mail waits on a reply when it is the newest message in its
+    conversation (same correspondent, same subject) and nothing of his went
+    to that address on that subject after it.
+
+    No signed-in Gmail is an error naming it, so the surface says "Gmail: not
+    signed in" instead of drawing an empty inbox (kyber-surfaces rule 8)."""
+    code, out, err = ctx.run(["python3", str(GMAIL_READER), "--json", "--days", str(days)])
+    if code != 0:
+        raise RuntimeError(f"Gmail failed: {clip((err or out or 'no answer').strip().splitlines()[-1], 120)}")
+    try:
+        rows = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        raise RuntimeError("Gmail answered with something that is not JSON") from None
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    missing = NOT_SIGNED_IN.findall(err or "")
+    if missing and not rows:
+        raise RuntimeError("Gmail: not signed in")
     now = ctx.now()
     snap = Snapshot()
     me = snap.add(me_node())
-    checks = 0
-    for row in rows if isinstance(rows, list) else []:
-        if not isinstance(row, dict) or row.get("isRead"):
+    latest_mine: dict = {}
+    inbound = []
+    mine = my_other_addresses(ctx)
+    for row in rows:
+        at = gmail_time(row.get("at"))
+        handle = str(row.get("handle") or "")
+        verified = not handle.lower().startswith(UNVERIFIED)
+        address = handle[len(UNVERIFIED):] if not verified else handle
+        key = conversation_key(address, mail_subject(row))
+        if at and at > now:
+            continue  # a replay of a past day never reads what came after it
+        if row.get("from_me"):
+            if at and (key not in latest_mine or at > latest_mine[key]):
+                latest_mine[key] = at
             continue
-        at = osgraph_time(row.get("date"))
-        if at and at < now - timedelta(days=days):
+        if verified and osgraph.email_key(address) in mine:
+            continue  # his own other address, not someone waiting on him
+        if not at or at < now - timedelta(days=days):
             continue
-        sender_raw = str(row.get("from", ""))
-        address = address_of(sender_raw)
-        message_id = str(row.get("id", ""))
-        mid_key = osgraph.node_key("mail", "mail", row.get("account", ""), message_id)
-        verified = False
-        if address and ids.resolve(address):
-            # A kept verdict counts only for this exact message from this
-            # exact address; anything else is checked again or stays false.
-            known = graph.node(mid_key)
-            kept = (known or {}).get("props") or {}
-            if "verified" in kept and kept.get("verified_for") == address and kept.get("message_id") == message_id:
-                verified = bool(kept["verified"])
-            elif checks < MOST_AUTH_CHECKS:
-                checks += 1
-                verified = sender_verified(auth_headers(ctx, str(row.get("id", ""))), address)
-        person = person_node(ids, address or sender_raw, source_hint="mail", verified=verified)
+        inbound.append((at, row, address, verified, key))
+    inbound.sort(key=lambda x: x[0], reverse=True)
+    newest: set = set()
+    for at, row, address, verified, key in inbound[:MOST_MAIL]:
+        mid_key = osgraph.node_key("mail", "gmail", row.get("inbox", ""), str(row.get("id", "")))
+        person = person_node(ids, address, source_hint="mail", verified=verified)
         pid = snap.add(person)
-        human = mail_is_person(sender_raw)
+        human = bool(address) and not AUTOMATED_MAIL.search(address)
         space = space_for({"props": person.props}, mapping)
         shown = person.label if not person.unresolved else (address or "unknown sender")
-        mid = snap.add(Node(mid_key, "MailItem", clip(row.get("subject") or "(no subject)", osgraph.SNIPPET_CHARS),
-                            {"app": "Mail", "from": shown, "address": address, "automated": not human,
-                             "verified": verified, "verified_for": address, "message_id": message_id,
-                             "at": at.isoformat() if at else "",
-                             "account": row.get("account", "")},
-                            observed_at=at.isoformat() if at else ""))
+        mid = snap.add(Node(mid_key, "MailItem", clip(mail_subject(row) or "(no subject)", osgraph.SNIPPET_CHARS),
+                            {"app": "Gmail", "network": "Gmail", "from": shown, "address": address,
+                             "automated": not human, "verified": verified,
+                             "gmail_id": str(row.get("gmail_id") or ""), "inbox": str(row.get("inbox") or ""),
+                             "at": at.isoformat()},
+                            observed_at=at.isoformat()))
         snap.link(mid, "SENT_BY", pid)
         snap.add(space_node(space))
         snap.link(mid, "BELONGS_TO", f"space:{space}")
-        if human:
-            snap.link(mid, "AWAITS_REPLY_FROM", me, confidence=0.6,
-                      props={"since": at.isoformat() if at else ""})
-    return snap.write(graph, "mail")
+        first = key not in newest
+        newest.add(key)
+        answered = latest_mine.get(key) and latest_mine[key] > at
+        if human and first and not answered:
+            snap.link(mid, "AWAITS_REPLY_FROM", me, confidence=0.6, props={"since": at.isoformat()})
+    report = snap.write(graph, "mail")
+    report["threads"] = len({x[4] for x in inbound[:MOST_MAIL]})
+    if missing:
+        report["note"] = "Gmail: not signed in: " + ", ".join(sorted(set(missing)))
+    return report
 
 
 def osgraph_time(stamp) -> datetime | None:
@@ -433,8 +625,9 @@ def coursework(graph: Graph, ctx, ids: Identities, days: int = 14) -> dict:
             course = str(row.get("course") or "")
             aid = snap.add(Node(osgraph.node_key("assignment", "coursework", course, row["name"]), "Assignment",
                                 clip(f"{course} {row['name']}", 90),
-                                {"course": course, "status": row.get("status") or "", "overdue": bucket == "overdue",
-                                 "type": row.get("type") or "", "app": "Class"}))
+                                {"course": course, "name": str(row["name"]), "status": row.get("status") or "",
+                                 "overdue": bucket == "overdue", "type": row.get("type") or "",
+                                 "at": str(row.get("at") or ""), "app": "Class"}))
             snap.link(aid, "OWED_BY", me)
             snap.link(aid, "BELONGS_TO", "space:school")
             day = str(row.get("date") or row.get("due") or "")[:10]
@@ -450,6 +643,7 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                      "--to", (now + timedelta(days=days)).strftime("%Y-%m-%d"), "--json"], "Calendar")
     snap = Snapshot()
     me = snap.add(me_node())
+    mine = my_addresses(ctx)
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or not row.get("title") or not row.get("start"):
             continue
@@ -462,7 +656,7 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                             "Event", clip(row["title"], 80),
                             {"start": start.isoformat(), "end": str(row.get("end") or ""),
                              "all_day": bool(row.get("isAllDay")), "calendar": row.get("calendar", ""),
-                             "app": "Calendar"}))
+                             "others": others_on(row, mine), "app": "Calendar"}))
         snap.add(day_node(day))
         snap.link(eid, "DUE_ON", f"day:{day}")
         snap.link(me, "ATTENDS", eid)
@@ -472,6 +666,34 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                 pid = snap.add(person_node(ids, addr, source_hint="calendar"))
                 snap.link(pid, "ATTENDS", eid)
     return snap.write(graph, "calendar")
+
+
+def my_addresses(ctx) -> set:
+    """Every address of his this machine knows: ~/.chewbacca/email/me and the
+    "me" list in ~/.chewbacca/meetings.json (meeting_capture.owner_emails)."""
+    mine = set(my_other_addresses(ctx))
+    try:
+        body = json.loads((ctx.home / ".chewbacca" / "meetings.json").read_text(encoding="utf-8"))
+        mine |= {osgraph.email_key(x) for x in body.get("me") or [] if isinstance(x, str)}
+    except (OSError, ValueError, AttributeError):
+        pass
+    return mine - {""}
+
+
+def others_on(row: dict, mine: set) -> int:
+    """How many people besides him an invite lists. An event he blocked out
+    for himself lists nobody, which is how a conflict tells a commitment from
+    a reminder to work (osgraph_missing.conflicts). An attendee the calendar
+    marks `self` is him whatever the address."""
+    n = 0
+    for attendee in row.get("attendees") or []:
+        if isinstance(attendee, dict) and attendee.get("self"):
+            continue
+        addr = attendee.get("email") if isinstance(attendee, dict) else str(attendee)
+        key = osgraph.email_key(addr or "")
+        if key and key not in mine:
+            n += 1
+    return n
 
 
 def backlog_paths(ctx) -> list[Path]:
@@ -561,28 +783,37 @@ def people_tasks(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
 
 
 def reminders(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
-    """Open Reminders due by the end of the window, as Tasks owed by me.
+    """Open Reminders due within the window either side of now, and open ones
+    with no date at all, as Tasks owed by me.
     Reminders on this Mac reach back to 2024 (2026-10-04: 11 open, the oldest
-    due 2024-08-18), so an overdue one only counts within the window."""
+    due 2024-08-18), so an overdue one only counts within the window. An
+    undated one has no window to fall out of: "Do Reagan's stuff", added by
+    voice on 2026-10-05 with no date, was on no list anywhere until it was let
+    in. They come in the order Reminders lists them, at most UNDATED_REMINDERS."""
     now = ctx.now()
-    rows = ctx.json(["mac", "reminders", "list", "--due-before",
-                     (now + timedelta(days=days)).strftime("%Y-%m-%d"), "--json"], "Reminders")
+    rows = ctx.json(["mac", "reminders", "list", "--json"], "Reminders")
     snap = Snapshot()
     me = snap.add(me_node())
+    undated = 0
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or row.get("isCompleted") or not row.get("title"):
             continue
         due = osgraph_time(row.get("due"))
-        if due is None or due < now - timedelta(days=days):
+        if due is None:
+            if row.get("due") or undated >= UNDATED_REMINDERS:
+                continue
+            undated += 1
+        elif not now - timedelta(days=days) <= due <= now + timedelta(days=days):
             continue
         tid = snap.add(Node(osgraph.node_key("task", "reminders", row.get("id") or "", row["title"]), "Task",
                             clip(row["title"], 100),
                             {"kind": "promise", "status": "ready", "app": "Reminders",
                              "provenance": f"Reminders, {row.get('list') or 'list'}"}))
         snap.link(tid, "OWED_BY", me)
-        day = due.date().isoformat()
-        snap.add(day_node(day))
-        snap.link(tid, "DUE_ON", f"day:{day}")
+        if due is not None:
+            day = due.date().isoformat()
+            snap.add(day_node(day))
+            snap.link(tid, "DUE_ON", f"day:{day}")
     return snap.write(graph, "reminders")
 
 
@@ -624,10 +855,36 @@ def meetings(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return ingest_meetings.meetings(graph, ctx, ids, days=days)
 
 
+def chats(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Signal, Telegram, Discord and the other bridged networks, from the rows
+    `people texts sync` filed out of the local homeserver (ingest_chats.chats).
+    No people store or no bridged rows is an empty snapshot, never an error."""
+    import ingest_chats  # noqa: PLC0415
+
+    return ingest_chats.chats(graph, ctx, ids, days=days)
+
+
+def slack(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Slack DMs, group DMs and channel @-mentions, from slacrawl's store
+    (ingest_slack.slack). No store is an empty snapshot with a note."""
+    import ingest_slack  # noqa: PLC0415
+
+    return ingest_slack.slack(graph, ctx, ids, days=days)
+
+
+def gtme(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Cold emails waiting for the person's ok and leads waiting on a reply,
+    from chewbacca gtme's own files (ingest_gtme.gtme). No client set up is
+    an empty snapshot, never an error."""
+    import ingest_gtme  # noqa: PLC0415
+
+    return ingest_gtme.gtme(graph, ctx, ids, days=days)
+
+
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
-    "whatsapp": whatsapp, "meetings": meetings,
+    "whatsapp": whatsapp, "meetings": meetings, "chats": chats, "gtme": gtme, "slack": slack,
 }
 
 
@@ -655,7 +912,7 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
 
 # Meetings ride the message window too: a meeting's snippet and transcript
 # words are other people's words, kept no longer than a text is.
-MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings")
+MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings", "chats", "slack")
 
 
 def dumps(report: dict) -> str:

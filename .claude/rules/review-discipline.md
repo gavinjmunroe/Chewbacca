@@ -63,8 +63,17 @@ away when nobody decides where it lives. Route every correction, once:
   silently drifts, this path is wrong on a fresh machine) becomes a **test next
   to the implementation**. Not a paragraph. A paragraph does not fail CI.
 
-If a correction produces neither, it was not a lesson, it was a typo. Fix it and
-move on. If it produces both, write both.
+- **The move that would have been right** becomes the **default path**: a
+  tool, a first step or a default that produces the good behavior without
+  anyone remembering to. A test catches the bad move after it's made; the
+  default stops it being the easiest move. Caleb, 2026-10-11, after an agent
+  asked him for a zip code one lookup away: "reengineer the way in which it
+  tries to be good". The fix was `chewbacca resolve`, which makes looking a
+  fact up one call, cheaper than asking, and a flag that runs it on the
+  question the agent asked.
+
+If a correction produces none of these, it was not a lesson, it was a typo. Fix
+it and move on. Most real ones produce a test and a default.
 
 The failure this prevents: the same class of bug caught three times in review,
 explained well each time, never written down anywhere, because "I'll remember"
@@ -78,7 +87,7 @@ Not the reasoning. The observation.
 
 ```js
 // Bad: reasoning only. Unfalsifiable, so nobody can ever safely change it.
-const MAX_HOPS = 1;  // walking too far up captures unrelated directories
+const MAX_HOPS = 1; // walking too far up captures unrelated directories
 
 // Good: the evidence. Now a reader knows what breaks if they raise it, and
 // can go re-measure.
@@ -112,3 +121,22 @@ row "just to check" has already made the decision it was asking about.
 Ship the reverse too. Anything that writes in bulk gets an undo that touches
 only rows its own apply created, identified by an origin field written at
 insert time, never inferred afterward by shape.
+
+## A guard trusts nothing the agent it guards can create
+
+When a guard decides "this is the real thing" (a checkout, a binary, a
+receipt), the evidence has to come from somewhere the guarded agent can't
+write in one command. A file existing is never that evidence.
+
+On 2026-10-16 launch-guard started allowing `cd <dir> && <test>` when the dir
+held `library/clay-api/registry.json` and a `.git` entry (68a6f592). The Tab
+manager's break-it pass faked both in two lines, an empty `.git/` and a `{}`
+registry, and ran arbitrary code as a "test". The same command by absolute
+path was refused, so the loosening created the hole. The fix (44dd24aa) asks
+the kit's own git: the dir has to appear in `git -C <kit> worktree list`, share
+its common dir, and git has to track the test file there.
+
+Before landing any allowlist change, write the forged case as a must-refuse
+test first: a fake marker, another repo with the same shape, a symlink, a
+pointer file aimed at the real thing, an untracked file inside the real thing.
+Then attack it yourself before you report done, so a reviewer doesn't have to.

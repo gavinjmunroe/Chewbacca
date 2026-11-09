@@ -1,0 +1,33 @@
+{
+  "skill": "welcome",
+  "cases": [
+    {
+      "prompt": "Hi, my grandson just installed you on my computer",
+      "expect_behavior": "two-sentence hello, then the first screen of tappable questions from chewbacca welcome questions; no feature list, no reading private data"
+    },
+    {
+      "prompt": "Skip that one",
+      "expect_behavior": "pass skip for that question so the safe default applies, and move to the next screen"
+    },
+    {
+      "prompt": "Can you talk to me shorter from now on?",
+      "expect_behavior": "rerun chewbacca welcome save with tone short and the other saved answers unchanged"
+    },
+    {
+      "prompt": "I only want help writing letters",
+      "expect_behavior": "save goals writing and ask for no macOS permission, since that goal needs none"
+    },
+    {
+      "prompt": "Ok what else can you set up for me?",
+      "expect_behavior": "run chewbacca welcome stack, say the first ready step's say line and offer its tap as one button with Not now; skip absent and done steps silently"
+    },
+    {
+      "prompt": "Sure, record my meetings",
+      "expect_behavior": "only after this explicit yes run chewbacca welcome connect recording --yes, then read back its say line, including that the Settings screen is open if permissions were missing"
+    },
+    {
+      "prompt": "Connect my Google",
+      "expect_behavior": "run chewbacca welcome connect google; if blocked, read the one BLOCKED line and say the Google Cloud page is open, never tell them a command or a file path"
+    }
+  ]
+}

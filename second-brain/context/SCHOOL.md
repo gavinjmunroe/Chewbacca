@@ -32,17 +32,6 @@ excuse one" is useful. "Writing class" is not.
 
 ---
 
-## AI policy per course
-
-The field that changes what help is allowed. Copy the operative clause, not a
-summary.
-
-| Course | Policy | What that means in practice |
-| ------ | ------ | --------------------------- |
-| ...    | ...    | ...                         |
-
----
-
 ## At risk
 
 What is actually in danger this term, with the reason. Attendance budgets nearly

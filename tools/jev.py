@@ -150,6 +150,11 @@ def validate_response(result, payload):
 
 
 def evaluate(payload):
+    # 2026-10-16: gtme next-move called evaluate() without "model", every call raised
+    # "Expected a Jev model identifier", and the replay ran on flat 0.5s before anyone saw
+    # it. The CLI already defaulted the model; in-process callers now get the same default.
+    if isinstance(payload, dict) and "model" not in payload:
+        payload = {**payload, "model": MODEL}
     body = validate_request(payload)
     if not allowed():
         raise JevError("Jev is disabled by this user root's consent settings; no request sent.")

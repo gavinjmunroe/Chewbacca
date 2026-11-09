@@ -17,6 +17,16 @@
       "reject": [
         "drafting the email first"
       ]
+    },
+    {
+      "prompt": "Get me ready for the call w the founder of Firebox at 4:30, me and Gav are pitching",
+      "expect_tools": [
+        "prospect-brief"
+      ],
+      "why": "a founder sales call script, which must carry the channel question, the service line, the Claude answer and a price",
+      "reject": [
+        "a cold email pilot before asking what channel works for them"
+      ]
     }
   ]
 }

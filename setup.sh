@@ -65,6 +65,44 @@ sedi() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `chewbacca setup` from PATH runs this copy inside the kit runtime, a snapshot
+# that is replaced on every update. Installing from it would record the
+# snapshot as the repo and link skills into a directory due to be deleted, so
+# hand over to the checkout the runtime was built from.
+_kr_side="$(cd -P "$SCRIPT_DIR" && pwd).kit-runtime.json"
+if [ -f "$_kr_side" ]; then
+  _kr_src="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source",""))' "$_kr_side" 2>/dev/null)"
+  if [ -n "$_kr_src" ] && [ -f "$_kr_src/setup.sh" ]; then
+    # Catch the checkout up first. On 2026-10-11 it sat 62 commits behind main,
+    # so this exec ran an old setup.sh and a hook landed that hour never
+    # registered. source_sync clears only copies of already-landed files and
+    # leaves real local work alone.
+    _kr_sha="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null)"
+    if [ -n "$_kr_sha" ] && [ -f "$SCRIPT_DIR/tools/source_sync.py" ]; then
+      # When the checkout can't catch up, its setup.sh is the wrong one to run. On 2026-11-06
+      # a `chewbacca update` ran it from 23 commits behind: every live hook went back to the
+      # old copies, and 16 registered hooks came off settings.json, minutes after they went
+      # in. So install from a clean worktree at this sha, kept at a stable path. Nothing in
+      # the shared checkout is touched, and skills and repo paths stay valid across updates.
+      if ! python3 -I "$SCRIPT_DIR/tools/source_sync.py" "$_kr_src" "$_kr_sha" >&2; then
+        _kr_clean="$HOME/.chewbacca/kit/setup-source"
+        if [ -e "$_kr_clean/.git" ]; then
+          git -C "$_kr_clean" checkout -q --detach "$_kr_sha" 2>/dev/null
+        else
+          git -C "$_kr_src" worktree add -q --detach "$_kr_clean" "$_kr_sha" 2>/dev/null
+        fi
+        if [ "$(git -C "$_kr_clean" rev-parse HEAD 2>/dev/null)" = "$_kr_sha" ]; then
+          echo "  $_kr_src is behind main with local work, so this installs from $_kr_clean" >&2
+          _kr_src="$_kr_clean"
+        else
+          echo "  ! $_kr_src is behind main and no clean copy could be made. Not running its old setup." >&2
+          exit 1
+        fi
+      fi
+    fi
+    exec bash "$_kr_src/setup.sh" "$@"
+  fi
+fi
 BACKUP_DIR="$HOME/.claude/backups/d1-setup-$(date +%Y%m%d-%H%M%S)"
 BACKED_UP=0
 
@@ -113,10 +151,16 @@ Required:
 
 Optional:
   --runtime <name>             Install only the selected runtime adapter:
-                               claude-code, codex, both, or auto. No Mac bootstrap.
+                               claude-code, codex, cursor, gemini, vscode, both,
+                               auto or all. No Mac bootstrap.
+  --every-agent                Same as --runtime all: every agent found on this
+                               machine, each config backed up first.
                                Use --dry-run to preview; use agent export for other hosts.
   --brain-dir <path>           With --runtime, choose the private context folder.
   --json                      With --runtime, print machine-readable results.
+  --team                       With --runtime, also load the shared team memory.
+                               Only for Amber, Chewbacca and Firm Foundation teammates.
+  --no-team                    Remove the team memory from an install that has it.
   --github-user <login>        Defaults to the logged-in gh account.
   --repo-dir <path>            Where repos live. Default ~/dev
   --anthropic-key <key>        Written to settings.json env. Omit to leave unset.
@@ -146,15 +190,17 @@ Who this install is for:
                                a name you can remember at the end of a pasted
                                curl line.
 
-Behaviors, both off unless asked for:
+Behaviors:
   --session-opener <name>      Opens every response with a line you choose.
                                Shipped: prayer, gratitude. Default: none.
                                Add it later:
                                  ./setup.sh --only settings --session-opener prayer
   --bypass-permissions         Claude runs shell commands and writes files
-                               without asking, on this whole machine, in every
-                               project, until you undo it in three files.
-                               Default: off, so Claude asks.
+                               without asking, in the terminal, VS Code, Cursor
+                               and the desktop app. Default: ON. Deny rules
+                               still block the irreversible operations.
+  --ask-permissions            Keep the prompts. Undo later with
+                               python3 tools/no_prompts.py --off
 
 Re-running:
   --only <section>             Run one section. Safe to repeat.
@@ -167,7 +213,10 @@ USAGE
 
 NAME=""; GITHUB_USER=""; REPO_DIR=""; ANTHROPIC_KEY=""; GITHUB_PAT=""
 TODOIST_TOKEN=""; COMPOSIO_URL=""; COMPOSIO_KEY=""; ANSWERS=""
-SESSION_OPENER="none"; BYPASS_PERMS="no"; ONLY=""; DRY_RUN=0
+# On by default since 2026-10-16. Caleb: "Make this the case for anyone that
+# uses chewbs, onboarding needs to be magical", after a day of agents stopping
+# to ask on every surface. --ask-permissions keeps the prompts.
+SESSION_OPENER="none"; BYPASS_PERMS="yes"; ONLY=""; DRY_RUN=0
 PROFILE="developer"; NO_GITHUB=0; ONLY_PORTABLE=0
 FAST=0
 AGENT_RUNTIME=""
@@ -182,6 +231,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="${2:-}"; shift 2 ;;
     --runtime) AGENT_RUNTIME="${2:-}"; shift 2 ;;
+    # Every agent already on this machine: Claude Code, Codex, Cursor, Gemini
+    # CLI and VS Code, each detected, its configs backed up first.
+    --every-agent) AGENT_RUNTIME=all; shift ;;
     --brain-dir) AGENT_BRAIN="${2:-}"; shift 2 ;;
     --json) AGENT_JSON=1; shift ;;
     --github-user) GITHUB_USER="${2:-}"; shift 2 ;;
@@ -194,6 +246,7 @@ while [ $# -gt 0 ]; do
     --answers) ANSWERS="${2:-}"; shift 2 ;;
     --session-opener) SESSION_OPENER="${2:-none}"; shift 2 ;;
     --bypass-permissions) BYPASS_PERMS="yes"; shift ;;
+    --ask-permissions) BYPASS_PERMS="no"; shift ;;
     --profile)
       PROFILE="${2:-developer}"
       case "$PROFILE" in
@@ -224,6 +277,8 @@ while [ $# -gt 0 ]; do
       SKIP_SECTIONS="$SKIP_SECTIONS editor desktop mcp plugins tools plynn"
       FAST=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --team) AGENT_TEAM=1; shift ;;
+    --no-team) AGENT_TEAM=0; AGENT_NO_TEAM=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) err "unknown argument: $1"; echo; usage; exit 2 ;;
   esac
@@ -235,7 +290,7 @@ if [ -n "$AGENT_RUNTIME" ]; then
   for ((arg_index=0; arg_index<${#REQUESTED_ARGS[@]}; arg_index++)); do
     case "${REQUESTED_ARGS[$arg_index]}" in
       --runtime|--name|--brain-dir) arg_index=$((arg_index + 1)) ;;
-      --dry-run|--json) ;;
+      --dry-run|--json|--team|--no-team|--every-agent|--bypass-permissions|--full-send|--ask-permissions) ;;
       *) err "Runtime setup does not accept ${REQUESTED_ARGS[$arg_index]}; use the full installer or native host settings for that option."
          exit 2 ;;
     esac
@@ -246,7 +301,24 @@ if [ -n "$AGENT_RUNTIME" ]; then
   [ -n "$NAME" ] && runtime_args+=(--name "$NAME")
   [ -n "$AGENT_BRAIN" ] && runtime_args+=(--brain-dir "$AGENT_BRAIN")
   [ "$AGENT_JSON" -eq 1 ] && runtime_args+=(--json)
-  exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
+  [ "${AGENT_TEAM:-0}" -eq 1 ] && runtime_args+=(--team)
+  [ "${AGENT_NO_TEAM:-0}" -eq 1 ] && runtime_args+=(--no-team)
+  if [ "$action" = plan ] || [ "$AGENT_JSON" -eq 1 ]; then
+    exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
+  fi
+  python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}" || exit $?
+  # The one-line install never reached the permission settings, so a new user
+  # was prompted on every surface (2026-10-16). Same default as the full path.
+  if [ "$BYPASS_PERMS" = "yes" ]; then
+    echo
+    echo "Turning off permission prompts (keep them: --ask-permissions):"
+    python3 "$SCRIPT_DIR/tools/no_prompts.py" || true
+  fi
+  # The first win, before anyone opens an agent: their own week from the git
+  # repos already here, read only, with a receipt of the commands behind it.
+  echo
+  python3 "$SCRIPT_DIR/tools/first_win.py" || true
+  exit 0
 fi
 if [ -n "$AGENT_BRAIN" ] || [ "$AGENT_JSON" -eq 1 ]; then
   err "--brain-dir and --json require --runtime"
@@ -475,8 +547,20 @@ ensure_terminal_shell_guard() {
     if grep -qF "$TERMINAL_GUARD_MARK" "$rc" 2>/dev/null; then
       had=1
       tmp="$(mktemp)" || return 0
-      awk -v s="$TERMINAL_GUARD_MARK" -v e="$TERMINAL_GUARD_END" \
-        'index($0,s){f=1; next} f{ if (index($0,e)) f=0; next } {print}' "$rc" > "$tmp"
+      # The first version (29bb83ee) wrote no end marker; its block ends at
+      # its one `fi`. Stripping to an end marker that isn't there deleted the
+      # rest of the user's rc (break-it, 2026-10-19), so without one the strip
+      # stops at that `fi`. Blank lines right before the block go with it, or
+      # every refresh added one. A copy of the rc is kept either way.
+      local hasend=0
+      grep -qF "$TERMINAL_GUARD_END" "$rc" 2>/dev/null && hasend=1
+      cp -p "$rc" "$rc.chewbacca-bak"
+      awk -v s="$TERMINAL_GUARD_MARK" -v e="$TERMINAL_GUARD_END" -v hasend="$hasend" '
+        index($0,s) { f=1; blank=""; next }
+        f { if (hasend ? index($0,e) : ($0 ~ /^fi[[:space:]]*$/)) f=0; next }
+        /^[[:space:]]*$/ { blank = blank $0 "\n"; next }
+        { printf "%s", blank; blank=""; print }
+        END { printf "%s", blank }' "$rc" > "$tmp"
       cat "$tmp" > "$rc"
       rm -f "$tmp"
     fi
@@ -494,17 +578,27 @@ link_tool() {
   local name="$1" src="$SCRIPT_DIR/bin/$1" dst="$HOME/.local/bin/$1"
   [ -f "$src" ] || return 1
   mkdir -p "$HOME/.local/bin"
+  # Through the kit runtime when it has the tool (see "Kit runtime" below), so
+  # PATH never runs a tab's uncommitted edit. A tool only on this branch
+  # links here until it reaches origin/main and kit-autopull moves the link.
+  local target="$src"
+  [ -f "${KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/bin/$name" ] &&
+    target="${KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/bin/$name"
   # -n so that when dst is already a symlink to a DIRECTORY we replace it rather
   # than writing inside it; -f to replace an existing copy from an older setup.
-  ln -sfn "$src" "$dst"
+  ln -sfn "$target" "$dst"
   chmod +x "$src"
 }
 
 install_backend_launchers() {
   local backend_tool
-  for backend_tool in chatgpt-tab chatgpt-gateway perplexity-tab jev-browse chewbacca-bridge mac-use chrome-js; do
+  for backend_tool in chatgpt-tab chatgpt-gateway perplexity-tab jev-browse chewbacca-bridge chewbacca-browser mac-use chrome-js; do
     link_tool "$backend_tool"
   done
+  # The native host for ChatGPT and Claude in Chrome. Registering it writes one
+  # file naming one extension id; loading the extension stays a person's click.
+  { python3 "$SCRIPT_DIR/bin/chewbacca-browser" install || warn "chewbacca browser install failed; run it again once Chrome is installed"; } |
+    while read -r line; do log "$line"; done
   log "Chewbacca backend launchers refreshed in ~/.local/bin"
 }
 
@@ -520,7 +614,7 @@ install_agent_instructions() {
   install_agent_neutral_rule
   python3 "$SCRIPT_DIR/tools/agents_md.py"
   initialize_personal_context
-  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR"
+  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR" $( [ "${AGENT_TEAM:-0}" -eq 1 ] && echo --team )
   if ! command -v jq >/dev/null 2>&1; then
     warn "jq is missing: context loading works, but shared file and reply checks require jq"
   fi
@@ -554,6 +648,27 @@ if [ "$DRY_RUN" -eq 1 ]; then
     [ -n "${pair#*:}" ] && echo "  credential:      ${pair%%:*} (would be written to settings.json)"
   done
   exit 0
+fi
+
+# Kit runtime, unguarded on purpose: every link_tool below reads it, under
+# any --only. PATH tools run from ~/.chewbacca/kit/current, a locked worktree of
+# origin/main that no agent edits, never from this checkout's working tree. On
+# 2026-10-10 every tool in ~/.local/bin linked into the shared checkout, which
+# could not fast-forward under six tabs' edits, so `chewbacca` on PATH ran code
+# main had replaced. Built here, before the first link_tool, so a fresh install
+# gets the same layout kit-autopull and the launchd timer keep current. A
+# checkout with no origin/main (a tarball, a fork mid-setup) falls back to
+# linking this tree, as before. CHEWBACCA_NO_RUNTIME=1 skips it.
+KIT_RUNTIME="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}"
+# Only for runs that link tools: `--only coding-agent` and friends never call
+# link_tool, and the hermetic tests run those against a scratch HOME.
+case "${ONLY:-}" in ""|agents|tools) _kr_wanted=1 ;; *) _kr_wanted=0 ;; esac
+if [ "$_kr_wanted" = 1 ] && [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$SCRIPT_DIR/tools/kit_runtime.py" ]; then
+  if _kr_out="$(python3 -I "$SCRIPT_DIR/tools/kit_runtime.py" update --repo "$SCRIPT_DIR" --adopt 2>&1)"; then
+    log "Kit runtime: $_kr_out ($KIT_RUNTIME/current)"
+  else
+    warn "Kit runtime not built ($_kr_out). Tools will link into $SCRIPT_DIR"
+  fi
 fi
 
 if [ -n "${CHEWBACCA_BRAIN_DIR:-}" ]; then
@@ -700,6 +815,13 @@ if should_run coding-agent; then
   # nothing else, on machines this kit does not otherwise run on.
   CLAUDE_CODE_INSTALLER="${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}"
   section "Your agent"
+  # Codex that came inside ChatGPT.app or Codex.app has no `codex` on PATH, so
+  # a USC student with free ChatGPT Edu Codex looked agentless and got Claude
+  # Code plus a paid-plan warning. Put a shim on PATH first (2026-10-10).
+  if ! command -v claude &>/dev/null && ! command -v codex &>/dev/null; then
+    python3 "$SCRIPT_DIR/tools/agent_runtime.py" shims >/dev/null 2>&1 || true
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
   for a in claude codex gemini; do
     if command -v "$a" &>/dev/null; then KIT_AGENT="$a"; break; fi
   done
@@ -959,7 +1081,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
+for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate ui-proof claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe brain-rerank mac-db screen-time tab-rescue sim-reap agent-nice; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"
@@ -977,15 +1099,14 @@ fi
 # The opener gate reads the word a reply must open with from here. Written
 # only when the person's own CLAUDE.md asks for a prayer ending in Amen, so
 # prayer-guard.sh stays inert for everyone who did not ask for one.
-if grep -qiE "prayer|pray" "$HOME/.claude/CLAUDE.md" 2>/dev/null && grep -q "Amen" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
-  mkdir -p "$HOME/.chewbacca"
-  echo "Amen" > "$HOME/.chewbacca/opener-marker"
-  log "opener gate on: replies must open with a prayer, as CLAUDE.md asks"
-fi
+# ~/.chewbacca/opener-off keeps it off for good; bin/lib/opener-marker.sh says why.
+case "$(bash "$SCRIPT_DIR/bin/lib/opener-marker.sh" "$HOME/.claude/CLAUDE.md" 2>/dev/null || true)" in
+  on)  log "opener gate on: replies must open with a prayer, as CLAUDE.md asks" ;;
+  off) log "opener gate off: ~/.chewbacca/opener-off is set" ;;
+esac
 
-# ux-engine lives in its own repo, so its tools cannot go through link_tool,
-# which resolves against this repo's bin/. Link them when that repo is present,
-# from the same default ux-guard.sh reads.
+# ux-engine lives in apps/ux-engine, outside this repo's bin/, so its tools
+# cannot go through link_tool. Link them from the same path ux-guard.sh reads.
 #
 # WHY THIS MATTERS AND IS NOT COSMETIC. ux-guard blocks a UI write and then
 # tells the agent what to do next: "Derive the constraints first: ux-constrain"
@@ -993,7 +1114,7 @@ fi
 # remediation was a dead end and the only move left after a refusal was to
 # guess again. A gate that refuses without a runnable next step trains people
 # to route around it.
-UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/code/tools/ux-engine}"
+UX_ENGINE_DIR="${UX_ENGINE_DIR:-$SCRIPT_DIR/apps/ux-engine}"
 if [ -d "$UX_ENGINE_DIR/bin" ]; then
   mkdir -p "$HOME/.local/bin"
   _ux_linked=""
@@ -1049,12 +1170,20 @@ fi
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
 # gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
 # scrape, and still runs exact passes on plain python3 when that build fails.
-for _tool in orphan-reap list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
+# The names after ig-read are tools a skill or rule tells agents to run by
+# bare name; none were linked, so each was "command not found" on a fresh
+# install (backlog 26 audit, 2026-10-16). tests/test_doc_commands_linked.py
+# fails when a doc names a bin/ tool this file never links.
+for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-rules gtme-dnc gtme-score gtme-lookup kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math discovery case-study llms-txt rfp-extract gtme-library gtme-signals gtme-grade gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen api-grow model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team peel ig-read call-listen chewbacca-permissions clay-go decision-inbox injection-hold gtm gtme gtme-interview gtme-investors kyber-surfaces qr railway-domain railway-attach logo-fetch texts-photos recur reel-assemble reel-check tabs contacts-bulk; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
   fi
 done
+# The Clay front door behind `chewbacca clay`, on PATH under its own name so
+# `readlink ~/.local/bin/chewbacca-clay` shows which kit a write runs from.
+# On 2026-10-10 the copy that ran was the dirty shared checkout's, hours behind.
+link_tool chewbacca-clay && log "chewbacca-clay installed to ~/.local/bin/"
 ensure_local_bin_on_path
 unset _tool
 
@@ -1065,8 +1194,11 @@ unset _tool
 # fails halfway. Kyber.app itself runs hud-listen, kyber-sessions and
 # text-command from ~/.local/bin; text-command was missing from this list until
 # 2026-10-05, so a text to yourself woke Kyber and ran a path that did not exist.
+# meeting-autopilot is the same: Kyber keeps it running so a meeting records
+# under Kyber's own Microphone and Screen Recording grants, and it drives
+# room-capture; granola-import brings Granola's past meetings across once.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-verse hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal hud-autostart meeting-autopilot room-capture meeting-live granola-import realm-engine realm-ui; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -1118,6 +1250,16 @@ if [ -n "$_installed_hud" ]; then
     warn "hud-voice is not built; replies are read by hud-speak, which needs uv and espeak-ng."
     warn "Build it: $(dirname "$0")/voice/build.sh, then HUD_SPEAKER=hud-voice for hud-listen."
   fi
+  # Wake mode asks Smart Turn whether a pause means finished, and ends the
+  # turn there instead of waiting out its 1.1s silence timer. About 17 MB,
+  # pinned and hash-checked; without it wake mode keeps the timer.
+  if [ -x "$SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh" ]; then
+    if "$SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh" >/dev/null 2>&1; then
+      log "Smart Turn end-of-turn model in ~/.bob/smart-turn"
+    else
+      warn "could not fetch Smart Turn; wake mode keeps its silence timer ($SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh)"
+    fi
+  fi
   ensure_local_bin_on_path
   ensure_terminal_shell_guard
 fi
@@ -1133,6 +1275,20 @@ if [ -f "$SCRIPT_DIR/bin/kits" ]; then
   log "kits installed to ~/.local/bin/"
 fi
 
+# The real `chewbacca` CLI. start.sh writes a six-verb stub (update, doctor,
+# setup, uninstall, where, version) so a half-finished install still has a way
+# back, and nothing ever replaced it: on every fresh install `chewbacca usc`,
+# `chewbacca api` and the `chewbacca welcome questions` start.sh hands the
+# agent printed the stub's help instead (found 2026-10-10 walking the USC
+# student path from a scratch HOME). ln -sfn replaces the stub file.
+link_tool chewbacca
+# Hooks and skills name these by bare command (lesson-guard says run
+# `closeout --fast`, method-guard says `method debug`), but none were in a link
+# list, so tests/test_doc_commands_linked.py now reads hooks too. On 2026-10-29
+# the night wrap-up tab got "command not found: closeout".
+for _tool in closeout backlog method evolve clay-inbox app-revive chewbacca-daemon gtme-portfolio text-blast plan-check best-pass send-file text-group; do
+  [ -f "$SCRIPT_DIR/bin/$_tool" ] && link_tool "$_tool"
+done
 if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   link_tool coursework
   COURSEWORK_HOME="${COURSEWORK_DIR:-$HOME/coursework}"
@@ -1142,6 +1298,12 @@ if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   # A course textbook is half a million words, so it is ingested once into
   # $COURSEWORK_HOME/texts and searched from there. See apps/texts/README.md.
   [ -f "$SCRIPT_DIR/bin/textbook" ] && link_tool textbook
+  # Slides, files and transcripts come straight off Brightspace. Neither tool
+  # was ever linked here, so on 2026-10-10 "pull my lecture slides" turned into
+  # a find across ~ while brightspace-sync sat in bin/ as command-not-found.
+  for _tool in brightspace brightspace-sync; do
+    [ -f "$SCRIPT_DIR/bin/$_tool" ] && link_tool "$_tool"
+  done
   log "coursework installed to ~/.local/bin/, ledger at $COURSEWORK_HOME"
   echo "    Next: run /syllabus on a syllabus PDF to fill the ledger."
 fi
@@ -1183,6 +1345,131 @@ CONTEXT_OWNER="$USER_NAME"
 CHEWBACCA_REPO_DIR="$SCRIPT_DIR"
 D1CONFIG
 log "Hook config written to ~/.claude/d1-config.sh"
+
+# write-log runs `git status` on the context repo before and after every tool
+# call. On 2026-10-11 that cost 0.85 s CPU per status on a 61,752-file brain;
+# with git's builtin fsmonitor daemon kept current by the repo's own config,
+# 0.17 s. The daemon only keeps that speed if every git command there (brain
+# sync included) carries the setting, so it lives in the repo's config.
+# macOS only: the builtin daemon does not exist on Linux.
+if [ "$(uname)" = "Darwin" ] && [ -z "${CHEWBACCA_SUITE:-}" ] && [ -n "$PC_DIR" ] && [ -e "$PC_DIR/.git" ]; then
+  git -C "$PC_DIR" config core.fsmonitor true
+  git -C "$PC_DIR" config core.untrackedCache true
+fi
+
+# hookd decides in under a millisecond whether a gated guard needs to run at
+# all (crates/hookd). It has no dependencies, so it builds offline in ~10 s
+# (2026-10-11, M-series, release). No cargo means no hookd, and every guard
+# then runs directly, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/hookd/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/hookd" cargo build --quiet --release \
+       --manifest-path "$SCRIPT_DIR/crates/hookd/Cargo.toml" 2>/dev/null; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/hookd/release/hookd" "$HOME/.local/bin/hookd.new" &&
+      mv -f "$HOME/.local/bin/hookd.new" "$HOME/.local/bin/hookd"
+    log "hookd built to ~/.local/bin/hookd"
+  else
+    warn "hookd did not build; guards run directly, as before."
+  fi
+fi
+# terminal-loop.sh hands its Pre/Post rows to hookd only behind this marker,
+# written only for a binary that answers the probe (an older hookd answers an
+# unknown verb with exit 0, and the agent board would get no rows).
+if [ "$("$HOME/.local/bin/hookd" terminal-event --probe 2>/dev/null)" = "hookd terminal-event 1" ]; then
+  mkdir -p "$HOME/.chewbacca" && : > "$HOME/.chewbacca/hookd-terminal-event"
+else
+  rm -f "$HOME/.chewbacca/hookd-terminal-event"
+fi
+
+# chewbacca-writelog (crates/writelog) answers write-log in Rust and reads the
+# brain from an FSEvents journal instead of running git status before and
+# after every call: 0.61 s of CPU per Bash call (Pre plus Post) became
+# 0.018 s, and 415 ms of wall per event 28 ms, on a 6,000 dirty-file test
+# brain (2026-10-11, load 6, tests/test_writelog_rust.py). The watcher
+# runs as one daemon service. Who writes the real log is the one-word file
+# ~/.chewbacca/writelog.mode (python, shadow or rust), which setup never
+# changes. No cargo, no binary: write_log.py runs, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/writelog/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/writelog" cargo build --quiet --release \
+       --manifest-path "$SCRIPT_DIR/crates/writelog/Cargo.toml" 2>/dev/null; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/writelog/release/chewbacca-writelog" "$HOME/.local/bin/chewbacca-writelog.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-writelog.new" "$HOME/.local/bin/chewbacca-writelog"
+    # The kit's own main checkout (not a runtime snapshot, which is a
+    # worktree) is the other repo most calls run in, so it is watched too.
+    WL_COMMON="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    WL_KIT="${WL_COMMON%/.git}"
+    if [ -n "$WL_COMMON" ] && [ "$WL_KIT" != "$WL_COMMON" ] && [ -d "$WL_KIT/.git" ]; then
+      mkdir -p "$HOME/.chewbacca/watch" && chmod 700 "$HOME/.chewbacca/watch"
+      grep -qxF "$WL_KIT" "$HOME/.chewbacca/watch/roots" 2>/dev/null || printf '%s\n' "$WL_KIT" >> "$HOME/.chewbacca/watch/roots"
+    fi
+    # A running watcher keeps the old binary and roots; the daemon starts
+    # the new one within its 10 s keepalive backoff.
+    pkill -f "^$HOME/.local/bin/chewbacca-writelog serve" 2>/dev/null || true
+    if [ "$(uname)" = "Darwin" ]; then
+      python3 - "$SCRIPT_DIR" "$HOME/.local/bin/chewbacca-writelog" <<'PY' || warn "writelog watcher not registered; write-log keeps using git status."
+import sys
+sys.path.insert(0, sys.argv[1] + "/bin/lib")
+import daemon_register
+print(daemon_register.register("writelog-watch", [sys.argv[2], "serve"], keepalive=True))
+PY
+    fi
+    log "chewbacca-writelog built to ~/.local/bin/chewbacca-writelog"
+  else
+    warn "chewbacca-writelog did not build; write-log runs in Python, as before."
+  fi
+fi
+
+# chewbacca-bashparse (crates/bashparse) reads a shell command with
+# tree-sitter-bash so destructive-guard, load-guard and zsh-guard can tell a
+# command from a word inside data. Unlike hookd it has two pinned crates, so
+# the first build needs the network (12 s wall, 30 s CPU cold on 2026-10-12,
+# M-series, release). No cargo, no network, no binary: those guards read the raw
+# command, exactly as before.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/bashparse/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/bashparse" cargo build --quiet --release --locked \
+       --manifest-path "$SCRIPT_DIR/crates/bashparse/Cargo.toml" 2>/dev/null &&
+     [ "$("$HOME/.chewbacca/build/bashparse/release/chewbacca-bashparse" --probe 2>/dev/null)" = "chewbacca-bashparse 1" ]; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/bashparse/release/chewbacca-bashparse" "$HOME/.local/bin/chewbacca-bashparse.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-bashparse.new" "$HOME/.local/bin/chewbacca-bashparse"
+    log "chewbacca-bashparse built to ~/.local/bin/chewbacca-bashparse"
+  else
+    warn "chewbacca-bashparse did not build; the shell guards read commands as before."
+  fi
+fi
+
+# chewbacca-sendpolicy (crates/sendpolicy) reads config/send-policy.cedar, the
+# one file of rules about who, when and how much a send may go. Cedar is a
+# crate, so the first build needs the network (2 min wall on 2026-10-12,
+# M-series, release, at load 26). No cargo, no network, no binary: every sink
+# keeps its inline checks exactly as before, and `chewbacca send-policy`
+# says it can't answer.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && command -v cargo >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/crates/sendpolicy/Cargo.toml" ]; then
+  if CARGO_TARGET_DIR="$HOME/.chewbacca/build/sendpolicy" cargo build --quiet --release --locked \
+       --manifest-path "$SCRIPT_DIR/crates/sendpolicy/Cargo.toml" 2>/dev/null &&
+     [ "$("$HOME/.chewbacca/build/sendpolicy/release/chewbacca-sendpolicy" --probe 2>/dev/null)" = "chewbacca-sendpolicy 1" ]; then
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 "$HOME/.chewbacca/build/sendpolicy/release/chewbacca-sendpolicy" "$HOME/.local/bin/chewbacca-sendpolicy.new" &&
+      mv -f "$HOME/.local/bin/chewbacca-sendpolicy.new" "$HOME/.local/bin/chewbacca-sendpolicy"
+    log "chewbacca-sendpolicy built to ~/.local/bin/chewbacca-sendpolicy"
+  else
+    warn "chewbacca-sendpolicy did not build; each send path keeps its own checks, as before."
+  fi
+fi
+
+# Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
+# about ten tabs pushed main and nearly every merge stopped on those two
+# generated files. .gitattributes names the drivers; git config holds the
+# commands, which git never clones, so every checkout registers them here.
+# Idempotent; the kit-autopull session hook repeats it for clones that
+# predate this line.
+# Not under the suite: its sandboxed setup runs must not write this checkout's
+# real git config.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && [ -e "$SCRIPT_DIR/.git" ] && [ -f "$SCRIPT_DIR/tools/merge_regen.py" ]; then
+  python3 "$SCRIPT_DIR/tools/merge_regen.py" install --repo "$SCRIPT_DIR" >/dev/null 2>&1 &&
+    log "Git merge drivers registered for SHA256SUMS.txt and README counts"
+fi
 
 # ── What this run turns on ────────────────────────────────────────────────────
 # Both of these used to be on with no way to say no, announced in a wall of
@@ -1233,14 +1520,56 @@ export D1_SESSION_OPENER="$SESSION_OPENER"
 export D1_BYPASS_PERMS="$BYPASS_PERMS"
 
 python3 << 'PYEOF'
-import json, os, shlex
+import json, os, re, shlex
 
 settings_path = os.path.expanduser("~/.claude/settings.json")
-try:
-    with open(settings_path) as f:
-        settings = json.load(f)
-except Exception:
-    settings = {}
+# A settings.json this can't read is never replaced. Break-it, 2026-10-19: a
+# file with a BOM, a // comment or a trailing comma failed json.load, became
+# {}, and every user key was gone under "Settings written." Those three are
+# read through; anything else stops the install with the file untouched.
+def _tolerant_json(text):
+    text = text.lstrip("\ufeff")
+    out, i, n, in_str = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1]); i += 2; continue
+            if c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True; out.append(c)
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        else:
+            out.append(c)
+        i += 1
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+    return json.loads(cleaned)
+
+settings = {}
+if os.path.exists(settings_path):
+    with open(settings_path, encoding="utf-8", errors="replace") as f:
+        _raw = f.read()
+    if _raw.strip():
+        try:
+            settings = json.loads(_raw)
+        except ValueError:
+            try:
+                settings = _tolerant_json(_raw)
+                print("Read settings.json past a BOM, comments or trailing commas; it is rewritten as plain JSON.")
+            except ValueError as exc:
+                raise SystemExit(f"setup: ~/.claude/settings.json isn't valid JSON ({exc}). Nothing was changed; "
+                                 f"fix it or move it aside and run setup again.")
+    if not isinstance(settings, dict):
+        raise SystemExit("setup: ~/.claude/settings.json isn't a JSON object. Nothing was changed.")
 
 env = os.environ.get
 hooks_dir = env("D1_HOOKS") or os.path.expanduser("~/.claude/hooks")
@@ -1257,13 +1586,20 @@ for key, var in (("GITHUB_TOKEN", "D1_GITHUB_PAT"),
         settings["env"][key] = val
         print(f"Wrote credential to settings.json: env.{key}")
 
-perms = settings.setdefault("permissions", {})
-# Off unless --bypass-permissions was passed. Turning it on removes the step
-# where Claude asks before running a shell command or writing a file, on the
-# whole machine, in every project, and it takes three separate files to undo.
-# That is not something an installer should decide on someone's behalf.
+# "permissions": null crashed the install halfway (break-it, 2026-10-19).
+if not isinstance(settings.get("permissions"), dict):
+    settings["permissions"] = {}
+perms = settings["permissions"]
+# On unless --ask-permissions was passed (default since 2026-10-16, see the
+# BYPASS_PERMS default). The deny list below still blocks what has no undo.
+# AskUserQuestion is denied too, so an agent can't stop to pop a question card.
+# tools/no_prompts.py --off undoes all of it.
 if env("D1_BYPASS_PERMS", "no") == "yes":
     perms["defaultMode"] = "bypassPermissions"
+    settings["skipDangerousModePermissionPrompt"] = True
+    perms.setdefault("deny", [])
+    if "AskUserQuestion" not in perms["deny"]:
+        perms["deny"].append("AskUserQuestion")
     print("Permission prompts disabled: Claude will not ask before acting.")
 else:
     perms.setdefault("defaultMode", "default")
@@ -1280,6 +1616,27 @@ perms.setdefault("allow", [])
 # yourself if you build something that needs them.
 if "WebSearch" not in perms["allow"]:
     perms["allow"].append("WebSearch")
+
+# Bypass mode alone still prompted for MCP tools. Caleb, 2026-10-04, three
+# times in an hour: "Fix vscode, you shouldn't be asking for permission to do
+# anything", "you just asked for permission again...", "you keep asking for
+# permission when you shouldn't be" (feedback_no_permission_prompts). The fix
+# that held was one `mcp__<server>` allow rule per server, written by hand on
+# this Mac, so every other install still prompted. Every MCP server configured
+# at user scope gets its rule here. `mcp__*` is not a valid rule, so it is one
+# per server (feedback_no_permission_prompts, 2026-10-04).
+if env("D1_BYPASS_PERMS", "no") == "yes":
+    servers = set()
+    for cfg in (os.path.expanduser("~/.claude.json"), os.path.expanduser("~/.claude/.mcp.json")):
+        try:
+            with open(cfg) as f:
+                servers.update((json.load(f).get("mcpServers") or {}).keys())
+        except Exception:
+            pass
+    for name in sorted(servers):
+        rule = "mcp__" + name
+        if name and rule not in perms["allow"]:
+            perms["allow"].append(rule)
 
 # Nothing prompts under bypassPermissions, so the deny list is the only brake
 # left. It covers operations with no undo, and reads that would pull a secret
@@ -1303,6 +1660,43 @@ settings["enableAllProjectMcpServers"] = True
 settings["alwaysThinkingEnabled"] = True
 
 h = settings.setdefault("hooks", {})
+
+# The user's own hooks survive. Several events below are assigned outright
+# (h["Stop"] = [...]), so on 2026-10-19 a break-it run from a temp home lost
+# the user's SessionStart, PostToolUse, PreToolUse, Stop, Notification and
+# UserPromptSubmit hooks and their statusLine. An entry is the kit's when a
+# command in it points into the kit's hooks dir, runs hookd, or is the
+# session opener; everything else is put back after the kit's are written.
+def _is_kit_entry(e):
+    for hk in (e.get("hooks") or []) if isinstance(e, dict) else []:
+        c = str(hk.get("command", ""))
+        if hooks_dir in c or "/.claude/hooks/" in c or "hookd" in c or "MANDATORY FIRST ACTION" in c:
+            return True
+    return False
+_user_hooks = {ev: [e for e in entries if isinstance(e, dict) and not _is_kit_entry(e)]
+               for ev, entries in list(h.items()) if isinstance(entries, list)}
+_user_status = settings.get("statusLine")
+
+
+def gated(command):
+    """Route a guard that declares `# gate:` words through hookd.
+
+    On 2026-10-11 twenty guards ran before every Bash call at ~70 ms of CPU
+    each, most exiting 0 because the command had nothing to do with them.
+    hookd decides that in under a millisecond (crates/hookd). Without the
+    binary the shell runs the guard directly, so a guard never stops guarding
+    because hookd is missing. The command still ends in the script path, so
+    _register's basename dedupe and D1_SKIP_HOOKS keep matching it."""
+    try:
+        with open(command, errors="replace") as f:
+            head = f.read(8192)
+    except OSError:
+        return command
+    if "\n# gate:" not in head and "\n# gate-file:" not in head:
+        return command
+    script = shlex.quote(command)
+    return ('H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" gate ' + script
+            + '; exec ' + script)
 
 
 def _register(event, command, timeout=None, matcher=None, status=None):
@@ -1329,7 +1723,7 @@ def _register(event, command, timeout=None, matcher=None, status=None):
         if not any(os.path.basename(str(hook.get("command", ""))) == name
                    for hook in e.get("hooks", []))
     ]
-    hook = {"type": "command", "command": command}
+    hook = {"type": "command", "command": gated(command)}
     if timeout is not None:
         hook["timeout"] = timeout
     if status is not None:
@@ -1505,6 +1899,17 @@ h["Stop"] = [{"hooks": [{
     "timeout": 15,
     "statusMessage": "Checking claims of doneness against evidence...",
 }]}, {"hooks": [{
+    # Caleb, 2026-10-16: "When they build something and say it's done, chewbs
+    # should attack it from every angle trying to break it before it concludes
+    # anything". A done claim over a change in a repo is attacked on the spot
+    # (garbage input to the touched commands, uncommitted files, the copy that
+    # runs, unbacked claims) unless a full break-it receipt for this exact tree
+    # names every open break. Replay numbers: tests/fixtures/break_it/REPLAY.md.
+    "type": "command",
+    "command": hooks_dir + "/break-it-guard.sh",
+    "timeout": 30,
+    "statusMessage": "Attacking the change before it is called done...",
+}]}, {"hooks": [{
     # A closing message that hands over a command is a confession of stopping
     # early. The shell was right there.
     "type": "command",
@@ -1549,6 +1954,40 @@ h["Stop"] = [{"hooks": [{
 #
 # Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
+# A compaction resumes the turn with no prompt, so neither reminder above runs
+# and the next replies forget both. On 2026-10-11 ten blocks went out unprayed
+# right after a compaction and the guard's refusal showed Caleb the answer
+# twice. SessionStart with the "compact" matcher fires right then.
+_register("SessionStart", hooks_dir + "/prayer-remind.sh", timeout=5, matcher="compact")
+_register("SessionStart", hooks_dir + "/voice-remind.sh", timeout=5, matcher="compact")
+# The current time on every prompt; the harness only states the date once.
+_register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
+# The disk filled three times on 2026-10-09 and the third time Bash could not
+# start at all. Prunes regenerable caches in the background below 20 GB free.
+_register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
+# Two Desktop tabs died on another account's weekly limit on 2026-10-10 and
+# nothing said so for an hour. Tells the next tab, with resume prompts, and
+# shuts down simulators booted with nothing using them.
+_register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
+# Nine tabs, their subagents and a forgotten simulator took the Mac to load 37
+# with 15% memory free on 2026-10-10 ("My slow af rn"). When the Mac is warm it
+# refuses workflows, when hot subagents too, with limits that are a share of
+# the Mac (bin/lib/machine_profile.py). bin/agent-nice (run by tab-rescue.sh)
+# keeps agents at nice 10 so the person's apps win the CPU. Its PreToolUse
+# half is registered below the PreToolUse reset, which wiped it until 10/13.
+_register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
+# A pasted call transcript gets the whole pasted-call method: the method as
+# context at prompt time, and a refused Stop if the turn skipped the skill,
+# the texts, the ledger or the brain. Roy call, 2026-10-29: "READ EVERY WORD
+# BRUH DONT SKIM", the third skim in five days with the skill sitting unread.
+_register("UserPromptSubmit", hooks_dir + "/pasted-call-gate.sh", timeout=5)
+_register("Stop", hooks_dir + "/pasted-call-gate.sh", timeout=5)
+# Archive or close asks get the learn-first closeout (2026-10-29, "I should never have to say this again").
+_register("UserPromptSubmit", hooks_dir + "/archive-learn.sh", timeout=5)
+_register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
+# Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
+# of typing at a terminal agent shells don't have (2026-10-10).
+_register("UserPromptSubmit", hooks_dir + "/chat-approval.sh", timeout=5)
 
 # coursework-context.sh is not registered for Claude Code. It emits a
 # SessionStart payload, and on UserPromptSubmit Claude Code dropped it on every
@@ -1568,6 +2007,20 @@ h["PreToolUse"] = [{"matcher": "Write", "hooks": [{
     "statusMessage": "Checking file safety...",
 }]}]
 
+# Every _register("PreToolUse", ...) goes below the reset above, or the reset
+# throws it away (tests/hooks_registered.sh refuses one that doesn't).
+_register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
+          matcher="Agent|Task|Workflow",
+          status="Checking the Mac has room...")
+# A GTM subagent brief names the engine (gtme, Togari, Jev) or is refused with
+# the block to paste. The 10/29 Medrano enrichment went out as "web search is
+# fine" and Caleb: "I SHOULD NEVER HAVE TO SAY THIS ... IT SHOULD BE BUILT IN".
+_register("PreToolUse", hooks_dir + "/dough-brief-gate.sh", timeout=5,
+          matcher="Agent|Task|Workflow")
+# A file texted over iMessage goes through send-file (an osascript-sent PDF did not
+# open for Gavin, 2026-11-03).
+_register("PreToolUse", hooks_dir + "/attachment-guard.sh", timeout=5, matcher="Bash")
+
 # Layer 6. A browser hands you an addressable model of its own contents, and
 # reading it as an image throws that away. On 2026-09-21 a form the user had
 # open in Chrome got filled by screenshots and pixel clicks, one field per round
@@ -1579,6 +2032,27 @@ h["PreToolUse"] = [{"matcher": "Write", "hooks": [{
 _register("PreToolUse", hooks_dir + "/browser-ux-guard.sh", timeout=10,
           matcher="Bash|mcp__peekaboo__.*",
           status="Checking this browser work is not being done through pixels...")
+
+# An agent's `open` stole Caleb's screen at 1:38am on 2026-10-11 ("waking up
+# the entire city with a flashbang tab"), a day after the background rule was
+# written as prose. Refuses a foreground open or a browser activate.
+_register("PreToolUse", hooks_dir + "/focus-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking nothing jumps to the front of the screen...")
+
+# A `repeat with p in people` reading six fields per card ran 5+ minutes on
+# 2026-10-21; the bulk read took 3.7 s. Refuses per-item Apple Event loops
+# over a whole collection and names the bulk form and contacts-bulk.
+_register("PreToolUse", hooks_dir + "/bulk-loop-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking this script reads in bulk, not one item at a time...")
+
+# "Downloading font Nanum Brush Script" popped over Caleb's work at 7:11pm on
+# 2026-10-11 ("permission should never be asked to download things"). Refuses
+# code that names a macOS font that is downloadable but not installed.
+_register("PreToolUse", hooks_dir + "/font-guard.sh", timeout=10,
+          matcher="Write|Edit|MultiEdit|Bash",
+          status="Checking no font download pops up...")
 
 # Stage 8 of graph-engineering, knowledge fusion, which the skill calls the #1
 # cause of useless graphs and which this machine kept skipping. On 2026-09-21 a
@@ -1611,15 +2085,77 @@ _register("PreToolUse", hooks_dir + "/load-guard.sh", timeout=10,
 # re-run each on 2026-09-27: `for path in` rebinding $PATH, "$G[v]" parsing as
 # a subscript, and a flags variable passed as one argument. The third was
 # already a memory note from 2026-09-22; it recurred because notes do not fire.
+# Git commands that destroy uncommitted work other tabs may own, and removing
+# another session's worktree (2026-10-09). See the hook's header.
+_register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
+          matcher="Bash", status="Checking nothing unsaved gets thrown away...")
+# 2026-10-10: Erik's site draft went to Vercel; "never do anything on vercel
+# ever again". Railway is the host. See the hook's header.
+# write-log needs its Pre snapshot to see what a call changed. Registered here
+# from the installed copy, which runs the kit runtime's code. Left out, the
+# agent adapter added it as `python3.14 <checkout>/tools/shared_checks.py run
+# write-log.sh`, which ran the shared checkout's copy: on 2026-10-11 that
+# checkout was 87 commits behind and the Pre cost 1.6 s CPU against 0.37 s for
+# the Post running current code.
+_register("PreToolUse", hooks_dir + "/write-log.sh", matcher="Write|Edit|Bash|NotebookEdit")
+_register("PreToolUse", hooks_dir + "/vercel-guard.sh", timeout=5,
+          matcher="Bash", status="Checking this deploys to Railway, not Vercel...")
+# 2026-10-12, reengineer step 15: two prose rules that no check backed
+# (docs/plans/context-budget.md). git.md bans AI attribution in commits and
+# CLAUDE.md bans publishing Artifacts; the host's prompt asks for both.
+_register("PreToolUse", hooks_dir + "/attribution-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the message has no AI attribution...")
+_register("PreToolUse", hooks_dir + "/artifact-guard.sh", timeout=5,
+          matcher="Artifact", status="Checking this ships as a repo...")
+# 2026-10-11: two Togari fixes sat as PRs while Railway deploys main;
+# Karthik: never PR on BMA or Amber, push to main. See the hook's header.
+_register("PreToolUse", hooks_dir + "/pr-guard.sh", timeout=5,
+          matcher="Bash", status="Checking BMA and Amber work goes straight to main...")
+# 2026-10-11: a post tagged a client for decks he had DM'd the day before.
+# A post that tags a client waits for a fresh, clean gtme done. See the hook.
+_register("PreToolUse", hooks_dir + "/client-ask-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the client has nothing unanswered first...")
+# 2026-10-28: the next-step box asked "What time Friday?" about a call on his
+# calendar. A question about a findable fact waits for a lookup this turn.
+_register("PreToolUse", hooks_dir + "/ask-lookup-guard.sh", timeout=5,
+          matcher="mcp__ccd_turn__wrap_up|AskUserQuestion")
+# 2026-10-12: 13 automated posts from Caleb's account in #zeutara-cold-replies.
+# "Everything should be togari": agents never post in client conversations.
+_register("PreToolUse", hooks_dir + "/contact-name-guard.sh", timeout=5, matcher="Bash",
+          status="Checking the contact name standard...")
+_register("PreToolUse", hooks_dir + "/client-post-guard.sh", timeout=5,
+          matcher="Bash|mcp__claude_ai_Slack__slack_send_message|mcp__claude_ai_Slack__slack_schedule_message",
+          status="Checking this isn't posting as Caleb in a client channel...")
+# 2026-10-11: a PDF took minutes by hand while chewbacca pdf-grade code sat in
+# the GTM report. A job the kit already does is pointed at its command.
+_register("PreToolUse", hooks_dir + "/use-the-kit-guard.sh", timeout=5,
+          matcher="Bash", status="Checking the kit does not already do this...")
+# 2026-10-11: generated prose went into a team Google Doc and a teammate
+# called it "the slop version". Long Doc writes now pass slop-check --essay
+# first. See the hook's header.
+_register("PreToolUse", hooks_dir + "/essay-gate.sh", timeout=15,
+          matcher="Bash", status="Checking this reads like a person wrote it...")
+# 2026-11-02: ACAD 185 A20 was built from the dropbox brief while the W10S20
+# lecture that assigned it sat unpulled. A coursework SPEC now has to cite it,
+# and a `brightspace submit` needs such a SPEC, so skipping the SPEC fails too.
+_register("PreToolUse", hooks_dir + "/lecture-gate.sh", timeout=10,
+          matcher="Write|Edit|MultiEdit|Bash", status="Checking this spec read the lecture that assigned it...")
+# 2026-10-11: the corrections Caleb repeated most in the fortnight before
+# (docs/plans/REPEAT-MISTAKES.md). A long check in the foreground ("Wtf taking
+# so long?", eight times), 3D work without Nalana, a new project with no look
+# for the existing one. See the hook's header.
+_register("PreToolUse", hooks_dir + "/lesson-guard.sh", timeout=5,
+          matcher="Bash|Agent|Task",
+          status="Checking this isn't a mistake he already corrected...")
+# Same day, the chat repeats: u'll, unasked study nudges, asking for his
+# paper draft. See the hook's header.
+_register("Stop", hooks_dir + "/reply-lessons.sh", timeout=5)
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
 
-# 2026-10-03: the full suite ran four times in one session, twice on a tree
-# that had not changed, about 15 minutes each.
-_register("PreToolUse", hooks_dir + "/suite-rerun-guard.sh", timeout=10,
-          matcher="Bash",
-          status="Checking this suite run has something new to test...")
+# suite-rerun-guard.sh is gone (2026-10-13): tests/run.sh asks
+# bin/lib/suite-gate.sh itself before a full run, so no Bash call is read for it.
 
 # 2026-10-03: three Claude tabs and Codex shared one checkout and collided.
 _register("PreToolUse", hooks_dir + "/repo-overlap-guard.sh", timeout=5,
@@ -1643,6 +2179,13 @@ _register("PreToolUse", hooks_dir + "/chatdb-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this chat.db search reads attributedBody...")
 
+# Mail.app holds only the accounts added to it: on 2026-10-08 its newest
+# message was 9/22, and on 2026-10-13 it was searched for USC invites it never
+# had. Email goes through Gmail (chewbacca email).
+_register("PreToolUse", hooks_dir + "/mail-app-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking this email read goes through Gmail...")
+
 _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",
           status="Checking this UI is not the generated look...")
@@ -1662,6 +2205,17 @@ _register("PreToolUse", hooks_dir + "/plan-guard.sh", timeout=10,
           matcher="Write|Edit",
           status="Checking this is the phase the plan is actually on...")
 
+# A person commits a big plan. On 2026-11-05 an agent marked a junk plan COMMITTED
+# and plan-check passed it, so writing the word now needs their own message.
+_register("PreToolUse", hooks_dir + "/plan-commit-guard.sh", timeout=20,
+          matcher="Write|Edit",
+          status="Checking a person committed this plan...")
+
+# A review log entry is only text, so what a real reviewer returned gets recorded.
+_register("PostToolUse", hooks_dir + "/plan-review-receipt.sh", timeout=10,
+          matcher="Agent|Task")
+_register("UserPromptSubmit", hooks_dir + "/plan-review-receipt.sh", timeout=10)
+
 # Coursework is never turned in without being asked. This was a rule in prose
 # that got broken twice in one night, so it became a gate.
 _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
@@ -1673,7 +2227,7 @@ _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
 # personalized lines, refused sender domains and two CFOs; the client caught it.
 _register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
           matcher="Bash|mcp__peekaboo__.*|mcp__chrome-devtools__.*|"
-                  "mcp__plugin_playwright_playwright__.*",
+                  "mcp__plugin_playwright_playwright__.*|Write|Edit|MultiEdit|NotebookEdit",
           status="Checking a campaign launch has a full pre-send gate pass...")
 
 # Bulk Clay work goes through Clay tables, not shell loops of per-row workflow
@@ -1686,6 +2240,38 @@ _register("PreToolUse", hooks_dir + "/clay-native-guard.sh", timeout=5,
 # wait hit a zsh parse error, never passed, and polled Railway every 10s for an
 # hour in the background.
 _register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
+          matcher="Bash")
+
+# Nothing ships while he is standing in front of a room. On 2026-11-06 four
+# changes were pushed to his presenter window between 9:59 and 10:14 while he
+# waited to present at 10:00, the last one after he had started. His ledger
+# had carried "type: presentation, at: 10:00" since the night before and
+# nothing read it. Registered here and not only in a local settings.json,
+# because a guard that exists on one machine is not a guard.
+_register("PreToolUse", hooks_dir + "/live-event-guard.sh", timeout=5,
+          matcher="Bash")
+
+# A commit never deletes files nobody asked it to. On 2026-11-06 commits built
+# in a temp index seeded with `cp .git/index`, in a checkout several tabs were
+# working in, wrote trees missing files HEAD already had. Nothing printed, and
+# 431 committed files were gone from the working tree before anyone looked.
+_register("PreToolUse", hooks_dir + "/commit-deletes-guard.sh", timeout=5,
+          matcher="Bash")
+
+# A deploy goes out on a clean name. On 2026-10-10 the prayer tool shipped as
+# web-production-331de.up.railway.app; bin/railway-domain renames it.
+_register("PostToolUse", hooks_dir + "/railway-domain-guard.sh", timeout=5,
+          matcher="Bash")
+
+# A founder call script is checked after every Google Doc write. On 2026-10-28
+# the Firebox script went out too dense, with Gavin in a solo call and three
+# founders in one tab, because the checker only ran when someone remembered.
+_register("PostToolUse", hooks_dir + "/call-prep-guard.sh", timeout=20,
+          matcher="Bash")
+
+# Deploys go through GitHub. On 2026-10-27 kyber-landing's service had no repo
+# because it was fed with railway up, and a pushed fix never deployed.
+_register("PreToolUse", hooks_dir + "/railway-up-guard.sh", timeout=5,
           matcher="Bash")
 
 # Say the ranking rule out loud before ranking, and name what would falsify
@@ -1719,6 +2305,15 @@ _register("UserPromptSubmit", hooks_dir + "/brain-recall.sh", timeout=5,
 # skill-gate refuses the first tool call once until the named skill is loaded.
 _register("PreToolUse", hooks_dir + "/skill-gate.sh", timeout=5)
 
+# A study app shipped as a flat card grid on 2026-10-11 with the interface
+# skill named and never loaded. A whole UI page waits for that skill.
+_register("PreToolUse", hooks_dir + "/interface-first.sh", matcher="Write", timeout=5)
+
+# A Kyber landing page went out on 2026-10-27 as a Tailwind CDN index.html with
+# ux-pick never run. A site page waits for ux-pick plus the house stack.
+_register("PreToolUse", hooks_dir + "/site-stack-gate.sh", matcher="Write", timeout=5)
+_register("PreToolUse", hooks_dir + "/gtm-reuse-gate.sh", matcher="Write", timeout=5)
+
 # ux-engine holds 18 research files, six stances, a motion constant table, a
 # 24-entry effects catalog and 106 psychology principles, and a whole session
 # of UI work on 2026-09-23 consulted none of it: the page shipped at 3
@@ -1751,6 +2346,10 @@ _register("Stop", hooks_dir + "/kit-autopush.sh", timeout=30,
 # remember, and it had never been registered on any machine at all.
 _register("UserPromptSubmit", hooks_dir + "/youtube-transcript-ready.sh", timeout=8)
 
+# The call he's on reaches the tab he asks about it in, so nobody copies a
+# transcript by hand mid-call. Stops at one file check when nothing is recording.
+_register("UserPromptSubmit", hooks_dir + "/meeting-live.sh", timeout=5)
+
 # The kit learns from the session or the session did not finish. Caleb asked
 # four times on 2026-09-20 whether Chewbacca had been updated with what a
 # session learned and then said "I shouldn't hv to keep asking this bruv", so
@@ -1764,6 +2363,13 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 # times and reported as a silent death; the job was buffering until the end of
 # a twenty minute run. The hook shipped that day and was never registered, so
 # it had not fired once by 2026-10-03, when hooks_registered.sh caught it.
+# slop-guard reads the reply only; 80 thinking blocks in a day carried em
+# dashes he reads in the editor (2026-10-10). Feeds forward, never refuses.
+_register("Stop", hooks_dir + "/thinking-dash-guard.sh", timeout=5)
+# The same hook mid-turn: a 40 minute overnight turn on 2026-10-19 never
+# reached Stop, so 7 thinking dashes went unflagged while Caleb read them.
+# Throttled to one 2 MB tail read per 20 seconds (about 140 ms).
+_register("PostToolUse", hooks_dir + "/thinking-dash-guard.sh", timeout=5)
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
 
@@ -1778,6 +2384,47 @@ _register("SessionStart", hooks_dir + "/orphan-reap.sh", timeout=10,
 # 36 of 238 with three platforms on hold, and he said "You didn't listen to me."
 _register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
           status="Checking the scope he asked for...")
+
+# A reply may not say everything was read when this session read a source only
+# in part. 2026-10-22: two ACAD 185 decks went through head -260 and the reply
+# said the class was in. Caleb: "Did you ingest everything or just skim?"
+_register("Stop", hooks_dir + "/skim-guard.sh", timeout=10,
+          status="Checking every source was read whole...")
+
+# A launch is ready only when `chewbacca gtme ready` says READY, signed and
+# under 2 hours old. 2026-10-12: a Zeutara launch was called good "until Jonah
+# responds" with 1 of 14 campaigns graded, gates 3 to 5 NOT CHECKED and an
+# expired pre-send receipt. Caleb: "DONT TELL ME UR READY IF THIS SHIT IS HAPPENING?"
+_register("Stop", hooks_dir + "/ready-guard.sh", timeout=10,
+          status="Checking any launch-ready claim against gtme ready...")
+
+# Every file link in a reply has to open from the session root. 2026-10-11: a
+# render link written relative to ~/Downloads (the shell had cd'd there) gave
+# "Couldn't open that file" when Caleb clicked it.
+_register("Stop", hooks_dir + "/link-guard.sh", timeout=5,
+          status="Checking every link in the reply opens...")
+
+# Three defaults from the 2026-10-16 steering study
+# (team/memory/feedback_caleb_steering_2026_10_16.md): 99 of his messages that
+# day steered an agent, 2.59 per active agent hour.
+# A turn may not end naming its own leftover. 22 pushes that day ("Are you
+# done with your work? There's noting more you could do?") answered recaps
+# that each listed one.
+_register("Stop", hooks_dir + "/open-work-guard.sh", timeout=10,
+          status="Checking nothing in the recap is left undone...")
+# A turn that lands code saves its lesson. He typed "Learn and remember
+# everything you should" 26 times that day.
+_register("Stop", hooks_dir + "/learn-on-land.sh", timeout=10,
+          status="Checking the lesson from this land was saved...")
+# A BLOCKED: that hands him a click names two kit routes tried first. Before a
+# live demo a Clay sort went to him twice: "Why can't you do it?"
+_register("Stop", hooks_dir + "/blocked-route-guard.sh", timeout=10,
+          status="Checking every route was tried before handing over a click...")
+# A draft he'll send names where each number came from. 2026-10-16: eleven
+# Zeutara drafts went by with none, and "about 100 replied personally" was an
+# estimate. Caleb: "Wait is 1% actually the bar where did u get that".
+_register("Stop", hooks_dir + "/draft-source-guard.sh", timeout=10,
+          status="Checking every number in the draft has a source...")
 
 # One brain commit per turn, named after the turn, in place of format-and-sync's
 # one commit per write. See the hook's header for the 2026-10-05 history count.
@@ -1821,8 +2468,23 @@ _register("PostToolUse", hooks_dir + "/clay-reply-guard.sh", timeout=5,
 # Above: an analytics reply category is not a reply. On 2026-10-05 "Interested"
 # was a canned apply-on-our-site redirect and got reported as a lead.
 _register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
-          matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
+          matcher="WebFetch|WebSearch|Bash|mcp__.*",
           status="Screening what was just read for instructions aimed at the agent...")
+
+# What that flag does: a send, post, pay, delete or publish in the session waits
+# for Caleb's next message. The rules and measured rate are in bin/lib/injection_hold.py.
+_register("PreToolUse", hooks_dir + "/injection-hold.sh", timeout=10,
+          matcher="Bash|Write|Edit|MultiEdit|NotebookEdit|Artifact|SendMessage|CronCreate|RemoteTrigger|mcp__.*",
+          status="Checking outbound against this session's flagged reads...")
+
+# Every site browsed grows the API layer (Caleb, 2026-10-11: "it should
+# reverse engineer an api so moving forward it gets more and more cracked").
+# Before a browse, a host with taught ops is pointed at them; after one, a host
+# with none is logged and the agent is nudged once per session to teach a
+# read-only op or record why not. Context only, never blocks.
+for _event in ("PreToolUse", "PostToolUse"):
+    _register(_event, hooks_dir + "/api-grow.sh", timeout=5,
+              matcher="WebFetch|Bash|mcp__claude-in-chrome__navigate|mcp__plugin_playwright_playwright__browser_navigate|mcp__chrome-devtools__navigate_page|mcp__chrome-devtools__new_page")
 
 h["Notification"] = [{"hooks": [{
     "type": "command",
@@ -1853,7 +2515,9 @@ if _pc:
     settings["autoMemoryDirectory"] = os.path.join(_pc, "memory")
 
 # One status line: model, directory, branch, context used, session cost.
-settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
+if not (isinstance(_user_status, dict) and _user_status.get("command")
+        and "statusline.sh" not in str(_user_status.get("command"))):
+    settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
 
 # Hooks this machine has opted out of, by basename, one per line in
 # ~/.chewbacca/skip-hooks or space-separated in D1_SKIP_HOOKS. Without this,
@@ -1877,13 +2541,113 @@ if _skip:
             del h[_event]
     print("Hooks skipped by ~/.chewbacca/skip-hooks: " + ", ".join(sorted(_skip)))
 
+# One hookd for every gated guard sharing a matcher (crates/hookd/src/
+# dispatch.rs). On 2026-10-12 twenty gated PreToolUse entries each cost the
+# host a shell, a bash start and a hookd start, ~6 ms of CPU apiece, to say
+# "skip" before every Bash call; the 13 on matcher Bash now answer in one
+# process. Each guard keeps its timeout. Built after the skip list,
+# so a skipped guard is never folded in, and only when the installed hookd
+# answers the probe: an older binary answers an unknown verb with exit 0,
+# which would skip every guard. Without the binary at call time the entry
+# runs hookd-fallback.sh, every guard, ungated.
+import subprocess as _sp
+_hookd = os.path.expanduser("~/.local/bin/hookd")
+_GATED = 'H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" gate '
+_DISPATCH = 'H="$HOME/.local/bin/hookd"; [ -x "$H" ] && exec "$H" dispatch '
+
+
+def _probe():
+    try:
+        r = _sp.run([_hookd, "dispatch", "--probe"], capture_output=True, text=True, timeout=10)
+    except (OSError, _sp.SubprocessError):
+        return False
+    return r.returncode == 0 and r.stdout.strip() == "hookd dispatch 1"
+
+
+def _foldable(entry):
+    """(matcher, timeout, script) for an entry that is one gated guard."""
+    hooks = entry.get("hooks") or []
+    if len(hooks) != 1 or set(entry) - {"hooks", "matcher"}:
+        return None
+    hook = hooks[0]
+    # A status line is cosmetic and gated guards answer in milliseconds, so
+    # it is dropped; async or any other key keeps the entry as it is.
+    if set(hook) - {"type", "command", "timeout", "statusMessage"} or hook.get("type", "command") != "command":
+        return None
+    command = str(hook.get("command", ""))
+    if not command.startswith(_GATED):
+        return None
+    script = shlex.split(command)[-1]
+    if gated(script) != command:
+        return None
+    # The host's own default when a hook names none (Claude Code docs).
+    return entry.get("matcher") or "", int(hook.get("timeout") or 60), script
+
+
+_dispatching = _probe()
+
+
+def _dispatch_entry(matcher, guards):
+    # Every guard here shares the entry's matcher, so the host's own matching
+    # (regex, legacy names, tool families) decides when they run, exactly as
+    # it did per guard; inside, each is '*'. A security review of the first
+    # version (2026-10-12) found its in-process matcher anchored where the
+    # host's regex is not, and blind to the host's tool aliases.
+    argv = " ".join("--guard '*' %d %s" % (t, shlex.quote(sc)) for t, sc in guards)
+    fallback = shlex.quote(hooks_dir + "/hookd-fallback.sh")
+    entry = {"hooks": [{
+        "type": "command",
+        "command": _DISPATCH + argv + "; exec /bin/bash " + fallback + " " + argv,
+        # Longest guard plus the second of grace hookd gives each one plus
+        # slack for hookd itself, so the host never kills the whole answer.
+        "timeout": max(t for t, _ in guards) + 3,
+    }]}
+    if matcher not in ("", "*"):
+        entry["matcher"] = matcher
+    return entry
+
+
+for _event in ("PreToolUse", "PostToolUse"):
+    if _event not in h:
+        continue
+    # An earlier run's dispatch entry is rebuilt from what is registered now.
+    entries = [e for e in h[_event] if not any(str(x.get("command", "")).startswith(_DISPATCH)
+                                               for x in e.get("hooks", []))]
+    folded = [(e, _foldable(e)) for e in entries]
+    groups = {}
+    for _, g in folded:
+        if g:
+            groups.setdefault(g[0], []).append(g[1:])
+    out, placed = [], set()
+    for e, g in folded:
+        if not _dispatching or not g or len(groups[g[0]]) < 2:
+            out.append(e)
+        elif g[0] not in placed:
+            placed.add(g[0])
+            out.append(_dispatch_entry(g[0], groups[g[0]]))
+    h[_event] = out
+    for m in placed:
+        print(f"{_event}: {len(groups[m])} gated guards on matcher {m or '*'} answer through one hookd")
+
+for _ev, _entries in _user_hooks.items():
+    for _e in _entries:
+        if _e not in h.setdefault(_ev, []):
+            h[_ev].append(_e)
+
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.
-tmp_path = settings_path + ".tmp"
+# Through a symlink to its target (a dotfiles repo keeps settings.json there;
+# os.replace on the link swapped it for a plain file), and never over a file
+# the user made read-only (break-it, 2026-10-19).
+real_settings = os.path.realpath(settings_path)
+if os.path.exists(real_settings) and not os.access(real_settings, os.W_OK):
+    raise SystemExit(f"setup: {real_settings} is read-only, so it was left as it is. "
+                     "Make it writable and run setup again to update it.")
+tmp_path = real_settings + ".tmp"
 with open(tmp_path, "w") as f:
     json.dump(settings, f, indent=2)
 os.chmod(tmp_path, 0o600)
-os.replace(tmp_path, settings_path)
+os.replace(tmp_path, real_settings)
 
 print("Settings written.")
 PYEOF
@@ -2146,10 +2910,9 @@ composio_key = env("D1_COMPOSIO_KEY", "").strip()
 # had them, and every listed tool is paid for in context each session. setdefault, so an existing entry is never clobbered.
 # Everything else is left to the user: ~/.claude.json is where client hostnames
 # and API keys live.
-mcp["mcpServers"].setdefault("filesystem", {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-filesystem", os.path.expanduser("~")],
-})
+# filesystem was dropped 2026-10-09: every Claude tab boots its own copy of
+# each MCP server, and a 12-tab restart put 252 MCP processes on the Mac at
+# load 106. Read, Write and Edit already cover the whole home directory.
 
 if composio_url:
     mcp["mcpServers"]["composio"] = {
@@ -2182,6 +2945,10 @@ mkdir -p "$GLOBAL_CLAUDE/commands" "$GLOBAL_CLAUDE/rules"
 cp "$SCRIPT_DIR/.claude/commands/"*.md "$GLOBAL_CLAUDE/commands/" 2>/dev/null || true
 cp "$SCRIPT_DIR/.claude/rules/"*.md    "$GLOBAL_CLAUDE/rules/"    2>/dev/null || true
 install_agent_neutral_rule
+# Inside the kit's own checkout the project CLAUDE.md and rules duplicate what
+# was just copied to ~/.claude: 14,624 tokens loaded twice on a kit
+# session's first turn (2026-10-16). Skip the project copies whose bytes match.
+python3 "$SCRIPT_DIR/tools/claude_md_dedupe.py" excludes --apply --root "$SCRIPT_DIR" >/dev/null 2>&1 || true
 mkdir -p "$GLOBAL_CLAUDE/agents"
 cp "$SCRIPT_DIR/.claude/agents/"*.md   "$GLOBAL_CLAUDE/agents/"   2>/dev/null || true
 
@@ -2196,18 +2963,24 @@ cp "$SCRIPT_DIR/.claude/output-styles/"*.md "$GLOBAL_CLAUDE/output-styles/" 2>/d
 # about someone's calendar. That is the right file for people who write code
 # and the wrong file for everyone else.
 case "$PROFILE" in
-  personal|student) STANDARDS="$SCRIPT_DIR/docs/CLAUDE-PERSONAL.md" ;;
+  personal|student) STANDARDS="$SCRIPT_DIR/docs/reference/CLAUDE-PERSONAL.md" ;;
   *)                STANDARDS="$SCRIPT_DIR/CLAUDE.md" ;;
 esac
 # Merge, do not clobber. Anyone who already had a CLAUDE.md lost it here, with
 # no backup and no warning. The logic lives in its own file so it can be tested;
 # it could not be, buried in a 1,700-line installer.
-MERGE_RESULT="$(bash "$SCRIPT_DIR/bin/lib/merge-claude-md.sh" "$GLOBAL_CLAUDE/CLAUDE.md" "$STANDARDS" 2>/dev/null || echo failed)"
+# It prints one word and exits 1 on refused, so `|| true` keeps that word
+# rather than appending a second one.
+MERGE_RESULT="$(bash "$SCRIPT_DIR/bin/lib/merge-claude-md.sh" "$GLOBAL_CLAUDE/CLAUDE.md" "$STANDARDS" 2>/dev/null || true)"
 case "$MERGE_RESULT" in
   merged) warn "You already had a CLAUDE.md. It is kept below the standards, and"
           warn "  the original is backed up next to it as CLAUDE.md.yours-*" ;;
   updated) log "Standards region updated, your own additions left alone" ;;
-  failed) warn "Could not write ~/.claude/CLAUDE.md" ;;
+  unchanged) log "Standards already current in ~/.claude/CLAUDE.md" ;;
+  refused) warn "Left ~/.claude/CLAUDE.md alone: it is read-only or its Chewbacca"
+           warn "  markers are unbalanced. Fix that, then re-run setup." ;;
+  wrote|adopted) ;;
+  *) warn "Could not write ~/.claude/CLAUDE.md" ;;
 esac
 # doctor.sh reads this. Without it, it checks for the coursework ledger and the
 # GitHub repos that a personal install deliberately never creates, and reports
@@ -2288,6 +3061,25 @@ else
   log "Skills linked to ~/.claude/skills/ ($_skills_have)"
 fi
 unset _sk _skn _dst _skills_want _skills_have
+# The gtm-engineering skill ships in Dough with the gtme engine (Dough SPEC section 5).
+# Linked through ~/.chewbacca/dough/current, which the kit runtime installs, so the
+# link follows every Dough update. A real directory of the same name is left alone;
+# an old link (into a checkout's skills/) is repointed, here and in the shared library.
+_dough_cur="${CHEWBACCA_DOUGH_RUNTIME:-$HOME/.chewbacca/dough}/current"
+for _sk in "$_dough_cur"/skills/*/; do
+  [ -f "$_sk/SKILL.md" ] || continue
+  _skn="$(basename "$_sk")"
+  for _dst in "$GLOBAL_CLAUDE/skills/$_skn" "$HOME/.chewbacca/skills/$_skn"; do
+    [ -d "$(dirname "$_dst")" ] || continue
+    if [ -e "$_dst" ] && [ ! -L "$_dst" ]; then
+      warn "skill '$_skn' at $_dst is not a link, leaving it alone"
+      continue
+    fi
+    ln -sfn "$_dough_cur/skills/$_skn" "$_dst"
+  done
+done
+[ -d "$_dough_cur/skills" ] && log "Dough's skills linked from $_dough_cur/skills"
+unset _sk _skn _dst _dough_cur
 log "Skills installed to ~/.claude/skills/"
 
 fi
@@ -2352,16 +3144,22 @@ while IFS='|' read -r SK_NAME SK_URL SK_PATH SK_LICENSE SK_AUTHOR; do
     } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"
     log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"
   else
-    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."
+    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/reference/EXTENSIONS.md to add it later."
   fi
   rm -rf "$TMP_SK"
 done <<'UPSTREAM_SKILLS'
+app-growth|https://github.com/31Carlton7/skills|app-growth|MIT|31Carlton7
+app-review|https://github.com/31Carlton7/skills|app-review|MIT|31Carlton7
 avoid-ai-writing|https://github.com/conorbronsdon/avoid-ai-writing||MIT|conorbronsdon
 cap|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 cap-demo|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 deslop|https://github.com/31Carlton7/skills|deslop|see upstream|31Carlton7
 first-reader|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/first-reader|Apache-2.0|Shubhamsaboo
+ghostwrite|https://github.com/31Carlton7/skills|ghostwrite|MIT|31Carlton7
+heavy-work|https://github.com/31Carlton7/skills|heavy-work|MIT|31Carlton7
 no-ai-slop|https://github.com/petergyang/no-ai-slop|skills/no-ai-slop|MIT|petergyang
+ship-feature|https://github.com/31Carlton7/skills|ship-feature|MIT|31Carlton7
+swiftui|https://github.com/31Carlton7/skills|swiftui|MIT|31Carlton7
 thinking-out-loud|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/thinking-out-loud|Apache-2.0|Shubhamsaboo
 youtube-transcripts|https://github.com/calebnewtonusc/claude-youtube-transcripts|skills/youtube-transcripts|MIT|calebnewtonusc
 UPSTREAM_SKILLS
@@ -2419,7 +3217,7 @@ elif ! command -v claude &>/dev/null; then
   warn "  chewbacca setup --only plugins"
 fi
 
-# MCP servers, curated from mcpmarket.com. See docs/EXTENSIONS.md.
+# MCP servers, curated from mcpmarket.com. See docs/reference/EXTENSIONS.md.
 #
 # Two tiers on purpose. The keyless ones are installed outright. The ones
 # needing an account are installed only when their variables are already
@@ -2443,8 +3241,9 @@ if [ "$PLUGINS_OK" -eq 1 ]; then
     else
       warn "could not register $M_NAME"
     fi
+  # git was dropped 2026-10-09 with filesystem above: 26 copies across 13
+  # tabs, for tools the git CLI already gives every agent.
   done <<'KEYLESS_MCP'
-git|uvx|mcp-server-git
 KEYLESS_MCP
 
   while IFS='|' read -r M_NAME M_CMD M_ARGS M_ENV; do
@@ -2486,6 +3285,12 @@ KEYED_MCP
 fi
 # END GENERATED: extensions
 fi
+if should_run plugins; then
+  # The full catalog (config/mcp/catalog.json) is opt-in: every server costs
+  # context in every session, and a sign-in needs a person at a browser.
+  log "More MCP servers (Figma, Notion, Linear, GitHub, Stripe and 50 more):"
+  log "  chewbacca mcp            then  chewbacca mcp add <name>"
+fi
 
 # ── macOS tools ───────────────────────────────────────────────────────────────
 if should_run tools; then
@@ -2496,7 +3301,7 @@ section "Installing macOS tools"
 
 # BEGIN GENERATED: cli
 # Kit-owned helpers that sit in front of the installed tools.
-#   peekaboo: forces local execution, see docs/MACOS-TOOLS.md
+#   peekaboo: forces local execution, see docs/reference/MACOS-TOOLS.md
 #   chrome-js: reads and clicks a Chrome tab through JavaScript
 mkdir -p "$HOME/.local/bin"
 for HELPER in peekaboo chrome-js slop-check; do
@@ -2554,62 +3359,98 @@ if command -v brew &>/dev/null; then
   # silently broke the HUD once, so the plist carries its own. The log lives in
   # the user's own Library: a fixed name in shared /tmp can be pre-created as
   # a symlink by another account and redirect these writes.
-  _mr_plist="$HOME/Library/LaunchAgents/com.chewbacca.messages-refresh.plist"
   # Run it on the stable node copy, never through `env node`: launchd jobs
   # have no .app above them, so macOS asks on behalf of node itself, and
   # Homebrew node moved to a new Cellar path on its 26.9 upgrade, losing its
   # grant. On 2026-10-09 that put "node would like to access data from other
   # apps" on screen every ten minutes. One Full Disk Access grant on the
   # copy covers this job across node upgrades.
+  #
+  # All three jobs below are services of chewbacca-daemon, the one Login Items
+  # row Chewbacca has. Each used to be its own LaunchAgent, and Login Items
+  # listed them as node, python3 and kyber-sessions. Caleb, 2026-10-11: "Chewb
+  # should aim to be only 1 thing ... Most ppl will get weirded out".
   _mr_node=$("$SCRIPT_DIR/bin/chewbacca-node" 2>/dev/null || command -v node)
-  cat >"$_mr_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.chewbacca.messages-refresh</string>
-  <key>ProgramArguments</key><array>
-    <string>$_mr_node</string><string>$SCRIPT_DIR/bin/people</string><string>texts</string><string>refresh</string>
-  </array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>600</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
-</dict></plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/com.chewbacca.messages-refresh" &>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$_mr_plist" &>/dev/null &&
+  _daemon() { "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" "$@" >/dev/null; }
+  # Services run the kit runtime (origin/main), never this checkout: a shared
+  # checkout drifts behind under other tabs' edits, and on 2026-10-11 jobs ran
+  # from one 87 commits behind main (docs/plans/one-supervisor.md, step 2).
+  # Each run resolves kit/current afresh, and the daemon restarts on a kit move.
+  _svc_root="$SCRIPT_DIR"
+  [ -z "${CHEWBACCA_SUITE:-}" ] && [ -f "$HOME/.chewbacca/kit/current/bin/chewbacca-jobs" ] && _svc_root="$HOME/.chewbacca/kit/current"
+  _daemon register messages-refresh --every 600 -- "$_mr_node" "$_svc_root/bin/people" texts refresh &&
     log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
 
   # The machine queue's heartbeat: every 30 s `chewbacca jobs tick` admits queued work
   # when there's room, pauses heavy work when the Mac is busy, and resumes it
   # after. 2026-10-10: every tab ran its own long jobs with no shared budget,
   # the Mac swapped at load 80+, and Caleb had to force-quit Claude.
-  _jq_plist="$HOME/Library/LaunchAgents/com.chewbacca.jobs.plist"
-  cat >"$_jq_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.chewbacca.jobs</string>
-  <key>ProgramArguments</key><array>
-    <string>/usr/bin/python3</string><string>$SCRIPT_DIR/bin/chewbacca-jobs</string><string>tick</string>
-  </array>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>StartInterval</key><integer>30</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
-</dict></plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/com.chewbacca.jobs" &>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
+  _daemon register jobs --every 30 -- /usr/bin/python3 "$_svc_root/bin/chewbacca-jobs" tick &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
+
+  # Orphan sweep every 5 minutes, plus an Ollama unload once swap passes 80%.
+  # 2026-10-19: three tabs crawled at load 110 with swap 87% full, from twelve
+  # test servers orphaned for 14 hours and 1.7 GB of idle embedding models. The
+  # SessionStart hook alone never fired, because the tabs stayed open all day.
+  # --min-age spares a live tab's own detached job: on a timer, ppid 1 alone
+  # doesn't prove its tab is gone.
+  _daemon register orphan-reap --every 300 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/orphan-reap" --kill --pressure --min-age 7200 &&
+    log "orphan sweep every 5 minutes" || warn "could not schedule the orphan sweep"
+
+  # Agent alerts on the HUD: once a minute `kyber-sessions watch` toasts a tab
+  # that newly waits on a permission, a run started from the glass that
+  # finished, and a tab that died on a usage limit. 2026-10-10: two Desktop
+  # tabs died at 2:47pm and Caleb found out an hour later from the sidebar,
+  # and tab-rescue's hook only speaks when he types in some other tab, which
+  # never happens when he works from the HUD.
+  # Stock /usr/bin/python3, never the shebang's Homebrew 3.14: on 2026-10-11 at
+  # 16:57 a run segfaulted inside 3.14's garbage collector, and as a child of the
+  # Chewbacca runtime the crash put "Python quit unexpectedly" on Caleb's screen.
+  _daemon register agent-watch --every 60 --nice 10 -- /usr/bin/python3 "$HOME/.local/bin/kyber-sessions" watch &&
+    log "agent alerts on the HUD every minute" || warn "could not schedule agent alerts"
+
+  # The weekly guard false-positive report (reengineer-flat-plan step 7). The
+  # daemon has no weekday schedule, so it runs daily at 9 and the report acts on
+  # Sundays, or on the first run a week after the last one: it ranks guards by
+  # refusals the agent overrode or reran, writes ~/.chewbacca/reports/guard-fp/,
+  # and files the top offender as a work-ledger task for that week.
+  _daemon register guard-fp --at 09:00 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/hookd_replay.py" fp --weekly &&
+    log "guard false-positive report scheduled for Sundays" || warn "could not schedule the guard false-positive report"
+
+  # The recall gate (reengineer-flat-plan step 14): once a day the shipped
+  # retriever answers the sealed set, and the memory indexes stop loading whole
+  # only while its recall@5 holds at the 55.4% the trade was judged on. The
+  # next session start applies the answer (kit-autopull, tools/recall_gate.py).
+  _daemon register recall-gate --at 06:30 --nice 10 -- /usr/bin/python3 "$_svc_root/tools/recall_gate.py" check &&
+    log "recall gate checked daily" || warn "could not schedule the recall gate"
+
+  # What got used (reinvent plan, phase 0): once a day the verdict log folds
+  # into ~/.chewbacca/state/usage before lib.sh deletes parts older than eight
+  # days, and on Sundays (or a week after the last one) the 30-day report lands
+  # in ~/.chewbacca/reports/usage/. Without the daily fold, hook runs older than
+  # eight days are gone, and the log only began on 2026-10-12.
+  _daemon register usage --at 05:40 --nice 15 -- /usr/bin/python3 "$_svc_root/tools/usage_report.py" --daily &&
+    log "usage report folded daily, written weekly" || warn "could not schedule the usage report"
+
+  # A verse on the HUD every fifteen minutes that stays until he closes it.
+  # Caleb, 2026-10-16: "Add hourly verses to the hud popping up", then "Make
+  # them stay until I x them out, also make it every 15 min". hud-verse itself
+  # stays quiet from 2am to 8am, and each run replaces the card in place.
+  _daemon register verse --every 900 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/hud-verse" &&
+    log "a verse on the HUD every 15 min" || warn "could not schedule the verse"
+
+  # An Electron app whose page crashed keeps its window up, blank or frozen,
+  # and never recovers. 2026-10-26: Granola went blank and Slack froze in the
+  # same minute after days of uptime; both needed a kill and a relaunch.
+  # app-revive checks every minute and restarts one seen dead twice in a row.
+  _daemon register app-revive --every 60 --nice 10 -- /usr/bin/python3 "$_svc_root/bin/app-revive" --fix &&
+    log "blank app windows restart themselves" || warn "could not schedule app-revive"
+
+  # Install the one LaunchAgent last, and fold in any per-job agent an older
+  # install left behind, so Login Items ends with a single Chewbacca row.
+  "$_mr_node" "$SCRIPT_DIR/bin/chewbacca-daemon" install 2>&1 | while IFS= read -r _line; do log "$_line"; done
 else
-  warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
+  warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"
 fi
 
 # cap: Screen recording with spring-physics zoom that follows your clicks, scriptable with --json on every command
@@ -3025,9 +3866,13 @@ else
   # Layer 3 is the accessibility-tree driver and it is the one worth having.
   # Everything below degrades to a screenshot without it.
   if command -v npm &>/dev/null; then
-    if command -v agent-desktop &>/dev/null; then
+    # agent-desktop floor: chewie notifications reads its 2.6 envelope, and refs
+    # older than 1.1.0 carry no capture proof. Installed-but-old isn't installed.
+    AGENT_DESKTOP_MIN=1.2.0
+    agent_desktop_have=$(agent-desktop version 2>/dev/null | sed -n 's/.*"version":"\([0-9.]*\)"}.*/\1/p')
+    if [ -n "$agent_desktop_have" ] && [ "$(printf '%s\n%s\n' "$AGENT_DESKTOP_MIN" "$agent_desktop_have" | sort -V | head -1)" = "$AGENT_DESKTOP_MIN" ]; then
       log "agent-desktop already installed"
-    elif npm install -g agent-desktop &>/dev/null; then
+    elif npm install -g agent-desktop@latest &>/dev/null; then
       log "agent-desktop installed (accessibility driver)"
     else
       warn "could not install agent-desktop: npm install -g agent-desktop"
@@ -3079,6 +3924,18 @@ if [ -x "$SCRIPT_DIR/bin/install-plynn.sh" ]; then
   "$SCRIPT_DIR/bin/install-plynn.sh" || warn "Plynn install returned non-zero, continuing"
 else
   warn "bin/install-plynn.sh missing, skipping Plynn"
+fi
+fi
+
+# ── Kit runtime timer ─────────────────────────────────────────────────────────
+if should_run tools; then
+# Keeps ~/.chewbacca/kit/current on origin/main between sessions, every 15
+# minutes, from the runtime's own copy of kit_runtime.py. Last, so its first
+# run (RunAtLoad) links the node_modules and builds the steps above produced.
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ "$(uname -s)" = Darwin ] &&
+   [ -f "$KIT_RUNTIME/current/tools/kit_runtime.py" ]; then
+  log "$(python3 -I "$KIT_RUNTIME/current/tools/kit_runtime.py" install-timer \
+          --repo "$SCRIPT_DIR" --link-bin "$HOME/.local/bin" 2>&1)"
 fi
 fi
 
@@ -3255,6 +4112,18 @@ fi
 # contacts, the screen. Ending there, with no way back, is what reads as
 # malware to a careful person, and a careful person is exactly the one worth
 # keeping.
+# REA is offered here and never installed: it's a fast-moving third-party pin
+# with 170 tools, so adding it is the person's call. The offer only shows when
+# it's absent and this Mac's Node can run it.
+REA_LINE="$(python3 "$SCRIPT_DIR/tools/rea_kit.py" status --line 2>/dev/null)"
+case "$REA_LINE" in
+  "REA: not installed (optional; \`chewbacca rea install\`"*)
+    echo ""
+    echo -e "  ${BLD}Optional:${NC}"
+    echo "    chewbacca rea install   adds REA, so agents can trace how another app or"
+    echo "                            site does one thing; its own setup asks first"
+    ;;
+esac
 echo ""
 echo -e "  ${BLD}If you want it gone:${NC}"
 echo "    chewbacca uninstall --dry-run   lists every path, changes nothing"
@@ -3268,7 +4137,7 @@ echo ""
 # draft of this block said "this installer sends nothing anywhere", which is
 # false: the GitHub path below creates two repos and pushes to them.
 echo -e "  ${BLD}What leaves this Mac:${NC}"
-echo "    Your prompts go to Anthropic, the same as any Claude Code session."
+echo "    $(bash "$SCRIPT_DIR/bin/lib/prompts-go-to.sh")"
 if [ "$NO_GITHUB" -eq 1 ]; then
   echo "    Your second brain is a folder on this disk. Nothing here pushes it."
 else

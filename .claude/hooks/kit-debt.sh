@@ -31,5 +31,6 @@ REPORT=$("$TOOL" --terse --session "$SID" --transcript "$TRANSCRIPT" 2>/dev/null
 [ -n "$REPORT" ] || exit 0
 
 [ -n "$SID" ] && touch "$MARK"
+type hook_verdict >/dev/null 2>&1 && hook_verdict refuse "$REPORT"
 jq -n --arg d "$REPORT" '{decision: "block", reason: ($d + "\n\nDo this before telling Caleb the session is done.")}' 2>/dev/null
 exit 0

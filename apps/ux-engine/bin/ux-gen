@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Propose several genuinely different answers, look at each one, keep what works.
+
+    ux-gen "a pricing page for a solo developer tool"
+    ux-gen "a delete-account confirmation button" --stances material,quiet-utility
+    ux-gen "brief" --intent intent.json --out runs/pricing
+
+THE PROBLEM THIS SOLVES. Everything else in this repo is subtractive: deny
+lists, a linter, refusals. Subtraction caps out at "not slop" and never
+proposes anything. Caleb, 2026-09-20: "Good design isn't just avoiding bad
+design."
+
+WHY NOT JUST SAMPLE N TIMES. N samples from one prompt cluster at that prompt's
+mode, so best-of-N picks between near-copies. tools/diversity.py measures this
+directly rather than assuming it.
+
+WHY NOT JUST ASK FOR CREATIVITY. "Be original" relocates the model to a second
+mode, the stereotype of creative: a gradient mesh, a glass card, brutalism worn
+as a costume. Still one mode, just a different one.
+
+WHAT THIS DOES INSTEAD. Partition the space with tools/stances.py, draw once
+per cell, then judge each draw by what a first-time viewer actually perceives
+(bin/ux-viewer) rather than by whether a model likes it. The selector has to be
+perceptual because research/13 measured reward models preferring typical
+outputs at alpha-hat 0.57: any model asked "which is best" returns the most
+median candidate. A blind viewer asked "where did your eye go" has nothing to
+be biased about.
+
+ANY GRAIN. A button, a page, a step in a flow, several components and how they
+sit together. The stance and the viewer probe are both scale-free.
+"""
+import argparse
+import concurrent.futures as cf
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import stances as st            # noqa: E402
+import tokens as tk             # noqa: E402
+
+VIEWER = ROOT / "bin" / "ux-viewer"
+LINT = ROOT / "bin" / "ux-lint"
+
+INTENT_PROMPT = """A designer is about to build this:
+
+{brief}
+
+Before they start, state what success means, as strict JSON with no markdown
+fence and exactly these keys:
+
+{{
+  "purpose": "what a first-time viewer should understand this is, in one sentence",
+  "primary_action": "the single thing the viewer should be able to do, in a few words",
+  "first_look": "the one element their eye should land on first",
+  "audience": "who is looking at this"
+}}
+
+Answer only for what the brief actually asks for. Do not invent features."""
+
+
+def run_claude(prompt, model, cwd, timeout=900):
+    return subprocess.run(["claude", "-p", "--model", model, prompt],
+                          capture_output=True, text=True,
+                          timeout=timeout, cwd=cwd).stdout
+
+
+def derive_intent(brief, model):
+    with tempfile.TemporaryDirectory() as t:
+        out = run_claude(INTENT_PROMPT.format(brief=brief), model, t, 300)
+    m = re.search(r"\{.*\}", out, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def html_span(text):
+    low = text.lower()
+    lo = low.find("<!doctype")
+    if lo < 0:
+        lo = low.find("<html")
+    hi = low.rfind("</html>")
+    return text[lo:hi + 7] if lo >= 0 and hi > lo else None
+
+
+def generate(stance_key, brief, model, outdir):
+    """One draw from one cell of the partition."""
+    dest = outdir / f"{stance_key}.html"
+    if dest.exists() and dest.stat().st_size > 2000:
+        return stance_key, dest, "cached"
+    prompt = st.prompt_for(stance_key, brief) + (
+        "\n\nWrite it as a single self-contained HTML file named index.html in "
+        "the current directory. Inline CSS and JS, no dependencies.")
+    work = pathlib.Path(tempfile.mkdtemp(prefix="uxgen-"))
+    try:
+        out = run_claude(prompt, model, str(work))
+        body = html_span(out)
+        if body is None:
+            files = [f for f in work.rglob("*.htm*") if f.is_file()]
+            if not files:
+                return stance_key, None, "no-html"
+            body = max(files, key=lambda f: f.stat().st_size).read_text(errors="ignore")
+        if len(body) < 2000:
+            return stance_key, None, f"short({len(body)})"
+        dest.write_text(body)
+        return stance_key, dest, "ok"
+    except subprocess.TimeoutExpired:
+        return stance_key, None, "timeout"
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def evaluate(stance_key, path, intent_path, model):
+    """Render it, show it to someone who knows nothing, count the gaps."""
+    r = subprocess.run([sys.executable, str(VIEWER), "check", str(path),
+                        "--intent", str(intent_path), "--model", model, "--json"],
+                       capture_output=True, text=True, timeout=1200)
+    try:
+        data = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        data = {"report": {}, "gaps": [{"kind": "probe-failed",
+                                        "detail": r.stdout[-200:] or r.stderr[-200:]}]}
+    lint = subprocess.run([sys.executable, str(LINT), str(path)],
+                          capture_output=True, text=True, timeout=120)
+    blocking = len(re.findall(r"^HIGH \[EXTERNAL\]", lint.stdout, re.M))
+    return stance_key, data, blocking
+
+
+HARD = {"primary-action-invisible", "primary-action-wrong", "attention-misdirected",
+        "purpose-unclear", "probe-failed"}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("brief")
+    ap.add_argument("--stances", default="one-voltage,dense-instrument,editorial",
+                    help="comma separated, or 'all'. " + ", ".join(st.STANCES))
+    ap.add_argument("--intent", help="JSON file; derived from the brief if omitted")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--model", default="sonnet")
+    ap.add_argument("--workers", type=int, default=3)
+    a = ap.parse_args()
+
+    keys = list(st.STANCES) if a.stances == "all" else [
+        s.strip() for s in a.stances.split(",") if s.strip()]
+    bad = [k for k in keys if k not in st.STANCES]
+    if bad:
+        print(f"unknown stance(s): {', '.join(bad)}\navailable: "
+              f"{', '.join(st.STANCES)}", file=sys.stderr)
+        return 2
+
+    slug = re.sub(r"[^a-z0-9]+", "-", a.brief.lower())[:40].strip("-")
+    outdir = pathlib.Path(a.out) if a.out else ROOT / "runs" / slug
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    intent_path = outdir / "intent.json"
+    if a.intent:
+        shutil.copy(a.intent, intent_path)
+    elif not intent_path.exists():
+        print("deriving what success means for this brief...", flush=True)
+        intent = derive_intent(a.brief, a.model)
+        if not intent:
+            print("could not derive intent; pass --intent", file=sys.stderr)
+            return 1
+        intent_path.write_text(json.dumps(intent, indent=2))
+    intent = json.loads(intent_path.read_text())
+    print(f"\nINTENT\n  is        {intent.get('purpose')}\n"
+          f"  action    {intent.get('primary_action')}\n"
+          f"  eye first {intent.get('first_look')}\n")
+
+    t0 = time.time()
+    print(f"drawing {len(keys)} variants, one per stance...", flush=True)
+    built = {}
+    with cf.ThreadPoolExecutor(max_workers=a.workers) as ex:
+        for k, p, status in ex.map(lambda k: generate(k, a.brief, a.model, outdir), keys):
+            print(f"  {k:<18} {status}", flush=True)
+            if p:
+                built[k] = p
+    if not built:
+        print("nothing generated", file=sys.stderr)
+        return 1
+
+    print(f"\nshowing each to a viewer who has not seen the brief...", flush=True)
+    results = {}
+    with cf.ThreadPoolExecutor(max_workers=a.workers) as ex:
+        for k, data, blocking in ex.map(
+                lambda kv: evaluate(kv[0], kv[1], intent_path, a.model), built.items()):
+            results[k] = {"gaps": data.get("gaps", []),
+                          "report": data.get("report", {}),
+                          "blocking": blocking}
+            print(f"  {k:<18} probed", flush=True)
+
+    feats = {k: tk.features(p.read_text(errors="ignore"), "html")
+             for k, p in built.items()}
+    ranked = sorted(results.items(),
+                    key=lambda kv: (sum(1 for g in kv[1]["gaps"] if g["kind"] in HARD),
+                                    kv[1]["blocking"],
+                                    len(kv[1]["gaps"])))
+
+    print("\n" + "=" * 68)
+    print(f"{'STANCE':<18} {'MISREAD':>7} {'BLOCK':>6} {'FRICTION':>9}   WHAT THE VIEWER SAW")
+    print("=" * 68)
+    for k, r in ranked:
+        hard = sum(1 for g in r["gaps"] if g["kind"] in HARD)
+        fric = sum(1 for g in r["gaps"] if g["kind"] in ("friction", "unreadable"))
+        saw = (r["report"].get("purpose") or "-")[:60]
+        print(f"{k:<18} {hard:>7} {r['blocking']:>6} {fric:>9}   {saw}")
+
+    best, bestr = ranked[0]
+    print(f"\nBEST BY VIEWER FIT: {best}")
+    print(f"  {built[best]}")
+    for g in bestr["gaps"]:
+        print(f"  [{g['kind']}] {g.get('where','')}: {g['detail']}")
+
+    if len(feats) > 1:
+        import itertools
+        import statistics
+        d = statistics.mean(
+            1 - len(feats[x] & feats[y]) / len(feats[x] | feats[y])
+            for x, y in itertools.combinations(feats, 2))
+        print(f"\nDIVERGENCE: {d:.3f} mean pairwise token distance across variants.")
+        print("  Compare against repeated sampling of one prompt "
+              "(tools/diversity.py on corpus/slop).")
+        print("  If these are not further apart than that, the partition did nothing.")
+
+    (outdir / "results.json").write_text(json.dumps(
+        {"brief": a.brief, "intent": intent,
+         "results": {k: v for k, v in results.items()}}, indent=2))
+    print(f"\n{len(built)} variants in {outdir}  ({time.time()-t0:.0f}s)")
+    print(f"Human trial between the top two:  ux-trial run {outdir}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

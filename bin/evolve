@@ -92,13 +92,13 @@ def baseline():
     return rows[-1] if rows else None
 
 
-def score_in(path):
+def score_in(path, ledger=None):
     # Score into a THROWAWAY ledger. The first run of this tool wrote its
     # worktree score into the real one, so an unmerged change became the
     # baseline and the next real comparison read as a 3.13 regression against
     # code that was never committed.
     env = dict(os.environ)
-    env["CHEWBACCA_FITNESS_LEDGER"] = str(path / ".evolve-fitness.jsonl")
+    env["CHEWBACCA_FITNESS_LEDGER"] = str(ledger or path / ".evolve-fitness.jsonl")
     r = subprocess.run([sys.executable, str(path / "bin/fitness"),
                         "--no-tests"], capture_output=True, text=True,
                        timeout=900, cwd=str(path), env=env)
@@ -107,6 +107,24 @@ def score_in(path):
     if not m:
         return None, out[-400:]
     return float(m.group(1)), out
+
+
+def base_in(worktree, dest, recorded=None):
+    """The structural score of the unchanged commit, taken in the worktree
+    every candidate starts from, before any change.
+
+    The recorded baseline is only a fallback. It is whatever `fitness` last
+    wrote, on whatever commit that was: on 2026-10-10 it was 99.5 from
+    36970ae on 2026-09-21, while the unchanged HEAD scored 83.3 because
+    skills had been added since without evals. Every change would have been
+    refused for "structural score fell 99.50 -> 83.30", a fall none of them
+    caused. Scored into the attempt's archive dir, never the worktree, so
+    the score file cannot end up in the proposer's diff or the checksums.
+    """
+    score, _ = score_in(worktree, ledger=dest / "fitness-before.jsonl")
+    if score is None:
+        return recorded
+    return {"structural_score": score, "sha": git("rev-parse", "--short", "HEAD", cwd=worktree)}
 
 
 def cases_from(ledger_path):
@@ -195,27 +213,63 @@ def full_diff(worktree):
     Intent-to-add makes new files show up in the diff without staging their
     content, inside a worktree that is about to be removed anyway.
     """
-    new = git("ls-files", "--others", "--exclude-standard", cwd=worktree).splitlines()
-    new = [p for p in new if not p.startswith(".evolve-")]
-    if new:
-        git("add", "--intent-to-add", "--", *new, cwd=worktree)
+    stage_change(worktree)
     # git() strips its output, and a diff without its final newline is one
     # `git apply` calls corrupt. Attempt 590e4335 on 2026-09-27 archived
     # that way and could not be replayed until the newline went back on.
-    diff = git("diff", cwd=worktree)
+    diff = git("diff", "HEAD", cwd=worktree)
     return diff + "\n" if diff else diff
+
+
+def changed_paths(worktree):
+    """Every path the change touched, by name, never evolve's own score files."""
+    # Not git(): it strips its output, which eats the leading space of the
+    # first " M path" line and shifts that path by one character. -z keeps
+    # names with spaces or quotes whole; a rename's source follows as its
+    # own entry and is skipped.
+    raw = subprocess.run(["git", "-C", str(worktree), "status", "--porcelain", "-z",
+                          "--untracked-files=all"], capture_output=True, text=True).stdout
+    out, entries, i = [], raw.split("\0"), 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":
+            i += 1
+        path = entry[3:]
+        if not path.startswith(".evolve-"):
+            out.append(path)
+    return out
+
+
+def stage_change(worktree):
+    """Stage the change, by name, in the candidate's own throwaway worktree.
+
+    The suite must see the change in the index as well as on disk.
+    tools/checksums.py hashes the index, and the suite runs both "checksums
+    are current" (index) and "start.sh's own checksum gate" (disk): with the
+    change unstaged one of the two always failed in the candidate and not on
+    the unchanged commit, so the gate refused every change that edited a
+    tracked file (found 2026-10-10). Staging only here, in a worktree no
+    person uses, and the diff is read against HEAD so it stays whole.
+    """
+    paths = changed_paths(worktree)
+    if paths:
+        git("add", "--all", "--", *paths, cwd=worktree)
+    return paths
 
 
 def commit_branch(worktree, aid, note):
     """Keep a change that passed the gate as a branch a person can read.
 
-    A branch and not a merge: tier B in docs/SELF-LEARNING.md is "a branch
+    A branch and not a merge: tier B in docs/plans/SELF-LEARNING.md is "a branch
     with a test, Gavin merges". The branch outlives the worktree, so the
     change survives this run without ever touching the tree anyone works in.
     Files are staged by name, never with -A, per the kit's git rule.
     """
     name = f"learn/{aid}"
-    files = [p for p in git("diff", "--name-only", cwd=worktree).splitlines()
+    files = [p for p in git("diff", "HEAD", "--name-only", cwd=worktree).splitlines()
              if p and not p.startswith(".evolve-")]
     if not files:
         return None
@@ -409,11 +463,9 @@ def main():
               file=sys.stderr)
         return 2
 
+    # Only a fallback: base_in() scores the unchanged commit once the
+    # worktree exists, which is the comparison that means something.
     base = baseline()
-    if not base:
-        print("no baseline score. Run `fitness` first, or there is nothing to "
-              "compare against.", file=sys.stderr)
-        return 1
 
     group = hashlib.sha1(f"{time.time()}{a.patch}{a.cmd}".encode()).hexdigest()[:8]
     cands = []
@@ -436,6 +488,12 @@ def main():
                 print(f"could not create worktree: {e}", file=sys.stderr)
                 return 1
             made.append(c["wt"])
+        base = base_in(cands[0]["wt"], cands[0]["dest"], base)
+        if not base:
+            print("the unchanged commit did not score, and no score is recorded",
+                  file=sys.stderr)
+            return 1
+        print(f"  base {base['structural_score']:.2f}, the unchanged {base['sha']}")
         return attempt(a, base, group, cands)
     finally:
         # Remove only these worktrees, each by exact path.

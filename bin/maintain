@@ -35,7 +35,6 @@ human, which is the only way a recurring report stays read.
 import argparse
 import json
 import pathlib
-import plistlib
 import re
 import subprocess
 import sys
@@ -46,7 +45,6 @@ STATE = pathlib.Path.home() / ".chewbacca"
 DIGEST = STATE / "maintain.md"
 LOG = STATE / "logs" / "maintain.log"
 LABEL = "com.calebnewton.chewbacca-maintain"
-PLIST = pathlib.Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 
 
 def run(cmd, timeout=1800):
@@ -101,33 +99,23 @@ def main():
     ap.add_argument("--hour", type=int, default=4)
     a = ap.parse_args()
 
+    # A service of chewbacca-daemon, the one Login Items row Chewbacca has
+    # (Caleb, 2026-10-11: "only 1 thing"), not its own LaunchAgent.
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import daemon_register
+
     if a.uninstall:
-        subprocess.run(["launchctl", "unload", "-w", str(PLIST)],
-                       capture_output=True)
-        PLIST.unlink(missing_ok=True)
+        daemon_register.unregister("maintain")
+        daemon_register.retire(LABEL)
         print(f"removed {LABEL}")
         return 0
 
     if a.install:
-        PLIST.parent.mkdir(parents=True, exist_ok=True)
         LOG.parent.mkdir(parents=True, exist_ok=True)
-        plist = {
-            "Label": LABEL,
-            "ProgramArguments": [sys.executable, str(ROOT / "bin/maintain"), "--quiet"],
-            # Offline on purpose. The brain consolidates during sleep because
-            # the operation cannot run while the system is behaving.
-            "StartCalendarInterval": {"Hour": a.hour, "Minute": 17},
-            "StandardOutPath": str(LOG),
-            "StandardErrorPath": str(LOG),
-            "RunAtLoad": False,
-        }
-        PLIST.write_bytes(plistlib.dumps(plist))
-        subprocess.run(["launchctl", "unload", str(PLIST)], capture_output=True)
-        r = subprocess.run(["launchctl", "load", "-w", str(PLIST)],
-                           capture_output=True, text=True)
-        if r.returncode != 0:
-            print(f"load failed: {r.stderr.strip()[:200]}", file=sys.stderr)
-            return 1
+        # Offline on purpose. The brain consolidates during sleep because
+        # the operation cannot run while the system is behaving.
+        daemon_register.register("maintain", [sys.executable, str(ROOT / "bin/maintain"), "--quiet"],
+                                 at=["{:02d}:17".format(a.hour)], legacy_label=LABEL)
         print(f"installed {LABEL}, runs daily at {a.hour:02d}:17")
         print(f"  digest: {DIGEST}")
         print(f"  log:    {LOG}")

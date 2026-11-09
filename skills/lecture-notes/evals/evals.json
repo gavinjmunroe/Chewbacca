@@ -1,0 +1,17 @@
+{
+  "skill": "lecture-notes",
+  "cases": [
+    {
+      "prompt": "Wrap up today's BISC lecture",
+      "expect": "invokes lecture-notes, finds the course folder from the coursework ledger, reads the whole lecture file, rewrites Notes, answers Questions in place, appends 8 to 15 flashcards, leaves the Transcript untouched, then extends the study guide"
+    },
+    {
+      "prompt": "I'm in class rn, what did she mean by facilitated diffusion",
+      "expect": "invokes lecture-notes, reads the lecture file and greps earlier lectures and slides, answers in two short paragraphs citing a path, and does not rewrite the notes"
+    },
+    {
+      "prompt": "Make flashcards from my notes on the cell membrane",
+      "expect": "invokes lecture-notes, works only from what the notes and transcript say, marks inference as inferred, writes Q/A pairs on core ideas rather than trivia"
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""ratio-check: load a page at every common screen shape and fail what breaks there.
+
+Caleb, 2026-11-06, on a pitch site that passed at 1440x900 and 390x844 while his own 771x558
+window got the fallback: "All things we make should take into acct all screen ratios!" A gate
+that only knows two sizes passes a page that breaks on a 16:9 laptop window, a projector or a
+phone on its side.
+
+It walks each page top to bottom at each shape and fails on a console error, sideways scroll, or
+text in a pinned layer that runs off the window. Screenshots land in --out so a person can look,
+because no script can say whether a layout looks good. Exit 0 clean, 1 failures, 3 no browser.
+"""
+import argparse
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+SHAPES = [
+    ("phone tall", 390, 844),
+    ("phone small", 320, 568),
+    ("phone sideways", 844, 390),
+    ("tablet", 768, 1024),
+    ("tablet sideways", 1024, 768),
+    ("short window", 771, 558),
+    ("slide small", 960, 540),
+    ("slide 720p", 1280, 720),
+    ("laptop", 1440, 900),
+    ("slide 1080p", 1920, 1080),
+    ("ultrawide", 2560, 1080),
+    ("big monitor", 2560, 1440),
+]
+# Guessed, never measured: enough stops to land inside a pinned scene of a few screens.
+STOPS = 14
+
+CLIPPED = """() => {
+  const out = [];
+  const pinned = [...document.querySelectorAll('body *')].filter((e) => {
+    const p = getComputedStyle(e).position;
+    const box = e.getBoundingClientRect();
+    // Only a layer that is pinned right now: one still scrolling in is off the window on purpose.
+    return (p === 'sticky' || p === 'fixed') && box.height >= innerHeight * 0.8 && Math.abs(box.top) < 2;
+  });
+  for (const layer of pinned) {
+    for (const el of layer.querySelectorAll('h1,h2,h3,p,li,dt,dd,a,button')) {
+      const s = getComputedStyle(el);
+      if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) < 0.5) continue;
+      if (!el.textContent.trim() || el.children.length > 3) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.top < -1 || r.left < -1) {
+        out.push(el.textContent.trim().slice(0, 50));
+      }
+    }
+  }
+  return [...new Set(out)];
+}"""
+
+
+async def check(browser, url, name, width, height, out_dir):
+    problems = []
+    ctx = await browser.new_context(viewport={"width": width, "height": height})
+    page = await ctx.new_page()
+    page.on("pageerror", lambda e: problems.append(f"page error: {str(e)[:100]}"))
+    page.on("console", lambda m: problems.append(f"console: {m.text[:100]}") if m.type == "error" else None)
+    response = await page.goto(url, wait_until="load", timeout=45000)
+    if response and response.status >= 400:
+        problems.append(f"HTTP {response.status}")
+    await page.wait_for_timeout(800)
+    total = await page.evaluate("document.documentElement.scrollHeight")
+    wide = await page.evaluate("document.documentElement.scrollWidth - innerWidth")
+    if wide > 1:
+        problems.append(f"scrolls sideways by {wide}px")
+    clipped = set()
+    for n in range(STOPS):
+        await page.evaluate(f"window.scrollTo(0, {(total - height) * n / max(1, STOPS - 1)})")
+        await page.wait_for_timeout(250)
+        clipped.update(await page.evaluate(CLIPPED))
+        if n in (0, STOPS // 2, STOPS - 1) and out_dir:
+            await page.screenshot(path=str(out_dir / f"{width}x{height}-{n:02d}.png"))
+    if clipped:
+        problems.append("text off the window in a pinned layer: " + "; ".join(sorted(clipped)[:4]))
+    await ctx.close()
+    return {"shape": name, "width": width, "height": height, "problems": sorted(set(problems))}
+
+
+async def run(args):
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        print("ratio-check: playwright isn't installed, so this page is unverified", file=sys.stderr)
+        return 3
+    out_dir = Path(args.out) if args.out else None
+    if out_dir:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    results = []
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch()
+        except Exception as exc:
+            print(f"ratio-check: no browser started ({exc.__class__.__name__}), so this page is unverified", file=sys.stderr)
+            return 3
+        for url in args.urls:
+            for name, w, h in SHAPES:
+                r = await check(browser, url, name, w, h, out_dir)
+                r["url"] = url
+                results.append(r)
+                mark = "ok  " if not r["problems"] else "FAIL"
+                print(f"{mark} {w}x{h} {name}" + ("" if not r["problems"] else ": " + " | ".join(r["problems"])))
+        await browser.close()
+    if args.json:
+        print(json.dumps(results))
+    bad = [r for r in results if r["problems"]]
+    if out_dir:
+        print(f"Look at the screenshots too: {out_dir}")
+    print(f"ratio-check: {len(results) - len(bad)} of {len(results)} shapes clean")
+    return 1 if bad else 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("urls", nargs="+")
+    ap.add_argument("--out", help="folder for screenshots")
+    ap.add_argument("--json", action="store_true")
+    return asyncio.run(run(ap.parse_args()))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,1167 @@
+{
+ "about": "For each message Caleb answered on 2026-10-16, the session's tool events up to it (M lesson write, C code edit, L land or push) and where his previous prompt's turn started. Replayed through learn-on-land.sh by tests/test_steering_stop_replay.py.",
+ "turns": [
+  {
+   "session": "4d62fc38",
+   "time": "11:47",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:47",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "bcd4f974",
+   "time": "11:48",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:49",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:50",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:52",
+   "events": "MMLML",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:54",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:56",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "11:59",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:00",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:01",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:04",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:04",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "poll"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:05",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "12:07",
+   "events": "MMLML",
+   "turn_start": 5,
+   "next_label": "steer:not_managing"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:17",
+   "events": "CCMCCCCCCMMCMLCC",
+   "turn_start": 12,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:24",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCML",
+   "turn_start": 29,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:28",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCC",
+   "turn_start": 31,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:33",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCL",
+   "turn_start": 37,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:33",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 38,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:34",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:be_smarter"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:35",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:39",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:40",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:41",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:42",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:42",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:43",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:43",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:43",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:44",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:48",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:49",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:50",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:53",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "steer:missed_capability"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:55",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:57",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "12:57",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:00",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:02",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:02",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:03",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:03",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:03",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 41,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:04",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 42,
+   "next_label": "task"
+  },
+  {
+   "session": "571704d6",
+   "time": "13:05",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:39",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCC",
+   "turn_start": 42,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:51",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCML",
+   "turn_start": 42,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "13:51",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLL",
+   "turn_start": 109,
+   "next_label": "poll"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:52",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLML",
+   "turn_start": 46,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:53",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLML",
+   "turn_start": 46,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:54",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLML",
+   "turn_start": 46,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "faf1c561",
+   "time": "13:55",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLM",
+   "turn_start": 46,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "13:56",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLL",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "13:57",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLL",
+   "turn_start": 109,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:00",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLL",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:01",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLL",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:02",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:03",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:04",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCL",
+   "turn_start": 56,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:05",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:06",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:08",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:08",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:09",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLML",
+   "turn_start": 56,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:09",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 109,
+   "next_label": "poll"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:12",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 111,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:13",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 111,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:14",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 111,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:15",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMM",
+   "turn_start": 111,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:16",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCC",
+   "turn_start": 111,
+   "next_label": "task"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:17",
+   "events": "CCCCCC",
+   "turn_start": 0,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:19",
+   "events": "CCCCCC",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "88c414a8",
+   "time": "14:23",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:24",
+   "events": "CCCCCCCCCCCCCCCCC",
+   "turn_start": 17,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "88c414a8",
+   "time": "14:27",
+   "events": "M",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:29",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+   "turn_start": 17,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:31",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLL",
+   "turn_start": 149,
+   "next_label": "steer:silent_progress"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:32",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLL",
+   "turn_start": 149,
+   "next_label": "poll"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:33",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLL",
+   "turn_start": 149,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "4d62fc38",
+   "time": "14:34",
+   "events": "MMLMLMLL",
+   "turn_start": 8,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:34",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+   "turn_start": 17,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:34",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLC",
+   "turn_start": 56,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "e837b0d5",
+   "time": "14:36",
+   "events": "CCLMCCCCLLLLLMMMMMMLLLMMMMMMMMLLMMLLMMLLLMMLLLMMLLMMLLMMLMMMMMMMMLMLLLMCCCCCMMMLLCCCCCCLMLML",
+   "turn_start": 92,
+   "next_label": "task"
+  },
+  {
+   "session": "e837b0d5",
+   "time": "14:41",
+   "events": "CCLMCCCCLLLLLMMMMMMLLLMMMMMMMMLLMMLLMMLLLMMLLLMMLLMMLLMMLMMMMMMMMLMLLLMCCCCCMMMLLCCCCCCLMLMLLLMLLLM",
+   "turn_start": 94,
+   "next_label": "task"
+  },
+  {
+   "session": "e837b0d5",
+   "time": "14:43",
+   "events": "CCLMCCCCLLLLLMMMMMMLLLMMMMMMMMLLMMLLMMLLLMMLLLMMLLMMLLMMLMMMMMMMMLMLLLMCCCCCMMMLLCCCCCCLMLMLLLMLLLM",
+   "turn_start": 99,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "17f1f821",
+   "time": "14:45",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "17f1f821",
+   "time": "14:47",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "f7901545",
+   "time": "14:47",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMMMLCCLLMCLC",
+   "turn_start": 60,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "17f1f821",
+   "time": "14:48",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:48",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLLLLC",
+   "turn_start": 149,
+   "next_label": "task"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "14:49",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLLLLC",
+   "turn_start": 149,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "f7901545",
+   "time": "14:49",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMMMLCCLLMCLC",
+   "turn_start": 60,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:49",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLML",
+   "turn_start": 56,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "d48b5843",
+   "time": "14:49",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCC",
+   "turn_start": 0,
+   "next_label": "steer:silent_progress"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:53",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLC",
+   "turn_start": 73,
+   "next_label": "poll"
+  },
+  {
+   "session": "f7901545",
+   "time": "14:53",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMMMLCCLLMCLCCL",
+   "turn_start": 62,
+   "next_label": "poll"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:54",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLC",
+   "turn_start": 73,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "14:55",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMCCMMMMLLMMMLM",
+   "turn_start": 50,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:55",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLC",
+   "turn_start": 73,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "faf1c561",
+   "time": "14:56",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLC",
+   "turn_start": 73,
+   "next_label": "steer:be_smarter"
+  },
+  {
+   "session": "f7901545",
+   "time": "14:57",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMMMLCCLLMCLCCLC",
+   "turn_start": 63,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "d48b5843",
+   "time": "14:57",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCC",
+   "turn_start": 27,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:04",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 73,
+   "next_label": "steer:be_smarter"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:05",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 78,
+   "next_label": "steer:not_reusable"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:05",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 78,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:06",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 78,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "d48b5843",
+   "time": "15:06",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCCMMMMMMMLCC",
+   "turn_start": 37,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:07",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 78,
+   "next_label": "steer:not_reusable"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "15:08",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMCCMMMMLLMMMLMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+   "turn_start": 85,
+   "next_label": "steer:not_reusable"
+  },
+  {
+   "session": "17f1f821",
+   "time": "15:09",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "17f1f821",
+   "time": "15:12",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "15:12",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLLLLCCCCCCLCCCCCCCCCCLLLCCCLLLLC",
+   "turn_start": 179,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "15:13",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLLLLCCCCCCLCCCCCCCCCCLLLCCCLLLLC",
+   "turn_start": 179,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "d48b5843",
+   "time": "15:13",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCCMMMMMMMLCCMLC",
+   "turn_start": 40,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:14",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCML",
+   "turn_start": 78,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "17f1f821",
+   "time": "15:14",
+   "events": "M",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "15:16",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLL",
+   "turn_start": 44,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "d48b5843",
+   "time": "15:17",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCCMMMMMMMLCCMLCC",
+   "turn_start": 40,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "1a269e75",
+   "time": "15:17",
+   "events": "",
+   "turn_start": 0,
+   "next_label": "task"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "15:18",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLL",
+   "turn_start": 44,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "88c414a8",
+   "time": "15:18",
+   "events": "MCM",
+   "turn_start": 1,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:25",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMML",
+   "turn_start": 78,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "88c414a8",
+   "time": "15:25",
+   "events": "MCM",
+   "turn_start": 3,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:30",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMML",
+   "turn_start": 78,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:33",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLML",
+   "turn_start": 78,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:33",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLML",
+   "turn_start": 78,
+   "next_label": "steer:quality_slop"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:34",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLML",
+   "turn_start": 84,
+   "next_label": "task"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:34",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLML",
+   "turn_start": 84,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:38",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLMLC",
+   "turn_start": 84,
+   "next_label": "steer:unchecked_claim"
+  },
+  {
+   "session": "faf1c561",
+   "time": "15:40",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLMLC",
+   "turn_start": 84,
+   "next_label": "task"
+  },
+  {
+   "session": "d48b5843",
+   "time": "15:41",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCCMMMMMMMLCCMLCC",
+   "turn_start": 40,
+   "next_label": "steer:permission_ask"
+  },
+  {
+   "session": "faf1c561",
+   "time": "16:05",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLMLC",
+   "turn_start": 84,
+   "next_label": "task"
+  },
+  {
+   "session": "d48b5843",
+   "time": "16:06",
+   "events": "CCCCCCCCCCCCCCMCMMLCLCCCCCCMMMMMMMLCCMLCCM",
+   "turn_start": 42,
+   "next_label": "steer:not_reusable"
+  },
+  {
+   "session": "faf1c561",
+   "time": "16:06",
+   "events": "CCMCCCCCCMMCMLCCCCCCCCCCCCCMLCCCCCCCCLCCCCMLMLCMMLLMLMCLMLLMLCCMLMLCMMMLCCCCMLMMMLMLC",
+   "turn_start": 84,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "2bb3894f",
+   "time": "16:07",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCMCCCCCCLCCLLLCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCLLCCCCMMMMMCCCLLLCCCCLLLLCCCCLLMMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLLLLCCCCCCLCCCCCCCCCCLLLCCCLLLLCCCCLCCCCLCC",
+   "turn_start": 189,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "c64c3ffe",
+   "time": "16:08",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCLLCC",
+   "turn_start": 31,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "cf163c5a",
+   "time": "16:08",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLCCCCCC",
+   "turn_start": 36,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "686d581e",
+   "time": "16:08",
+   "events": "MMMMML",
+   "turn_start": 6,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "4289bdee",
+   "time": "16:09",
+   "events": "MMCCMMMMMMMMMMMCMMMMMML",
+   "turn_start": 23,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "16:09",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLLLLMMMMML",
+   "turn_start": 47,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "dcd10a90",
+   "time": "16:10",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCCCCCLCCCCMCL",
+   "turn_start": 48,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "c817e5d4",
+   "time": "16:10",
+   "events": "MCCCCCCLLL",
+   "turn_start": 0,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "17f1f821",
+   "time": "16:10",
+   "events": "M",
+   "turn_start": 1,
+   "next_label": "steer:not_managing"
+  },
+  {
+   "session": "5aa63c38",
+   "time": "16:38",
+   "events": "CCCMCCCCCCCCCMMMMMMMLCCLLLLCMMLMM",
+   "turn_start": 33,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "f15baf97",
+   "time": "16:38",
+   "events": "LMLL",
+   "turn_start": 1,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "88c414a8",
+   "time": "16:39",
+   "events": "MCMM",
+   "turn_start": 3,
+   "next_label": "task"
+  },
+  {
+   "session": "c64c3ffe",
+   "time": "16:40",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCLLCCMMLMLCL",
+   "turn_start": 38,
+   "next_label": "poll"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "16:40",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLLLLMMMMMLML",
+   "turn_start": 47,
+   "next_label": "poll"
+  },
+  {
+   "session": "dcd10a90",
+   "time": "16:41",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLCCCCCLCCCCMCLMMCL",
+   "turn_start": 58,
+   "next_label": "poll"
+  },
+  {
+   "session": "686d581e",
+   "time": "16:41",
+   "events": "MMMMMLMLMMM",
+   "turn_start": 6,
+   "next_label": "poll"
+  },
+  {
+   "session": "c817e5d4",
+   "time": "16:41",
+   "events": "MCCCCCCLLLMML",
+   "turn_start": 0,
+   "next_label": "poll"
+  },
+  {
+   "session": "12497a20",
+   "time": "16:41",
+   "events": "MMCCCCCCCCCCCCCCCCCCCCCCCCCCMLMCLCCLCCL",
+   "turn_start": 37,
+   "next_label": "poll"
+  },
+  {
+   "session": "4289bdee",
+   "time": "16:42",
+   "events": "MMCCMMMMMMMMMMMCMMMMMMLMLMLLLM",
+   "turn_start": 30,
+   "next_label": "poll"
+  },
+  {
+   "session": "bc78d8f9",
+   "time": "16:42",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMCCMMMMLLMMMLMCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCLLCCCCLLLLCCC",
+   "turn_start": 122,
+   "next_label": "poll"
+  },
+  {
+   "session": "41314bcc",
+   "time": "16:42",
+   "events": "CCCCCCCCMCCCCMLLMMLMLCLLLLMMMLCL",
+   "turn_start": 32,
+   "next_label": "poll"
+  },
+  {
+   "session": "17f1f821",
+   "time": "16:43",
+   "events": "MMLMLLMM",
+   "turn_start": 8,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "41314bcc",
+   "time": "16:45",
+   "events": "CCCCCCCCMCCCCMLLMMLMLCLLLLMMMLCL",
+   "turn_start": 32,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "c817e5d4",
+   "time": "16:45",
+   "events": "MCCCCCCLLLMML",
+   "turn_start": 13,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "f15baf97",
+   "time": "16:46",
+   "events": "LMLLL",
+   "turn_start": 5,
+   "next_label": "task"
+  },
+  {
+   "session": "12497a20",
+   "time": "16:46",
+   "events": "MMCCCCCCCCCCCCCCCCCCCCCCCCCCMLMCLCCLCCL",
+   "turn_start": 37,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "f7901545",
+   "time": "16:46",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCMMMMMLCCLLMCLCCLCCCCMMCCCCCCCCCC",
+   "turn_start": 71,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "16:46",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLLLLMMMMMLML",
+   "turn_start": 55,
+   "next_label": "steer:stopped_early"
+  },
+  {
+   "session": "c817e5d4",
+   "time": "16:46",
+   "events": "MCCCCCCLLLMML",
+   "turn_start": 13,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "41314bcc",
+   "time": "16:48",
+   "events": "CCCCCCCCMCCCCMLLMMLMLCLLLLMMMLCL",
+   "turn_start": 32,
+   "next_label": "steer:learn_ritual"
+  },
+  {
+   "session": "8e3129b9",
+   "time": "16:48",
+   "events": "CCCCCCCCCCCCCCCCCCCCCCCCCMMMCCCCCMCCMCCCCCCLLLLMMMMMLML",
+   "turn_start": 55,
+   "next_label": "steer:learn_ritual"
+  }
+ ]
+}

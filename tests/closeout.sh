@@ -7,6 +7,9 @@
 # the closing question never got an answer. Everything here runs against a
 # throwaway kit and brain under a temporary HOME.
 set -uo pipefail
+# grep reads here-strings, never printf | grep -q: grep stops at its match,
+# printf takes SIGPIPE on longer output, and pipefail read that as a FAIL
+# ("--fast after failure" on 10/13, line 155 write error).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME="$T/home" CHEWBACCA_LOG_DIR="$T/logs" TMPDIR="$T"
@@ -66,7 +69,7 @@ python3 -c "import sys; sys.exit(0 if $first < 1.5 and $total >= 3 else 1)" \
 
 # ── --fast reuses a pass on this exact commit, and nothing else ────────────
 out=$(python3 "$KIT/bin/closeout" --fast); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "gates: passed on .*reused" \
+[ "$code" = 0 ] && grep -q "gates: passed on .*reused" <<< "$out" \
   && ok "--fast reuses the gates that passed on this commit" || bad "--fast after a pass: $code $out"
 
 echo "# next" >> "$KIT/tests/run.sh"
@@ -74,7 +77,7 @@ git -C "$KIT" commit -qam next; git -C "$KIT" push -q
 start=$(python3 -c 'import time; print(time.time())')
 out=$(python3 "$KIT/bin/closeout" --fast); code=$?
 secs=$(python3 -c "import time; print(f'{time.time() - $start:.1f}')")
-[ "$code" = 1 ] && printf '%s' "$out" | grep -q '????  gates: not run on this commit' \
+[ "$code" = 1 ] && grep -q '????  gates: not run on this commit' <<< "$out" \
   && ok "a new commit makes the gates unknown, never a pass" || bad "--fast on a new commit: $code $out"
 python3 -c "import sys; sys.exit(0 if $secs < 5 else 1)" \
   && ok "--fast answered in ${secs}s, inside vibe-guard's 10 s watchdog" || bad "--fast took ${secs}s"
@@ -131,35 +134,35 @@ c2() { CHEWBACCA_HOME="$T/state2" python3 "$K2/bin/closeout" "$@"; }
 land() { git -C "$K2" add -A; git -C "$K2" commit -qm "$1"; git -C "$K2" push -q; }
 
 out=$(c2); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "alpha passes" && printf '%s' "$out" | grep -q "beta passes" \
+[ "$code" = 0 ] && grep -q "alpha passes" <<< "$out" && grep -q "beta passes" <<< "$out" \
   && ok "no earlier pass: today's changes select both checks" || bad "first scoped run: $code $out"
 
 printf '#!/bin/bash\n# reworded\nexit 0\n' > "$K2/bin/alpha"; land "alpha only"
 start=$(python3 -c 'import time; print(time.time())')
 out=$(c2); code=$?
 secs=$(python3 -c "import time; print(f'{time.time() - $start:.1f}')")
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "alpha passes" && ! printf '%s' "$out" | grep -q "beta" \
+[ "$code" = 0 ] && grep -q "alpha passes" <<< "$out" && ! grep -q "beta" <<< "$out" \
   && ok "a change to bin/alpha runs alpha's check and not beta's 4 s one (${secs}s)" || bad "scoped run: $code $out"
 
 out=$(c2); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "gates: passed on this tree" \
+[ "$code" = 0 ] && grep -q "gates: passed on this tree" <<< "$out" \
   && ok "a second closeout on the same tree runs nothing" || bad "rerun on same tree: $code $out"
 
 # THE GUARANTEE. A check that fails still fails closeout, scoped or not.
 printf '#!/bin/bash\nexit 1\n' > "$K2/bin/alpha"; land "break alpha"
 out=$(c2); code=$?
-[ "$code" = 1 ] && printf '%s' "$out" | grep -q "FAIL  gates" && printf '%s' "$out" | grep -q "alpha passes" \
+[ "$code" = 1 ] && grep -q "FAIL  gates" <<< "$out" && grep -q "alpha passes" <<< "$out" \
   && [ ! -f "$T/state2/closeout-receipt.json" ] \
   && ok "a broken bin/alpha fails closeout and leaves no receipt" || bad "broken alpha passed: $code $out"
 out=$(c2 --fast); code=$?
-[ "$code" = 1 ] && printf '%s' "$out" | grep -q '????  gates: not run on this commit' \
+[ "$code" = 1 ] && grep -q '????  gates: not run on this commit' <<< "$out" \
   && ok "--fast never reuses a pass across a failing change" || bad "--fast after failure: $code $out"
 
 # A changed file no check names still has to parse.
 printf '#!/bin/bash\nexit 0\n' > "$K2/bin/alpha"
 printf '#!/bin/bash\nif then fi\n' > "$K2/bin/gamma"; land "gamma"
 out=$(c2); code=$?
-[ "$code" = 1 ] && printf '%s' "$out" | grep -q "FAIL  .*parses: bin/gamma" \
+[ "$code" = 1 ] && grep -q "FAIL  .*parses: bin/gamma" <<< "$out" \
   && ok "a syntax error in a file no check names fails closeout" || bad "gamma parse: $code $out"
 printf '#!/bin/bash\nexit 0\n' > "$K2/bin/gamma"; land "fix gamma"
 c2 >/dev/null; code=$?
@@ -168,17 +171,17 @@ c2 >/dev/null; code=$?
 # A check line added to the suite runs on the next closeout.
 printf 'if group "delta"; then\n  check "delta runs" true\nfi\n' >> "$K2/tests/run.sh"; land "delta"
 out=$(c2); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "delta runs" \
+[ "$code" = 0 ] && grep -q "delta runs" <<< "$out" \
   && ok "a check added to run.sh is selected by its own diff" || bad "added check: $code $out"
 
 # Board edits cannot break a script, so they keep the last pass.
 mkdir -p "$K2/team/tasks"; echo t > "$K2/team/tasks/CHW-9.md"; land "team: CHW-9"
 out=$(c2 --fast); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "gates: passed on .*reused" \
+[ "$code" = 0 ] && grep -q "gates: passed on .*reused" <<< "$out" \
   && ok "a team-board commit keeps the pass for --fast" || bad "--fast after a board edit: $code $out"
 
 out=$(c2 --all); code=$?
-[ "$code" = 0 ] && printf '%s' "$out" | grep -q "beta passes\|\[.*\] beta" && printf '%s' "$out" | grep -q "groups" \
+[ "$code" = 0 ] && grep -q "beta passes\|\[.*\] beta" <<< "$out" && grep -q "groups" <<< "$out" \
   && ok "--all runs every group" || bad "--all: $code $out"
 
 # The real suite: its preamble is found and most check lines run alone.
@@ -205,12 +208,12 @@ echo decided > "$HOME/second-brain/memory/project_cohort.md"
 git -C "$HOME/second-brain" add -A; git -C "$HOME/second-brain" commit -qm p
 git -C "$HOME/second-brain" push -q
 out=$(python3 "$KIT/bin/closeout" --fast)
-printf '%s' "$out" | grep -q "FAIL  board: today's project decisions" \
+grep -q "FAIL  board: today's project decisions" <<< "$out" \
   && ok "a project note with no board commit fails the board check" || bad "board check missed it: $out"
 mkdir -p "$KIT/team/tasks"; echo t > "$KIT/team/tasks/CHW-1.md"
 git -C "$KIT" add -A; git -C "$KIT" commit -qm "team: CHW-1 created"; git -C "$KIT" push -q
 out=$(python3 "$KIT/bin/closeout" --fast)
-printf '%s' "$out" | grep -q "PASS  board: today's project decisions" \
+grep -q "PASS  board: today's project decisions" <<< "$out" \
   && ok "a board commit today clears it" || bad "board check after a task: $out"
 
 echo

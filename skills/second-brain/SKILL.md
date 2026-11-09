@@ -1,6 +1,8 @@
 ---
 name: second-brain
-description: 'Read from and write to the user''s personal context repo, the private markdown store holding who they are, what they are working on, who they work with, and how their systems are wired. Use when the user asks what you know about something, states a durable fact worth persisting (new role, project shipped or died, collaborator joined, preference, infrastructure change), says "remember this", asks for a context review, or when work just changed something context should reflect. Also use before advising on anything personal.'
+description: "Read and write the user's private context repo: who they are, what they're working on, collaborators, systems. Use for what you know, remember this, a durable new fact, a context review, or personal advice."
+triggers: >-
+  Read from and write to the user's personal context repo, the private markdown store holding who they are, what they are working on, who they work with, and how their systems are wired. Use when the user asks what you know about something, states a durable fact worth persisting (new role, project shipped or died, collaborator joined, preference, infrastructure change), says "remember this" or "save this for later", asks for a context review, or when work just changed something context should reflect. Also use before advising on anything personal.
 ---
 
 # Second brain
@@ -72,6 +74,27 @@ verified and what was inherited.
 
 **If the user contradicts the repo, the user is right.** Fix the file in the
 same turn. Never argue with someone using their own stale notes.
+
+## Save for later
+
+"Save these for later" with links, pastes or screenshots is a save of ALL of it,
+read in full, for a session that has none of this conversation.
+
+- Read every source whole: each link's page, every video's transcript, every
+  box of a screenshot. Never write a summary of a page you only skimmed, and
+  never claim coverage you didn't read.
+- Keep the originals in `raw/` (pastes verbatim, images copied in), plus one
+  notes file that opens with "Picking this up next time": what's there, where
+  it stands, the open decisions, the first steps.
+- Make it findable: a `MEMORY.md` pointer, and for kit work a backlog row and
+  a work-ledger task that names the notes file.
+- Prove it: a fresh `claude -p` asked about the topic, with no hints, has to
+  name the notes file. If it can't, the save isn't done.
+
+Never-dos, from Caleb on 2026-10-25, after a first save of the Omarchy and
+one-agent-company material was a shallow summary with nothing indexed: "DONT
+SKIM", then "I hv a feeling you didn't save this well enough for me to pick up
+next time".
 
 ## What does not belong
 

@@ -61,6 +61,10 @@
         "title": {
           "type": "string",
           "bindable": false
+        },
+        "ask": {
+          "type": "string",
+          "bindable": false
         }
       }
     },
@@ -92,6 +96,10 @@
             "top",
             "center"
           ]
+        },
+        "from": {
+          "type": "string",
+          "bindable": true
         }
       }
     },
@@ -337,6 +345,18 @@
         "page": {
           "type": "number",
           "min": 1
+        },
+        "line": {
+          "type": "number",
+          "min": 1
+        },
+        "tabs": {
+          "type": "array",
+          "items": "object",
+          "bindable": true
+        },
+        "tabAction": {
+          "type": "rowaction"
         }
       }
     },
@@ -506,6 +526,110 @@
       "props": {
         "text": {
           "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "plain": {
+          "type": "boolean"
+        },
+        "hunks": {
+          "type": "array",
+          "items": "object",
+          "bindable": true
+        },
+        "keepAction": {
+          "type": "rowaction"
+        },
+        "rejectAction": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Tree": {
+      "family": "Anything else",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Web": {
+      "family": "Anything else",
+      "props": {
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "App": {
+      "family": "Anything else",
+      "props": {
+        "url": {
+          "type": "string",
+          "bindable": true
+        },
+        "h": {
+          "type": "number",
+          "min": 600
+        }
+      }
+    },
+    "Hits": {
+      "family": "Anything else",
+      "props": {
+        "caption": {
+          "type": "string",
+          "bindable": true
+        },
+        "items": {
+          "type": "array",
+          "items": "object",
+          "bindable": true,
+          "rows": true,
+          "data": true
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Tiles": {
+      "family": "Data",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        },
+        "counts": {
+          "type": "object"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Chips": {
+      "family": "Controls",
+      "props": {
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "options": {
+          "type": "array",
+          "items": "json"
+        },
+        "action": {
+          "type": "rowaction"
+        },
+        "dots": {
+          "type": "boolean"
         }
       }
     }

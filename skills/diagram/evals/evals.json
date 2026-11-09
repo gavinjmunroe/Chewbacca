@@ -1,0 +1,26 @@
+{
+  "skill": "diagram",
+  "cases": [
+    {
+      "prompt": "Draw an architecture diagram of the quant rig for the research note",
+      "expect_behavior": "picks Architecture, loads type-architecture.md, writes one HTML file, runs self_check.py and verify-geometry.py"
+    },
+    {
+      "prompt": "Make a flowchart of the Jev edge results with the real scores in it",
+      "expect_behavior": "uses this skill, not the chart MCP, because the figures are private and the MCP posts them to antv-studio.alipay.com",
+      "reject": ["mcp__chart__"]
+    },
+    {
+      "prompt": "Redraw this mermaid diagram so it looks presentable",
+      "expect_behavior": "runs mermaid_extract.py, redraws instead of converting, reports a fidelity ledger"
+    },
+    {
+      "prompt": "Sketch the onboarding flow as a sequence diagram with 14 services",
+      "expect_behavior": "splits into an overview and a detail because 14 is over the 9-node budget"
+    },
+    {
+      "prompt": "Customize the diagram style guide to match this client's website",
+      "expect_behavior": "overrides tokens in the generated file or the project's reference/DESIGN.md, never edits the shared style-guide.md"
+    }
+  ]
+}

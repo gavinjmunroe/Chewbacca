@@ -163,6 +163,61 @@ struct SnapshotTests {
             .frame(width: width)
     }
 
+    /// Any panel, from the Kyber Lines it actually sends: HUD_LINES_FILE
+    /// names a file of lines (bin/kyber-surfaces' own output), and with
+    /// HUD_SNAPSHOT_DIR the card is kept as <file>-light.png and
+    /// <file>-dark.png; several files are separated by colons. Added 2026-10-11 so the meetings panel could be looked
+    /// at with the Mac locked; Caleb had called it a wall of text from a
+    /// screenshot nobody else had seen.
+    @Test("a Kyber Lines file renders, for review")
+    func linesFile() throws {
+        guard let paths = ProcessInfo.processInfo.environment["HUD_LINES_FILE"] else { return }
+        for path in paths.split(separator: ":").map(String.init) {
+            let lines = try String(contentsOfFile: path, encoding: .utf8)
+                .split(separator: "\n").map(String.init).filter { !$0.hasPrefix("@") }
+            let drawn = store(lines)
+            let stem = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            // HUD_LINES_CHROME=glass renders it the way chrome=glass draws.
+            let chrome = ProcessInfo.processInfo.environment["HUD_LINES_CHROME"].flatMap(Chrome.init) ?? .card
+            for ground in Ground.allCases {
+                let covered = coverage("\(stem)-\(ground.rawValue)", size: CGSize(width: 520, height: 1180),
+                                       ground: ground) {
+                    card(drawn, chrome, 420)
+                }
+                #expect(covered > 0.05, "\(stem) covered only \(covered) of the frame")
+            }
+        }
+    }
+
+    /// The instrument's own test: a panel taller than its cap must render
+    /// its words offscreen, not an empty card. Before 2026-10-11 the tall
+    /// version was a ScrollView, which ImageRenderer draws as nothing, and
+    /// every HUD_LINES_FILE review of a long panel was a blank card that
+    /// still passed the coverage check on the glass alone.
+    @Test("a panel taller than its cap still renders its content offscreen")
+    func tallPanelRenders() {
+        let rows = (0..<80).map { #"c t\#($0) Text value="row \#($0) of a long panel""# }
+        let tall = store([#"c s Screen title="TALL""#, "r s", "> s " + (0..<80).map { "t\($0)" }.joined(separator: " ")]
+                         + rows)
+        // The same rows with a space for their words: the same height and
+        // the same glass, so only the ink differs.
+        let blanks = (0..<80).map { #"c t\#($0) Text value=" ""# }
+        let empty = store([#"c s Screen title="TALL""#, "r s", "> s " + (0..<80).map { "t\($0)" }.joined(separator: " ")]
+                          + blanks)
+        func draw(_ store: SurfaceStore) -> NSBitmapImageRep? {
+            render(card(store, .card, 400).frame(width: 480, height: 900)
+                .environment(\.colorScheme, .dark).environment(\.hudOffscreen, true))
+        }
+        guard let words = draw(tall), let none = draw(empty) else {
+            Issue.record("the cards did not render")
+            return
+        }
+        // The rows' words have to change pixels against the same card drawn
+        // with no words in it. Blank, the two images were identical.
+        let changed = difference(words, none)
+        #expect(changed > 0.01, "the words changed only \(changed) of the card")
+    }
+
     @Test("a card draws, on both grounds", arguments: Ground.allCases)
     func cardDraws(ground: Ground) {
         let drawn = coverage(
@@ -229,6 +284,35 @@ struct SnapshotTests {
             card(dashboard, .window, 400)
         }
         #expect(drawn > 0.25, "a window covered only \(drawn) of the frame")
+    }
+
+    /// The window's `.fontDesign(.monospaced)` swaps custom fonts for the
+    /// system mono, and `.fontDesign(nil)` after the font is what keeps the
+    /// pixel face (Typeface.swift). `swift test` has no app bundle, so the
+    /// face is registered here from the repo's own copy, and the shield is
+    /// judged by pixels: shielded must match the face drawn with no design
+    /// around it, and unshielded must not.
+    @Test("the pixel face survives the window's mono design")
+    func pixelFaceIsShielded() throws {
+        let font = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fonts/DepartureMono-Regular.otf")
+        if NSFont(name: Typeface.pixelName, size: 11) == nil {
+            CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil)
+        }
+        try #require(NSFont(name: Typeface.pixelName, size: 11) != nil, "Departure Mono did not register")
+        func word(_ shield: Bool, inMono: Bool) -> NSBitmapImageRep? {
+            let text = Text("OUTBOUND 0123").font(.custom(Typeface.pixelName, fixedSize: 11))
+            let shielded = Group { if shield { text.fontDesign(nil) } else { text } }
+            return render(
+                shielded.foregroundStyle(.black).padding(4).background(.white)
+                    .fontDesign(inMono ? .monospaced : nil))
+        }
+        let plain = try #require(word(false, inMono: false)?.tiffRepresentation)
+        let kept = try #require(word(true, inMono: true)?.tiffRepresentation)
+        let swapped = try #require(word(false, inMono: true)?.tiffRepresentation)
+        #expect(kept == plain, "the shielded pixel face drew differently from the face itself")
+        #expect(swapped != plain, "an unshielded face was not swapped, so this test no longer proves the shield")
     }
 
     @Test("a bracketed surface draws", arguments: Ground.allCases)

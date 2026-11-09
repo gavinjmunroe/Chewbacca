@@ -10,6 +10,37 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate check <url> [<url>...]   exit 1 on any failure below
                                         (write url@404 for a page meant to 404)
     site-gate idle <url> [--ref <url>] what moves while nobody touches it
+    site-gate research [repo]          exit 1 unless research/INDEX.md (every
+                                       source page), research/SOURCES.md (which
+                                       kit tools ran), research/STEAL.md and
+                                       docs/COPY.md exist. Run it FIRST.
+    site-gate flash <url>...           exit 1 if scrolling at phone size flashes:
+                                       a frame where over a quarter of the
+                                       screen swings brightness hard
+    site-gate repeat <url>...          exit 1 if a sentence of five words or
+                                       more shows on two of the pages given,
+                                       or twice on one, nav and footer aside
+    site-gate focus <url>...           exit 1 if a screen has no place for the
+                                       eye: the biggest text under 1.6x the
+                                       usual size, over 40 lines at one size,
+                                       or one control with more than 4 choices
+    site-gate scrub <url> --run <sel>  step a pinned scroll run at 1440 and 390,
+                                       write a fresh contact sheet per width, and
+                                       exit 1 on a console error or visible text
+                                       inside the 16px side gutter
+    site-gate deck <url>...            exit 1 if the page reads like a pitch
+                                       deck: three or more sections in a row
+                                       with the same shape, or every section
+                                       edge a flat cut nothing crosses
+    site-gate slideshow <url>...       exit 1 if a pinned scene could have been
+                                       a slideshow: it holds still on most
+                                       scroll steps and swaps on a few
+                                       (research also refuses carousel
+                                       libraries and slide markup in source)
+    site-gate parity <url>...          exit 1 if the phone version is thinner
+                                       than desktop: figure share or screens
+                                       with motion under 75% of desktop's, or
+                                       a desktop pinned scene the phone lost
     site-gate story <url>...           exit 1 if the page is an essay: figure
                                        share under 0.35, or under 60% of
                                        screens with scroll-linked motion
@@ -17,6 +48,9 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
 check, at 1440x900 and 390x844, on every url given:
     console errors and uncaught exceptions          none allowed
     horizontal scroll at 390                        none allowed
+    in WebKit as an iPhone 15 Pro: horizontal
+      scroll, or a visible img, video or canvas
+      drawn under 2px tall                          none allowed
     dead controls: href="#", "", javascript:,
       a same-page #anchor with no target, a link
       or button with no accessible name, or a
@@ -27,6 +61,15 @@ check, at 1440x900 and 390x844, on every url given:
       itself or any descendant (group hovers count) none allowed
     infinite animations running under
       prefers-reduced-motion                        none allowed
+    a boring section: nothing moves on entry, at
+      rest or on scroll; a still image over 20% of
+      a section; a band under 15% content that sits
+      dead once it lands; an empty block over 30%
+      of a section                                  none allowed
+    a small element that should hold still and
+      twitches back and forth under the scroll      none allowed
+    a video or image whose own background shows
+      as a box against the page                     none allowed
 
 Chromium runs on Metal. Without it a WebGL-heavy page fell to about 1 fps
 headless and screenshots timed out after 30 s; with it the same page ran 50 to
@@ -35,7 +78,9 @@ headless and screenshots timed out after 30 s; with it the same page ran 50 to
 import argparse
 import io
 import json
+import re
 import sys
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 GPU = ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist"]
@@ -90,6 +135,23 @@ CONTROLS = r"""(max) => {
     const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
     if (ratio < 1.5) dead.push(e.tagName.toLowerCase() + ' "' + txt.slice(0, 30) + '" text is invisible on its background (contrast ' + ratio.toFixed(2) + ')');
   }
+  // Walls of text. Caleb, 2026-10-10, on a homepage built from an about page
+  // and article excerpts: "Chewbacca should never make fat walls of text!
+  // Ever! ... IF ppl wanted to read a book they would open a book." A block
+  // over 45 words, or a section carrying more than 120 words of body copy,
+  // fails. Long-form reading lives inside <article>, which is exempt.
+  const wc = s => (s.trim().match(/\S+/g) || []).length;
+  const inProse = el => el.closest('article, nav, footer, header, form, details');
+  for (const el of document.querySelectorAll('p, li, blockquote')) {
+    if (!vis(el) || inProse(el) || el.querySelector('p, li')) continue;
+    const n = wc(el.innerText || '');
+    if (n > 45) dead.push('wall of text: a ' + n + '-word block "' + (el.innerText || '').trim().slice(0, 40) + '" (one idea per beat, 45 words at most; put long reading behind a link)');
+  }
+  for (const sec of document.querySelectorAll('section')) {
+    if (inProse(sec) || sec.closest('article')) continue;
+    const n = [...sec.querySelectorAll('p, li, blockquote')].filter(e => vis(e) && !e.closest('article') && !e.querySelector('p, li')).reduce((t, e) => t + wc(e.innerText || ''), 0);
+    if (n > 120) dead.push('wall of text: section "' + ((sec.getAttribute('aria-label') || sec.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 30)) + '" carries ' + n + ' words of body copy (120 at most; tell it as beats, figures or a link)');
+  }
   // Heading-plus-line grids: four or more sibling cards, each a short label
   // over one short line. Caleb, 2026-10-04: "Header, subheader X6 screams SO
   // AI." Navs, footers, headers and forms are exempt.
@@ -114,6 +176,28 @@ CONTROLS = r"""(max) => {
       break;
     }
   }
+  // Twin sections: two neighbours on the same ground with the same
+  // heading-left split read as one section that runs on. Caleb, 2026-10-10,
+  // on BMA's team block flowing into its FAQ: "Never make sections that read
+  // as the same section connected." Change the ground, the layout, or both.
+  const secs = [...document.querySelectorAll('main section')]
+    .filter(s => vis(s) && !s.querySelector('section') && !s.closest('nav, footer, header'));
+  const sig = s => {
+    const g = [s, ...s.querySelectorAll('*')].find(n => {
+      const c = getComputedStyle(n);
+      return c.display === 'grid' && c.gridTemplateColumns.trim().split(/\s+/).length === 2;
+    });
+    if (!g || !g.children.length) return null;
+    const cols = getComputedStyle(g).gridTemplateColumns.trim().split(/\s+/).map(parseFloat);
+    return { bg: bgOf(s).join(','), split: Math.round(cols[0] / (cols[0] + cols[1]) * 10),
+             lead: !!(g.children[0].matches('h1, h2, h3') || g.children[0].querySelector('h1, h2, h3')),
+             name: ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().slice(0, 30) };
+  };
+  for (let i = 0; i + 1 < secs.length; i++) {
+    const a = sig(secs[i]), b = sig(secs[i + 1]);
+    if (a && b && a.lead && b.lead && a.bg === b.bg && a.split === b.split)
+      dead.push('twin sections: "' + a.name + '" and "' + b.name + '" share a ground and a heading-left layout, so they read as one section (change the ground or the layout)');
+  }
   const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
   const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);
   probe.forEach((e, i) => e.setAttribute('data-sg', i));
@@ -123,6 +207,97 @@ CONTROLS = r"""(max) => {
 
 def launch(pw):
     return pw.chromium.launch(args=GPU)
+
+
+
+# Caleb, 2026-10-10, on a book photo with a light wall behind it, masked into
+# an oval on a near-black section: "Fix chewb to NEVER have ugly hard
+# cutoffs!!!!!!" A picture whose own edge is bright on a dark ground draws a
+# hard line round itself. Measured on that page: the inner ring sat at 0.78
+# luminance, the ground at 0.04. A cover with its own dark edge (0.12) passes.
+CUTOFF_INNER = 0.5
+CUTOFF_GROUND = 0.18
+
+
+def hard_cutoffs(pg) -> list[str]:
+    from PIL import Image, ImageStat
+    boxes = pg.evaluate("""() => [...document.querySelectorAll('img, video, canvas')].map(e => {
+      const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+      return {x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height,
+              hidden: c.visibility === 'hidden' || c.display === 'none' || +c.opacity < 0.2,
+              name: (e.getAttribute('alt') || e.getAttribute('src') || e.tagName).slice(0, 40)};
+    }).filter(b => b.w > 160 && b.h > 160 && !b.hidden)""")
+    found = []
+    for b in boxes[:40]:
+        pg.evaluate(f"scrollTo(0, {max(0, b['y'] - 40)})"); pg.wait_for_timeout(250)
+        top = pg.evaluate("scrollY")
+        vw, vh = pg.evaluate("[innerWidth, innerHeight]")
+        x0, y0 = max(0, b["x"] - 14), max(0, b["y"] - top - 14)
+        x1, y1 = min(vw, b["x"] + b["w"] + 14), min(vh, b["y"] - top + b["h"] + 14)
+        if x1 - x0 < 60 or y1 - y0 < 60:
+            continue
+        img = Image.open(io.BytesIO(pg.screenshot(clip={"x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0}))).convert("L")
+        W, H = img.size
+        sx, sy = W / (x1 - x0), H / (y1 - y0)
+        ix0, iy0 = int((b["x"] - x0) * sx), int((b["y"] - top - y0) * sy)
+        ix1, iy1 = int(ix0 + b["w"] * sx), int(min(H, iy0 + b["h"] * sy))
+        band = max(3, int(6 * sx))
+        def mean(box):
+            l, t, r, d = [int(v) for v in box]
+            if r - l < 2 or d - t < 2:
+                return None
+            return ImageStat.Stat(img.crop((l, t, r, d))).mean[0] / 255
+        inner = [m for m in (mean((ix0 + band, iy0 + band, ix1 - band, iy0 + 2 * band)),
+                             mean((ix0 + band, iy1 - 2 * band, ix1 - band, iy1 - band)),
+                             mean((ix0 + band, iy0 + band, ix0 + 2 * band, iy1 - band)),
+                             mean((ix1 - 2 * band, iy0 + band, ix1 - band, iy1 - band))) if m is not None]
+        outer = [m for m in (mean((ix0, max(0, iy0 - 2 * band), ix1, iy0 - band)),
+                             mean((ix0, iy1 + band, ix1, min(H, iy1 + 2 * band))),
+                             mean((max(0, ix0 - 2 * band), iy0, ix0 - band, iy1)),
+                             mean((ix1 + band, iy0, min(W, ix1 + 2 * band), iy1))) if m is not None]
+        if inner and outer and max(inner) > CUTOFF_INNER and min(outer) < CUTOFF_GROUND:
+            found.append(f'hard cutoff: "{b["name"]}" has a bright edge ({max(inner):.2f}) on a dark ground ({min(outer):.2f}); '
+                         "cut the subject out, use an asset with its own dark edge, or feather it into the ground")
+    pg.evaluate("scrollTo(0,0)")
+    return found
+
+# Chromium at 390 passed three bugs Caleb's iPhone showed on usctts.com on
+# 2026-10-11: five advisor faces 0px tall ("on mobile Andrew laffoon is the
+# only face I see"), /apply and /work-with-us 33,554,432px wide (a canvas whose
+# CSS lived in another page's stylesheet), and a 0px mailbox video. So the
+# phone pass runs in WebKit, the engine his phone uses.
+PHONE_PROBE = """() => ({
+  over: document.documentElement.scrollWidth - innerWidth,
+  flat: [...document.querySelectorAll('img,video,canvas')].filter(e => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    return r.height < 2 && s.display !== 'none' && s.visibility !== 'hidden' &&
+      !e.closest('[aria-hidden=true]');
+  }).map(e => String(e.currentSrc || e.getAttribute('src') || e.className || e.tagName).slice(0, 80)),
+})"""
+
+
+def phone_fails(probe: dict) -> list[str]:
+    """Verdicts from one WebKit iPhone load: sideways scroll, flat media."""
+    fails = []
+    if probe.get("over", 0) > 1:
+        fails.append(f"iphone safari: horizontal scroll, page is {probe['over']}px wider than the screen")
+    fails += [f"iphone safari: drawn under 2px tall: {f}" for f in probe.get("flat", [])]
+    return fails
+
+
+def phone_check(pw, url) -> list[str]:
+    try:
+        b = pw.webkit.launch()
+    except Exception as e:  # missing engine is a failure, never a silent pass
+        return [f"iphone safari: webkit did not launch ({e}); run: python3 -m playwright install webkit"]
+    try:
+        ctx = b.new_context(**pw.devices["iPhone 15 Pro"])
+        pg = ctx.new_page()
+        pg.goto(url, wait_until="load", timeout=60000)
+        pg.wait_for_timeout(2500)
+        return phone_fails(pg.evaluate(PHONE_PROBE))
+    finally:
+        b.close()
 
 
 def check_page(pw, url, out):
@@ -156,6 +331,7 @@ def check_page(pw, url, out):
                 fails.append(f"390: horizontal scroll, page is {sw}px wider than the viewport")
         info = pg.evaluate(CONTROLS, MAX_CONTROLS)
         if w == 1440:
+            fails += hard_cutoffs(pg)
             fails += [f"dead control: {d}" for d in info["dead"]]
             origin = urlparse(url).netloc
             for link in info["links"]:
@@ -223,6 +399,9 @@ def check_page(pw, url, out):
                 except Exception:
                     continue
             fails += [f"heading paints nothing (covered or invisible): {x}" for x in covered]
+            fails += [f"boring section: {x}" for x in boring_sections(pg)]
+            fails += [f"jitter: {x}" for x in jitter(pg)]
+            fails += [f"seam: {x}" for x in seams(pg)]
         if expect == 404:
             errs = [e for e in errs if "404" not in e]
         fails += [f"{w}: console: {e[:160]}" for e in errs]
@@ -236,6 +415,8 @@ def check_page(pw, url, out):
           ? a.effect.target.className.baseVal : a.effect.target && a.effect.target.className) || '').toString().slice(0, 30))""")
     fails += [f"runs under reduced motion: {r}" for r in sorted(set(running))]
     ctx.close(); b.close()
+    if expect == 200:
+        fails += phone_check(pw, url)
     out[url + (f"@{expect}" if expect != 200 else "")] = fails
     return fails
 
@@ -301,12 +482,13 @@ RATES = r"""(dy) => {
 }"""
 
 
-def story(pw, url):
-    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+def story(pw, url, size=(1440, 900)):
+    W, H = size
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
     pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(3000)
     total = pg.evaluate("document.documentElement.scrollHeight")
     rows = []
-    for y in range(0, max(1, total - 900), 900):
+    for y in range(0, max(1, total - H), H):
         pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(1500)
         s = pg.evaluate(STORY)
         pg.evaluate(RATES, 120)
@@ -320,7 +502,7 @@ def story(pw, url):
     # parent's height) is at least three viewports. uselemma.ai's hero runs
     # 1200vh; Caleb, 2026-10-04: "Scroll activated intentional scenes like the
     # lemma one are a MUST".
-    b2 = launch(pw); pg2 = b2.new_page(viewport={"width": 1440, "height": 900})
+    b2 = launch(pw); pg2 = b2.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
     pg2.goto(url, wait_until="networkidle", timeout=60000); pg2.wait_for_timeout(1500)
     pinned = pg2.evaluate("""() => { let best = 0; for (const e of document.querySelectorAll('body *')) {
         if (getComputedStyle(e).position !== 'sticky' || !e.parentElement) continue;
@@ -339,6 +521,867 @@ def story(pw, url):
     }
     return rows, summary
 
+
+# A section is boring when nothing in it moves: no entrance, nothing at rest,
+# nothing tied to the scroll. A still figure, however big, is a poster. Caleb,
+# 2026-10-10: "Make sure no section is ever boring. Chewb should ALWAYS ensure
+# this", after a day of TTS sections he called lame next to a claymation
+# reference. story averages over screens, so one dead section hid behind a
+# lively hero; this reads every section on its own.
+SECTION_LIST = r"""() => {
+  // Sections by layout, not by tag: from <body>, keep descending into any
+  // block that holds two or more full-width blocks at least 40% of a screen
+  // tall; a block that doesn't is a section. A <section>-only search found
+  // none on the Lemma reference (all divs) and so passed it by reading nothing.
+  const W = innerWidth, H = innerHeight;
+  const vis = e => { const c = getComputedStyle(e); return c.visibility !== 'hidden' && c.display !== 'none'; };
+  const band = e => { const r = e.getBoundingClientRect();
+    return vis(e) && r.width >= 0.85 * W && r.height >= 0.4 * H && !e.matches('nav, footer, header, script, style'); };
+  const out = [];
+  const walk = (el, depth) => {
+    const kids = [...el.children].filter(band);
+    if (depth < 12 && kids.length >= 2) { kids.forEach(k => walk(k, depth + 1)); return; }
+    if (depth < 12 && kids.length === 1 && !el.matches('section')) { walk(kids[0], depth + 1); return; }
+    if (el !== document.body && band(el)) out.push(el);
+  };
+  walk(document.body, 0);
+  out.forEach((s, i) => s.setAttribute('data-sg-sec', i));
+  return out.map((s, i) => { const h = s.querySelector('h1, h2, h3');
+    const t = h ? (h.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40) : '';
+    return t || 'section ' + (i + 1) + ' of ' + out.length + ', no heading, ' +
+      Math.round((s.getBoundingClientRect().top + scrollY) / innerHeight * 10) / 10 + ' screens down'; });
+}"""
+
+SECTION_STILL = r"""(i) => {
+  const s = document.querySelector('[data-sg-sec="' + i + '"]');
+  const r = s.getBoundingClientRect(), W = innerWidth, H = innerHeight;
+  const top = Math.max(0, r.top), bot = Math.min(H, r.bottom);
+  const seen = Math.max(1, (bot - top) * W);
+  const clip = b => Math.max(0, Math.min(b.right, W) - Math.max(b.left, 0)) * Math.max(0, Math.min(b.bottom, bot) - Math.max(b.top, top));
+  const shown = e => { const c = getComputedStyle(e); return c.visibility !== 'hidden' && +c.opacity >= 0.05; };
+  // content: painted text lines plus figures and controls, never the ground
+  let content = 0, figure = 0;
+  const tw = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw.nextNode());) {
+    if (!n.textContent.trim() || !shown(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const b of rg.getClientRects()) content += clip(b);
+  }
+  const stills = [];
+  for (const e of s.querySelectorAll('canvas, svg, img, video, picture, button, a, input, [role=img]')) {
+    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    const b = e.getBoundingClientRect();
+    if (b.width < 24 || b.height < 24 || !shown(e) || clip(b) > 0.85 * seen) continue;
+    content += clip(b);
+    if (e.matches('canvas, svg, img, video, picture, [role=img]')) figure += clip(b);
+    // a big raster image is a poster unless something animates it
+    if (e.matches('img') && clip(b) >= 0.2 * seen) {
+      let moving = false;
+      for (const a of document.getAnimations())
+        if (a.playState === 'running' && a.effect && a.effect.target && a.effect.target.nodeType === 1 &&
+            (a.effect.target === e || a.effect.target.contains(e))) moving = true;
+      if (!moving) stills.push({ x: Math.max(0, b.left), y: Math.max(top, b.top),
+        width: Math.min(b.right, W) - Math.max(0, b.left), height: Math.min(b.bottom, bot) - Math.max(top, b.top),
+        src: /^data:/.test(e.currentSrc || e.src || '') ? '' : (e.currentSrc || e.src || '').split('/').pop().slice(0, 50) });
+    }
+  }
+  // Dead space: split the visible band into 6 x 4 cells, mark a cell taken
+  // when anything (text line, figure, control) covers 10% of it, then find
+  // the largest all-empty rectangle of cells.
+  const C = 6, R = 4, cw = W / C, ch = Math.max(1, bot - top) / R;
+  const taken = Array.from({ length: R }, () => Array(C).fill(0));
+  const mark = b => {
+    for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
+      const cx = x * cw, cy = top + y * ch;
+      const ix = Math.max(0, Math.min(b.right, cx + cw) - Math.max(b.left, cx));
+      const iy = Math.max(0, Math.min(b.bottom, cy + ch) - Math.max(b.top, cy));
+      taken[y][x] += ix * iy;
+    } };
+  const tw2 = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw2.nextNode());) {
+    if (!n.textContent.trim() || !shown(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const b of rg.getClientRects()) mark(b);
+  }
+  for (const e of s.querySelectorAll('canvas, svg, img, video, picture, button, a, input, [role=img]')) {
+    if (e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    const b = e.getBoundingClientRect();
+    if (b.width < 24 || b.height < 24 || !shown(e) || clip(b) > 0.85 * seen) continue;
+    mark(b);
+  }
+  const empty = taken.map(row => row.map(v => v < 0.1 * cw * ch));
+  let hole = 0;
+  for (let y0 = 0; y0 < R; y0++) for (let x0 = 0; x0 < C; x0++)
+    for (let y1 = y0; y1 < R; y1++) for (let x1 = x0; x1 < C; x1++) {
+      let ok = true;
+      for (let y = y0; y <= y1 && ok; y++) for (let x = x0; x <= x1 && ok; x++) ok = empty[y][x];
+      if (ok) hole = Math.max(hole, (y1 - y0 + 1) * (x1 - x0 + 1));
+    }
+  const words = (s.innerText.match(/\S+/g) || []).length;
+  const anims = document.getAnimations().filter(a => a.playState === 'running' && a.effect &&
+    a.effect.target && a.effect.target.nodeType === 1 && s.contains(a.effect.target)).length;
+  // what can move under the scroll, ground layers excluded
+  window.__sgSec = [...s.querySelectorAll('*')].map(e => [e, e.getBoundingClientRect().top])
+    .filter(([e]) => { const b = e.getBoundingClientRect();
+      return b.width >= 40 && b.height >= 20 && clip(b) <= 0.85 * seen; });
+  return { figure: Math.min(1, figure / seen), cover: Math.min(1, content / seen), hole: hole / (C * R), words, anims, stills,
+           clip: { x: 0, y: top, width: W, height: Math.max(1, bot - top) } };
+}"""
+
+SECTION_SCROLLED = r"""(dy) => (window.__sgSec || []).filter(([e, t]) =>
+  Math.abs(e.getBoundingClientRect().top - t + dy) > 12).length"""
+
+
+def _changed(pg, clip, gap=1000):
+    from PIL import Image, ImageChops
+    a = Image.open(io.BytesIO(pg.screenshot(clip=clip))).convert("L")
+    pg.wait_for_timeout(gap)
+    c = Image.open(io.BytesIO(pg.screenshot(clip=clip))).convert("L")
+    return ImageChops.difference(a, c).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
+
+
+def boring_sections(pg):
+    names = pg.evaluate(SECTION_LIST)
+    out = []
+    for i, name in enumerate(names):
+        label = f'"{name}"'
+        why = []
+        try:
+            pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
+            # an entrance that plays once and ends counts, so look early too
+            pg.wait_for_timeout(150)
+            early = pg.evaluate(SECTION_STILL, i)["anims"]
+            pg.wait_for_timeout(1050)
+            st = pg.evaluate(SECTION_STILL, i)
+            if st["clip"]["height"] < 80:
+                continue
+            area = st["clip"]["width"] * st["clip"]["height"]
+            idle_px = _changed(pg, st["clip"])
+            still_imgs = [s for s in st["stills"] if s["width"] > 8 and s["height"] > 8
+                          and _changed(pg, {k: s[k] for k in ("x", "y", "width", "height")}, 800)
+                          < 0.01 * s["width"] * s["height"]]
+            # At the foot of a page scrollBy(0, 120) moves nothing, and every
+            # element then read as "moving differently". That passed the
+            # /apply close on 2026-10-10. Measure the real delta, and go up
+            # when down is blocked.
+            y0 = pg.evaluate("scrollY")
+            pg.evaluate("scrollBy(0, 120)"); pg.wait_for_timeout(600)
+            dy = pg.evaluate("scrollY") - y0
+            if abs(dy) < 40:
+                pg.evaluate("i => document.querySelector('[data-sg-sec=\"' + i + '\"]').scrollIntoView({block: 'start'})", i)
+                pg.wait_for_timeout(300)
+                st = pg.evaluate(SECTION_STILL, i)
+                y0 = pg.evaluate("scrollY")
+                pg.evaluate("scrollBy(0, -120)"); pg.wait_for_timeout(600)
+                dy = pg.evaluate("scrollY") - y0
+            scrolled = pg.evaluate(SECTION_SCROLLED, dy) if abs(dy) >= 40 else 0
+        except Exception:
+            continue
+        # A still render, however big, is a poster. Caleb, 2026-10-10, on a
+        # still clay world in the who-we-are card: "they need to be 3d
+        # animated videos like the clay site!!!!!!!! ALL OF THEM".
+        for s in still_imgs:
+            why.append(f'still image {s["src"] or "(inline)"} fills {s["width"] * s["height"] / area:.0%} of it, '
+                       'make it a looping video or animate it')
+        settled = idle_px > max(400, 0.002 * area) or scrolled >= 2
+        if not (settled or early > 0 or st["anims"] > 0):
+            why.append(f'nothing moves on entry, at rest or on scroll (figures {st["figure"]:.0%}, '
+                       f'{st["words"]} words), give it an entrance, an ambient loop or a scroll scene')
+        # A slab: a near-empty band whose only motion was getting there. The
+        # /apply close on 2026-10-10 was one sentence and a button on 1.3
+        # screens of flat cardinal; it grew in on scroll, then sat dead.
+        elif st["cover"] < 0.15 and not settled:
+            why.append(f'only {st["cover"]:.0%} of it holds anything and it sits dead once it lands, '
+                       'fill it or cut it down to its content')
+        # Every region is filled on purpose. Caleb, 2026-10-10, on an advisor
+        # band whose right half and top third were empty blue: "Chewb should
+        # ALWAYS be intentional with how it chooses to fill EVERY space".
+        if st["hole"] >= 0.3 and not settled:
+            why.append(f'{st["hole"]:.0%} of it is one empty block, fill it on purpose or size the section to what it holds')
+        if why:
+            out.append(f'{label}: ' + '; '.join(why))
+    return out
+
+
+
+# Caleb, 2026-10-10, after a site for Erik Fish was started from three pages
+# of his site and none of the kit's tools: "scrape everything from every page
+# and use all the cool stuff we've built ... I should NEVER have to say this
+# again." The Lemma lessons existed in prose and the next site skipped them,
+# so the research pass is a receipt on disk that this command checks.
+RESEARCH_FILES = {
+    "research/INDEX.md": "every page and post of the source, one line each (api-anything or the site's own API, never three hand-picked pages)",
+    "research/SOURCES.md": "which kit tools ran and what each produced",
+    "research/STEAL.md": "From | What | Why it is ours, plus a 'Not stolen, on purpose' list",
+    "docs/COPY.md": "the copy as one document, each line traced to the owner's words",
+}
+# Each named tool must appear in SOURCES.md. ux-pick or ux-gen counts once.
+RESEARCH_TOOLS = [("api-anything",), ("brand-grab",), ("ux-pick", "ux-gen"), ("website.md",), ("site-gate",)]
+# Under this many lines the inventory is a sample, not "every page". The
+# erikfish.com pull was 166 (132 posts, 34 pages); a one-page business site
+# still has a home, an about and a contact.
+MIN_INDEX_LINES = 3
+
+
+# Caleb, 2026-10-10, on a map caption keyed to replay a fade-up on every
+# scroll step and four scenes that each slid their text up: "upfade upfade
+# upfade bro it hurts my eyes" and "Make sure chewb NEVER makes annoying
+# unintentional animations". Text that changes in place swaps; motion belongs
+# to the figure. Three or more rise or fade-up entrances in one component is
+# the generic pattern, and an entrance on an element keyed to state replays it
+# on every change.
+REMOUNT = re.compile(r"<[a-zA-Z]+[^>]*\bkey=\{[^}]*\}[^>]*animate-(rise|fade|fade-up|in)\b|<[a-zA-Z]+[^>]*animate-(rise|fade|fade-up|in)\b[^>]*\bkey=\{", re.S)
+RISE = re.compile(r"animate-(rise|fade-up)\b|\brise\(|translateY\(calc\(\(1 - ")
+MAX_RISES = 2
+
+
+def motion_lint(root: Path) -> list[str]:
+    fails = []
+    src = root / "src"
+    if not src.is_dir():
+        return fails
+    for f in sorted(src.rglob("*.tsx")):
+        text = f.read_text(errors="ignore")
+        rel = f.relative_to(root)
+        if REMOUNT.search(text):
+            fails.append(f"{rel}: an entrance animation on an element keyed to state replays every time it changes; swap the text in place")
+        n = len(RISE.findall(text))
+        if n > MAX_RISES:
+            fails.append(f"{rel}: {n} rise or fade-up entrances; one per page at most, and text never slides in beat after beat")
+    return fails
+
+
+def research(root: Path) -> list[str]:
+    fails = []
+    for rel, what in RESEARCH_FILES.items():
+        f = root / rel
+        if not f.is_file() or not f.read_text(errors="ignore").strip():
+            fails.append(f"missing {rel}: {what}")
+    idx = root / "research/INDEX.md"
+    if idx.is_file():
+        lines = [l for l in idx.read_text(errors="ignore").splitlines() if l.lstrip().startswith(("-", "*", "|"))]
+        if len(lines) < MIN_INDEX_LINES:
+            fails.append(f"research/INDEX.md lists {len(lines)} pages; inventory the whole source site")
+    src = root / "research/SOURCES.md"
+    if src.is_file():
+        text = src.read_text(errors="ignore")
+        for names in RESEARCH_TOOLS:
+            if not any(n in text for n in names):
+                fails.append(f"research/SOURCES.md never mentions {' or '.join(names)}: run it and record what it found")
+    return fails
+
+
+# Jitter: something that should hold still on screen while the page scrolls,
+# a progress point, a pinned label, a nav, that twitches back and forth
+# instead. Caleb, 2026-10-10: "the scroll circle on the left tweaks and
+# bounces up and down". The cause was an in-flow point offset by a smoothed
+# copy of the scroll, so it led and lagged every wheel notch. Scrub with real
+# wheel notches and sample small elements every frame: one that ends within
+# 40px of where it began after 1,200px of scroll is meant to hold still, and
+# four or more reversals of 3px or more mean it doesn't.
+JIT_TAG = r"""() => {
+  const out = []; let i = 0;
+  for (const e of document.querySelectorAll('body *')) {
+    const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    if (r.width < 4 || r.height < 4 || r.width > 160 || r.height > 160) continue;
+    if (r.bottom < 0 || r.top > innerHeight || c.visibility === 'hidden' || +c.opacity < 0.1) continue;
+    e.setAttribute('data-sg-j', i); out.push(i++); if (i >= 400) break;
+  }
+  return out.length;
+}"""
+JIT_READ = r"""() => [...document.querySelectorAll('[data-sg-j]')].map(e => e.getBoundingClientRect().top)"""
+JIT_NAME = r"""(i) => { const e = document.querySelector('[data-sg-j="' + i + '"]');
+  return e.tagName.toLowerCase() + (e.className && e.className.baseVal === undefined && e.className ? '.' + String(e.className).split(' ')[0] : ''); }"""
+
+
+def jitter(pg):
+    out = []
+    total = pg.evaluate("document.documentElement.scrollHeight")
+    for start in (900, int(total * 0.4)):
+        if start + 1300 > total:
+            continue
+        pg.evaluate(f"scrollTo(0,{start})"); pg.wait_for_timeout(1200)
+        pg.evaluate("document.querySelectorAll('[data-sg-j]').forEach(e => e.removeAttribute('data-sg-j'))")
+        n = pg.evaluate(JIT_TAG)
+        if not n:
+            continue
+        pg.mouse.move(720, 450)
+        series = [pg.evaluate(JIT_READ)]
+        for _ in range(12):
+            pg.mouse.wheel(0, 100)
+            for _ in range(5):
+                pg.wait_for_timeout(16)
+                series.append(pg.evaluate(JIT_READ))
+        pg.wait_for_timeout(700); series.append(pg.evaluate(JIT_READ))
+        for k in range(n):
+            ys = [s[k] for s in series if k < len(s)]
+            # meant to hold still: it ends where it started, give or take,
+            # after 1,200px of scroll. A lagging point swings up to ~100px
+            # inside a notch (measured on the fixture), so the range is loose
+            # and the net drift is what separates it from page content.
+            if len(ys) < 10 or abs(ys[-1] - ys[0]) > 40 or max(ys) - min(ys) > 250 or max(ys) - min(ys) < 3:
+                continue
+            flips, trend, anchor = 0, 0, ys[0]
+            for y in ys[1:]:
+                d = y - anchor
+                if abs(d) < 3:
+                    continue
+                s = 1 if d > 0 else -1
+                if trend and s != trend:
+                    flips += 1
+                trend, anchor = s, y
+            if flips >= 4:
+                name = pg.evaluate(JIT_NAME, k)
+                out.append(f"{name} near y={round(ys[0])} twitches {flips} times over a steady scroll "
+                           f"(range {round(max(ys) - min(ys))}px). Something meant to hold still must "
+                           "follow the real scroll, never a smoothed copy")
+        if out:
+            break
+    return sorted(set(out))[:5]
+
+
+# A seam: a video or image meant to sit on the page shows its own box,
+# because its baked-in background differs from the paper around it. Caleb,
+# 2026-10-10, on the logo loop: "you can see a boarder around the video".
+# For every square-cornered, borderless figure on a flat ground, compare a
+# strip just inside each edge with a strip just outside; a ground that is
+# even outside and differs inside on two or more sides is a visible box.
+SEAM_LIST = r"""() => {
+  const out = [];
+  for (const e of document.querySelectorAll('video, img, canvas')) {
+    const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    if (r.width < 120 || r.height < 80 || c.visibility === 'hidden' || +c.opacity < 0.5) continue;
+    if (parseFloat(c.borderTopLeftRadius) > 2 || parseFloat(c.borderTopWidth) > 0 || c.boxShadow !== 'none') continue;
+    let p = e.parentElement, framed = false;
+    for (let k = 0; p && k < 3; k++, p = p.parentElement) {
+      const pc = getComputedStyle(p), pr = p.getBoundingClientRect();
+      if ((parseFloat(pc.borderTopLeftRadius) > 2 || pc.overflow === 'hidden') &&
+          Math.abs(pr.width - r.width) < 4 && Math.abs(pr.height - r.height) < 4) { framed = true; break; }
+    }
+    if (framed) continue;
+    e.setAttribute('data-sg-m', out.length);
+    out.push(/^data:/.test(e.currentSrc || e.src || '') ? 'inline ' + e.tagName.toLowerCase() : (e.currentSrc || e.src || e.tagName).split('/').pop().slice(0, 40));
+  }
+  return out;
+}"""
+
+
+def seams(pg):
+    from PIL import Image, ImageStat
+    out = []
+    for i, name in enumerate(pg.evaluate(SEAM_LIST)[:12]):
+        try:
+            box = pg.evaluate("""i => { const e = document.querySelector('[data-sg-m="' + i + '"]');
+                e.scrollIntoView({block: 'center'}); const r = e.getBoundingClientRect();
+                return {x: r.left, y: r.top, w: r.width, h: r.height, W: innerWidth, H: innerHeight}; }""", i)
+            pg.wait_for_timeout(700)
+            shot = Image.open(io.BytesIO(pg.screenshot())).convert("L")
+        except Exception:
+            continue
+        sx, sy = shot.width / box["W"], shot.height / box["H"]
+        x0, y0, x1, y1 = box["x"], box["y"], box["x"] + box["w"], box["y"] + box["h"]
+        strips = {  # (inside, outside) per edge, 4 css px wide, middle 60% of the edge
+            "top": ((x0 + .2 * box["w"], y0 + 2, x1 - .2 * box["w"], y0 + 6), (x0 + .2 * box["w"], y0 - 6, x1 - .2 * box["w"], y0 - 2)),
+            "bottom": ((x0 + .2 * box["w"], y1 - 6, x1 - .2 * box["w"], y1 - 2), (x0 + .2 * box["w"], y1 + 2, x1 - .2 * box["w"], y1 + 6)),
+            "left": ((x0 + 2, y0 + .2 * box["h"], x0 + 6, y1 - .2 * box["h"]), (x0 - 6, y0 + .2 * box["h"], x0 - 2, y1 - .2 * box["h"])),
+            "right": ((x1 - 6, y0 + .2 * box["h"], x1 - 2, y1 - .2 * box["h"]), (x1 + 2, y0 + .2 * box["h"], x1 + 6, y1 - .2 * box["h"])),
+        }
+        bad = []
+        for edge, (a, b) in strips.items():
+            if b[0] < 0 or b[1] < 0 or b[2] > box["W"] or b[3] > box["H"]:
+                continue
+            ca = shot.crop(tuple(int(v * s) for v, s in zip(a, (sx, sy, sx, sy))))
+            cb = shot.crop(tuple(int(v * s) for v, s in zip(b, (sx, sy, sx, sy))))
+            if ca.width < 2 or ca.height < 2 or cb.width < 2 or cb.height < 2:
+                continue
+            ia, ib = ImageStat.Stat(ca), ImageStat.Stat(cb)
+            if ib.stddev[0] < 3 and abs(ia.mean[0] - ib.mean[0]) > 6:
+                bad.append(f"{edge} {abs(ia.mean[0] - ib.mean[0]):.0f}")
+        if len(bad) >= 2:
+            out.append(f"{name}: its own background shows as a box against the page ({', '.join(bad)} levels off). "
+                       "Match the page exactly at its edges, or render it with alpha")
+    return out
+
+# Caleb, 2026-10-10, on the Firm Foundation site on his phone: "Some of the
+# mobile animations/transitions are literal whiplash and flashbangs, fix chewb
+# to make sure that never happens again." A flash here follows WCAG 2.3.1's
+# general flash: a big brightness swing over a quarter of the view. Grey
+# values are 0-255; a swing over 40 (about 16%) counts, on a 4x downscaled
+# frame so grain and text antialiasing do not. Pinned scenes hold still while
+# the page scrolls, so each frame is compared unshifted and shifted by the
+# scroll, and the closer match is the one that counts.
+FLASH_SWING = 40
+FLASH_AREA = 0.25
+
+
+def flash_area(prev, cur, w, h, shift):
+    """Share of a w x h grey frame that swung more than FLASH_SWING against the
+    previous frame moved up by `shift` rows."""
+    rows = max(0, h - shift)
+    if not rows:
+        return 0.0
+    big = 0
+    for r in range(rows):
+        a0, b0 = (r + shift) * w, r * w
+        for c in range(w):
+            if abs(prev[a0 + c] - cur[b0 + c]) > FLASH_SWING:
+                big += 1
+    return big / (rows * w)
+
+
+def flash(pw, url, step=48, scale=4):
+    from PIL import Image
+    W, H = 390, 844
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=True, has_touch=True)
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+    end = pg.evaluate("document.documentElement.scrollHeight - innerHeight")
+    w, h = W // scale, H // scale
+
+    def grab():
+        im = Image.open(io.BytesIO(pg.screenshot())).convert("L").resize((w, h))
+        return list(im.getdata())
+
+    found, prev, prev_y, y = [], grab(), 0, 0
+    while y < end:
+        y = min(end, y + step)
+        pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(17)
+        cur = grab()
+        shift = round((y - prev_y) / scale)
+        area = min(flash_area(prev, cur, w, h, 0), flash_area(prev, cur, w, h, shift))
+        if area > FLASH_AREA:
+            found.append({"y": y, "area": round(area, 2)})
+        prev, prev_y = cur, y
+    b.close()
+    return found
+
+
+# Caleb, 2026-10-10, same night: "So much of the mobile version is 10x lamer
+# than the desktop version, make sure that never happens again for what chewb
+# makes." The phone had one hero plate where desktop had five, and its scroll
+# scene had been unpinned into a stack. Measured with story() at both sizes.
+PARITY_MIN = 0.75
+
+
+def parity_fails(desk: dict, phone: dict) -> list[str]:
+    fails = []
+    for key, label in (("figure_share", "figure share"), ("motion_share", "share of screens with motion")):
+        d, m = desk.get(key, 0), phone.get(key, 0)
+        if d > 0 and m < PARITY_MIN * d:
+            fails.append(f"phone {label} {m:.2f} is under {PARITY_MIN:.0%} of desktop's {d:.2f}")
+    if desk.get("pinned_scene_screens", 0) >= 3 and phone.get("pinned_scene_screens", 0) < 3:
+        fails.append(f"desktop has a pinned scene of {desk['pinned_scene_screens']} screens, the phone has none")
+    return fails
+
+
+def _with_motion_share(summ: dict) -> dict:
+    return {**summ, "motion_share": round(summ["screens_with_motion"] / max(1, summ["screens"]), 2)}
+
+
+# Caleb, 2026-10-10, on Firm Foundation: "It reads like a slide deck bro",
+# "so 1 dimensional unlike the lemma site", and then "Chewbacca should never
+# make section to section feel 1 dimensional like a pitch deck!" The deck was
+# eyebrow, giant heading, boxed drawing, a hairline, and again, five times.
+# A section's shape is where its heading sits, how big it is, what ground it is
+# on and whether one framed box carries the rest. Three in a row with one shape
+# is a deck. A page where no figure, sheet or colour crosses any section edge
+# is a stack of slides however different each one is.
+DECK_RUN = 3
+DECK_MIN_SECTIONS = 4
+# Firm Foundation's Home, the night it was called a deck, carried 1 of 5 edges
+# (the CTA's dark ground); Lemma's carries most of its edges with a sheet or a
+# figure. A third is the floor.
+DECK_MIN_CARRIED = 0.34
+
+DECK_SHAPES = r"""() => {
+  // outermost only: a pinned scene's own layers are not sections of their own
+  const all = [...document.querySelectorAll('[data-sg-sec]')];
+  // fixed overlays (grain, a header) are not sections; of two that cover the same
+  // stretch of page, the longer one is the section
+  const span = e => { const r = e.getBoundingClientRect(); return [r.top + scrollY, r.bottom + scrollY]; };
+  const secs = all.filter(s => getComputedStyle(s).position !== 'fixed' && !all.some(o => o !== s && o.contains(s)))
+    .filter((s, _, list) => { const [t, b] = span(s); return !list.some(o => { if (o === s) return false;
+      const [ot, ob] = span(o); return ot <= t + 2 && ob >= b - 2 && ((ob - ot) > (b - t) || ((ob - ot) === (b - t) && list.indexOf(o) < list.indexOf(s))); }); });
+  const shapes = secs.map(s => {
+    const r = s.getBoundingClientRect();
+    const h = s.querySelector('h1, h2, h3');
+    const hr = h ? h.getBoundingClientRect() : null;
+    const fs = h ? parseFloat(getComputedStyle(h).fontSize) : 0;
+    const align = h ? getComputedStyle(h).textAlign : '';
+    let bg = getComputedStyle(s).backgroundColor, p = s;
+    while (bg === 'rgba(0, 0, 0, 0)' && p.parentElement) { p = p.parentElement; bg = getComputedStyle(p).backgroundColor; }
+    // a ground painted by a canvas or a gradient layer behind the content is its own ground
+    for (const e of s.querySelectorAll('canvas, div')) {
+      const b = e.getBoundingClientRect(), c = getComputedStyle(e);
+      if (b.width >= 0.9 * r.width && b.height >= 0.6 * r.height && (e.tagName === 'CANVAS' || (c.backgroundImage !== 'none' && c.position === 'absolute'))) { bg = 'painted'; break; }
+    }
+    // one framed box: a bordered block wider than 70% of the section holding most of its height
+    let boxed = false;
+    for (const e of s.querySelectorAll('div, figure, ol, ul')) {
+      const b = e.getBoundingClientRect(), c = getComputedStyle(e);
+      if (b.width > 0.7 * r.width && b.height > 0.45 * r.height && parseFloat(c.borderTopWidth) > 0 && parseFloat(c.borderLeftWidth) > 0) { boxed = true; break; }
+    }
+    return { name: (h ? h.innerText : '').trim().slice(0, 40), left: hr ? Math.round(hr.left / 16) : -1,
+             size: Math.round(fs / 4), align, bg, boxed, top: r.top + scrollY, bottom: r.bottom + scrollY };
+  });
+  // what crosses each edge between neighbours: anything painted, not a wrapper of both
+  const crossings = [];
+  for (let i = 0; i + 1 < secs.length; i++) {
+    const edge = shapes[i].bottom;
+    let n = 0;
+    for (const e of document.querySelectorAll('body *')) {
+      if (e.contains(secs[i]) || e.contains(secs[i + 1])) continue;
+      const c = getComputedStyle(e);
+      if (c.position === 'fixed' || c.visibility === 'hidden' || c.display === 'none') continue;
+      const b = e.getBoundingClientRect(), top = b.top + scrollY, bot = b.bottom + scrollY;
+      if (b.width < 40 || b.height < 40) continue;
+      if (top < edge - 24 && bot > edge + 24) n++;
+    }
+    const sameGround = shapes[i].bg === shapes[i + 1].bg;
+    crossings.push({ edge: Math.round(edge), crossed: n, sameGround });
+  }
+  return { shapes, crossings };
+}"""
+
+
+def deck_fails(shapes: list, crossings: list) -> list[str]:
+    fails = []
+    key = lambda s: (s["left"], s["size"], s["align"], s["bg"], s["boxed"])
+    run = 1
+    for i in range(1, len(shapes)):
+        run = run + 1 if key(shapes[i]) == key(shapes[i - 1]) and shapes[i]["left"] >= 0 else 1
+        if run == DECK_RUN:
+            names = ", ".join(repr(s["name"]) for s in shapes[i - DECK_RUN + 1 : i + 1])
+            fails.append(f"{DECK_RUN} sections in a row with one shape: {names}")
+    carried = sum(1 for c in crossings if c["crossed"] or not c["sameGround"])
+    if len(shapes) >= DECK_MIN_SECTIONS and crossings and carried / len(crossings) < DECK_MIN_CARRIED:
+        fails.append(f"{carried} of {len(crossings)} section edges carry anything across (a sheet, a figure or a change of ground); "
+                     f"under {DECK_MIN_CARRIED:.0%} reads as slides")
+    return fails
+
+
+def deck(pw, url):
+    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(2000)
+    pg.evaluate(SECTION_LIST)
+    got = pg.evaluate(DECK_SHAPES)
+    b.close()
+    return got["shapes"], got["crossings"], deck_fails(got["shapes"], got["crossings"])
+
+
+# Caleb, 2026-10-10, on a screen of the Firm Foundation scene: "this whole ss
+# sequence is cognitive overload mainly bc there is no visual heirachy of where
+# to direct your attention all the text looks the same also the follow up tab
+# has 6 diff options bc 3 diff things x before and after". That screen had a
+# 15-column clickable grid, a readout column and two rows of labels at 13 to
+# 16px; on the phone demo, three path tabs times a Before/After toggle.
+FOCUS_RATIO = 1.6
+FOCUS_CROWD = 40
+FOCUS_CHOICES = 4
+
+FOCUS_SCREEN = r"""() => {
+  const H = innerHeight;
+  const shown = e => { for (let p = e; p; p = p.parentElement) { const c = getComputedStyle(p);
+    if (c.visibility === 'hidden' || c.display === 'none' || +c.opacity < 0.05) return false; } return true; };
+  const sizes = [];
+  for (const e of document.querySelectorAll('body *')) {
+    if (![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length > 1)) continue;
+    const r = e.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= H || r.width === 0 || !shown(e)) continue;
+    if (getComputedStyle(e).position === 'fixed' || e.closest('svg, footer')) continue;  // a drawing's labels are the drawing; the footer is not a screen to direct
+    sizes.push(parseFloat(getComputedStyle(e).fontSize));
+  }
+  // choices: toggles that pick one view inside one figure or section
+  const toggles = [...document.querySelectorAll('[role=tab], [role=radio], [aria-pressed], [aria-selected]')]
+    .filter(e => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < H && r.width > 0 && shown(e); });
+  const groups = new Map();
+  for (const t of toggles) {
+    const home = t.closest('figure, section, [role=tabpanel], [data-sg-sec]') || document.body;
+    groups.set(home, (groups.get(home) || 0) + 1);
+  }
+  return { sizes, choices: Math.max(0, ...groups.values()) };
+}"""
+
+
+def focus_fails(screen: dict) -> list[str]:
+    sizes = sorted(screen["sizes"])
+    fails = []
+    # A footer or the tail of a list is a short read, not a screen to direct; only
+    # dense screens are judged.
+    if len(sizes) >= 20:
+        median = sizes[len(sizes) // 2]
+        if max(sizes) < FOCUS_RATIO * median:
+            fails.append(f"no place for the eye: the biggest text is {max(sizes):.0f}px against a usual {median:.0f}px "
+                         f"(needs {FOCUS_RATIO}x)")
+        crowd = sum(1 for v in sizes if abs(v - median) <= 0.1 * median)
+        if crowd > FOCUS_CROWD:
+            fails.append(f"{crowd} lines of text at one size on one screen")
+    if screen["choices"] > FOCUS_CHOICES:
+        fails.append(f"one control offers {screen['choices']} choices; keep it to {FOCUS_CHOICES}")
+    return fails
+
+
+def focus(pw, url):
+    out = []
+    for W, H in SIZES:
+        b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
+        pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+        total = pg.evaluate("document.documentElement.scrollHeight")
+        for y in range(0, max(1, total - H + 1), H):
+            pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(900)
+            for f in focus_fails(pg.evaluate(FOCUS_SCREEN)):
+                out.append(f"{W} y={y}: {f}")
+        b.close()
+    return out
+
+
+# Caleb, 2026-10-11, on Firm Foundation: "ur repeating the same stuff nuh uh
+# bro". "AI never does pastoral care" sat on Home's close, on Trust and in
+# Mission's last beat, and the same "Start with your website" box closed both
+# Home and Mission. A line says its thing once; the other pages link to it.
+REPEAT_MIN_WORDS = 5
+
+REPEAT_TEXT = r"""() => {
+  const out = [];
+  for (const e of document.querySelectorAll('h1, h2, h3, p, li, blockquote, figcaption')) {
+    if (e.closest('nav, footer, header, [aria-hidden=true]')) continue;
+    const c = getComputedStyle(e);
+    if (c.display === 'none' || c.visibility === 'hidden') continue;
+    if ([...e.children].some(k => k.matches('p, li, h1, h2, h3'))) continue;
+    const t = (e.innerText || '').trim().replace(/\s+/g, ' ');
+    if (t) out.push(t);
+  }
+  return out;
+}"""
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"[^a-z0-9 ]", "", t.lower().replace("\u2019", "'")).strip()
+
+
+def repeat_fails(pages: dict) -> list[str]:
+    seen: dict = {}
+    for url, texts in pages.items():
+        for t in texts:
+            n = _norm(t)
+            if len(n.split()) < REPEAT_MIN_WORDS:
+                continue
+            seen.setdefault(n, []).append((url, t))
+    fails = []
+    for hits in seen.values():
+        if len(hits) > 1:
+            where = ", ".join(sorted({u for u, _ in hits}))
+            fails.append(f"said {len(hits)} times ({where}): {hits[0][1][:80]!r}")
+    return fails
+
+
+def repeat(pw, urls):
+    pages = {}
+    b = launch(pw)
+    for u in urls:
+        pg = b.new_page(viewport={"width": 1440, "height": 900})
+        pg.goto(u, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(800)
+        pages[u] = pg.evaluate(REPEAT_TEXT)
+        pg.close()
+    b.close()
+    return repeat_fails(pages)
+
+
+# Caleb, 2026-10-25, on the Parker Manley site: "NEVER make anything that
+# could've been a slideshow! Fix chewbs". The scenes he rejected were pinned
+# stages that sat still while he scrolled and then swapped one card or plate
+# for the next. A scene is a thing happening (a film playing, a camera
+# rolling, an edit session), so its frames change a little on most scroll
+# steps. A slideshow's frames change on a few steps and hold on the rest.
+#
+# The live half walks every pinned scene in 40px steps and diffs consecutive
+# frames of the stage alone. Measured 2026-10-26 on two synthetic pages, a
+# three-card swap and a ball rolling across the stage: the swap read 0.000 on
+# 65 of 67 steps and 0.011 and 0.019 on the two swaps (pastel grounds diff
+# little in grey); the rolling ball read 0.006 to 0.016 on every step. So a
+# step "holds" under 0.002, a "swap" is a step over 0.005 that stands 5x above
+# the scene's median step, and a scene that holds on 70% of its steps with 2 or
+# more swaps is a slideshow. Not yet measured on a real site Caleb called a
+# slideshow; do that on the next one and move these.
+SLIDE_STEP = 40
+SLIDE_HOLD = 0.002
+SLIDE_SWAP_MIN = 0.005
+SLIDE_SWAP_RATIO = 5
+SLIDE_HOLD_SHARE = 0.7
+SLIDE_MIN_SWAPS = 2
+
+# The source half: a carousel library or slide markup is a slideshow before a
+# browser ever opens. Runs with `site-gate research`.
+SLIDE_LIBS = re.compile(r"""["'](swiper|@splidejs/[\w-]+|@glidejs/glide|keen-slider|slick-carousel|react-slick|"""
+                        r"""embla-carousel[\w-]*|flickity|owl\.carousel|react-responsive-carousel|"""
+                        r"""@egjs/[\w-]*flicking|tiny-slider)["']""")
+# Whole class names only: tailwindcss-animate's slide-in-from-top-2 and a
+# slide-up reveal are motion utilities on every shadcn site, not slides.
+SLIDE_MARKUP = re.compile(r"""\bclass(Name)?=["'{`][^"'}`>]*(?<![\w-])(slide-deck|slideshow|slides|slide|carousel)(?![\w-])""")
+SLIDE_SUFFIXES = {".tsx", ".ts", ".jsx", ".js", ".mjs", ".html", ".vue", ".svelte", ".astro"}
+SLIDE_SKIP = {"node_modules", ".git", "dist", "build", ".next", "out", "research", "vendor", ".cache"}
+
+
+def slideshow_lint(root: Path) -> list[str]:
+    fails = []
+    pkg = root / "package.json"
+    if pkg.is_file():
+        try:
+            deps = json.loads(pkg.read_text(errors="ignore"))
+        except ValueError:
+            deps = {}
+        names = {**deps.get("dependencies", {}), **deps.get("devDependencies", {})}
+        for n in sorted(names):
+            if SLIDE_LIBS.search(f'"{n}"'):
+                fails.append(f"package.json depends on {n}, a carousel: never make anything that could have been a slideshow")
+    for f in sorted(root.rglob("*")):
+        if f.suffix not in SLIDE_SUFFIXES or any(p in SLIDE_SKIP for p in f.relative_to(root).parts):
+            continue
+        if not f.is_file() or f.stat().st_size > 2_000_000:
+            continue
+        text = f.read_text(errors="ignore")
+        hit = SLIDE_LIBS.search(text) or SLIDE_MARKUP.search(text)
+        if hit:
+            fails.append(f"{f.relative_to(root)}: {hit.group(0)[:60]!r} is a slideshow; make the section a thing "
+                         f"happening (a film playing, a camera rolling), never cards that change")
+    return fails
+
+
+def slideshow_fails(scenes: list) -> list[str]:
+    """scenes: [{'name', 'changes': [share of the stage changed, per scroll step]}]."""
+    fails = []
+    for s in scenes:
+        ch = s["changes"]
+        if len(ch) < 4:
+            continue
+        held = sum(1 for c in ch if c < SLIDE_HOLD) / len(ch)
+        median = sorted(ch)[len(ch) // 2]
+        swaps = sum(1 for c in ch if c > SLIDE_SWAP_MIN and c >= SLIDE_SWAP_RATIO * median)
+        if held >= SLIDE_HOLD_SHARE and swaps >= SLIDE_MIN_SWAPS:
+            fails.append(f"pinned scene {s['name']!r} holds still on {held:.0%} of its scroll and swaps {swaps} times: "
+                         f"that is a slideshow; make something happen on every step")
+    return fails
+
+
+PINNED_SCENES = r"""() => [...document.querySelectorAll('body *')].filter(e => {
+    if (getComputedStyle(e).position !== 'sticky' || !e.parentElement) return false;
+    return e.getBoundingClientRect().height >= 0.6 * innerHeight
+      && e.parentElement.getBoundingClientRect().height >= 1.5 * innerHeight;
+  }).map((e, i) => { e.dataset.sgPin = i; const p = e.parentElement.getBoundingClientRect();
+    const h = e.querySelector('h1, h2, h3');
+    return { pin: i, name: ((h && h.innerText) || e.id || e.className || e.tagName).toString().trim().slice(0, 40),
+             top: Math.round(p.top + scrollY), runway: Math.round(p.height - innerHeight) }; })"""
+
+
+def slideshow(pw, url, size=(1440, 900)):
+    from PIL import Image, ImageChops
+    W, H = size
+    b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+    scenes = []
+    for sc in pg.evaluate(PINNED_SCENES):
+        # only the stage: the rest of the screen scrolls past and is not the scene
+        def grab():
+            r = pg.evaluate(f"""() => {{ const r = document.querySelector('[data-sg-pin="{sc['pin']}"]').getBoundingClientRect();
+                return {{x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(innerWidth, r.right) - Math.max(0, r.left),
+                         height: Math.min(innerHeight, r.bottom) - Math.max(0, r.top)}}; }}""")
+            if r["width"] < 4 or r["height"] < 4:
+                return None  # off screen at this size, a drawer at 390
+            im = Image.open(io.BytesIO(pg.screenshot(clip=r))).convert("L")
+            return im.resize((max(1, im.width // 4), max(1, im.height // 4)))
+        pg.evaluate(f"scrollTo(0,{sc['top']})"); pg.wait_for_timeout(300)
+        prev, changes = grab(), []
+        for y in range(sc["top"] + SLIDE_STEP, sc["top"] + sc["runway"], SLIDE_STEP):
+            pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(120)
+            cur = grab()
+            if cur is None or prev is None:
+                prev = cur
+                continue
+            if cur.size != prev.size:
+                prev = prev.resize(cur.size)
+            diff = ImageChops.difference(prev, cur).point(lambda v: 255 if v > DIFF_LEVEL else 0).histogram()[255]
+            changes.append(diff / (cur.width * cur.height))
+            prev = cur
+        scenes.append({"name": sc["name"], "changes": changes})
+    b.close()
+    return scenes, slideshow_fails(scenes)
+
+
+# scrub: the check for a scroll-driven scene. Learned on the Firm Foundation hero,
+# 2026-11-01: a crash from a shadowed variable passed tsc and showed only in the
+# console, a sheet built from a reused folder mixed in shots from older runs, a hot
+# reload remounted the run mid-capture, and course names the camera carried to 10px
+# from a phone's edge went out because the phone wasn't re-shot after a round.
+GUTTER_PX = 16
+SCRUB_PROBE = r"""(g) => {
+  const out = [], W = innerWidth, H = innerHeight;
+  const alpha = (el) => { let a = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement || e.parentNode) {
+      const cs = getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden') return 0;
+      a *= parseFloat(cs.opacity); } return a; };
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const t = n.textContent.trim(); if (t.length < 2) continue;
+    const el = n.parentElement; if (!el || el.closest('[aria-hidden="true"] .sr-only, .sr-only')) continue;
+    const r = document.createRange(); r.selectNodeContents(n);
+    for (const b of r.getClientRects()) {
+      if (b.width < 1 || b.bottom < 0 || b.top > H || b.right < 0 || b.left > W) continue;
+      const a = alpha(el); if (a < 0.3) break;
+      if (b.left < g || b.right > W - g) { out.push({text: t.slice(0, 40), left: Math.round(b.left), right: Math.round(W - b.right)}); break; }
+    }
+  }
+  return out;
+}"""
+
+
+def scrub_fails(frames):
+    """frames: [{width, step, errors: [...], edge: [{text, left, right}]}] -> failure lines."""
+    fails = []
+    for f in frames:
+        for e in f["errors"]:
+            fails.append(f"{f['width']}px step {f['step']:.3f}: console error: {e[:160]}")
+        for t in f["edge"]:
+            side = f"{t['left']}px from the left" if t["left"] < GUTTER_PX else f"{t['right']}px from the right"
+            fails.append(f"{f['width']}px step {f['step']:.3f}: \"{t['text']}\" sits {side}, inside the {GUTTER_PX}px gutter")
+    return fails
+
+
+def scrub(pw, url, run, steps, out_dir):
+    import time
+    from PIL import Image
+    out_dir = Path(out_dir) / time.strftime("%Y%m%d-%H%M%S")
+    out_dir.mkdir(parents=True, exist_ok=False)
+    frames = []
+    for w, h in ((1440, 900), (390, 844)):
+        b = pw.chromium.launch()
+        pg = b.new_page(viewport={"width": w, "height": h})
+        errors = []
+        pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.goto(url, wait_until="networkidle")
+        shots = []
+        for k in range(steps + 1):
+            n = k / steps
+            pg.wait_for_selector(run, timeout=90000)
+            pg.evaluate("""([sel, n]) => { const r = document.querySelector(sel);
+              const top = r.getBoundingClientRect().top + scrollY;
+              scrollTo(0, top + n * Math.max(0, r.offsetHeight - innerHeight)); }""", [run, n])
+            pg.wait_for_timeout(900)
+            shot = out_dir / f"{w}-{k:03d}.png"
+            pg.screenshot(path=str(shot))
+            shots.append(shot)
+            frames.append({"width": w, "step": n, "errors": list(errors), "edge": pg.evaluate(SCRUB_PROBE, GUTTER_PX)})
+            errors.clear()
+        b.close()
+        ims = [Image.open(s) for s in shots]
+        scale = 0.25 if w > 1000 else 0.5
+        tw, th = int(ims[0].width * scale), int(ims[0].height * scale)
+        cols = 6 if w > 1000 else 10
+        sheet = Image.new("RGB", (tw * min(cols, len(ims)), th * ((len(ims) + cols - 1) // cols)), "white")
+        for k, im in enumerate(ims):
+            sheet.paste(im.resize((tw, th)), ((k % cols) * tw, (k // cols) * th))
+        sheet.save(out_dir / f"sheet-{w}.png")
+    return out_dir, frames
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -352,9 +1395,27 @@ def main():
     s.add_argument("--min-motion", type=float, default=0.6)
     s.add_argument("--min-pinned", type=float, default=3.0,
                    help="viewports of runway the longest pinned scene needs")
+    f = sub.add_parser("flash"); f.add_argument("urls", nargs="+")
+    pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
+    dk = sub.add_parser("deck"); dk.add_argument("urls", nargs="+")
+    sl = sub.add_parser("slideshow"); sl.add_argument("urls", nargs="+")
+    fo = sub.add_parser("focus"); fo.add_argument("urls", nargs="+")
+    rp = sub.add_parser("repeat"); rp.add_argument("urls", nargs="+")
+    sc = sub.add_parser("scrub"); sc.add_argument("url"); sc.add_argument("--run", required=True,
+        help="selector of the pinned run element"); sc.add_argument("--steps", type=int, default=24)
+    sc.add_argument("--out", default="/tmp/site-gate-scrub")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
+    r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
+    r.add_argument("repo", nargs="?", default=".")
     a = ap.parse_args()
+    if a.cmd == "research":
+        root = Path(a.repo).resolve()
+        fails = research(root) + motion_lint(root) + slideshow_lint(root)
+        for f in fails:
+            print(f"FAIL  {f}")
+        print(f"site-gate research: {len(fails)} problem(s)" if fails else "ok    research receipt complete")
+        sys.exit(1 if fails else 0)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         if a.cmd == "check":
@@ -370,6 +1431,67 @@ def main():
                     for f in fails:
                         print(f"        {f}")
                 print(f"site-gate: {bad} problem(s) across {len(out)} page(s)")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "scrub":
+            out_dir, frames = scrub(pw, a.url, a.run, a.steps, a.out)
+            fails = scrub_fails(frames)
+            for x in fails:
+                print(f"FAIL  {x}")
+            print(f"sheets {out_dir}/sheet-1440.png and sheet-390.png: read every frame before calling it done")
+            print(f"site-gate scrub: {len(fails)} problem(s) over {len(frames)} frames")
+            sys.exit(1 if fails else 0)
+        if a.cmd == "flash":
+            bad = 0
+            for u in a.urls:
+                found = flash(pw, u)
+                bad += bool(found)
+                print(f"{'FAIL' if found else 'ok  '}  {u}" + (f" {len(found)} flashing frame(s): {found[:6]}" if found else ""))
+            sys.exit(1 if bad else 0)
+        if a.cmd == "repeat":
+            fails = repeat(pw, a.urls)
+            print(f"{'FAIL' if fails else 'ok  '}  {len(a.urls)} page(s)")
+            for x in fails:
+                print(f"        {x}")
+            sys.exit(1 if fails else 0)
+        if a.cmd == "focus":
+            bad = 0
+            for u in a.urls:
+                fails = focus(pw, u)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}")
+                for x in fails:
+                    print(f"        {x}")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "deck":
+            bad = 0
+            for u in a.urls:
+                shapes, crossings, fails = deck(pw, u)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}  {len(shapes)} sections, "
+                      f"{sum(1 for c in crossings if c['crossed'] or not c['sameGround'])} of {len(crossings)} edges carried across")
+                for x in fails:
+                    print(f"        {x}")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "slideshow":
+            bad = 0
+            for u in a.urls:
+                for size in SIZES:
+                    scenes, fails = slideshow(pw, u, size)
+                    bad += bool(fails)
+                    print(f"{'FAIL' if fails else 'ok  '}  {u} at {size[0]}  {len(scenes)} pinned scene(s)")
+                    for x in fails:
+                        print(f"        {x}")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "parity":
+            bad = 0
+            for u in a.urls:
+                desk = _with_motion_share(story(pw, u, (1440, 900))[1])
+                phone = _with_motion_share(story(pw, u, (390, 844))[1])
+                fails = parity_fails(desk, phone)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}\n        desktop {json.dumps(desk)}\n        phone   {json.dumps(phone)}")
+                for x in fails:
+                    print(f"        {x}")
             sys.exit(1 if bad else 0)
         if a.cmd == "story":
             bad = 0

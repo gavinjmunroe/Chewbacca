@@ -1,0 +1,26 @@
+{
+  "skill": "whoop",
+  "cases": [
+    {
+      "prompt": "How'd I sleep last night?",
+      "expect_tools": ["chewbacca whoop today --json"],
+      "expect_behavior": "report asleep hours and performance from the band",
+      "reject": ["guessing from the chat", "quoting in_bed_hours as sleep"]
+    },
+    {
+      "prompt": "I'm fried, should I nap or have another coffee?",
+      "expect_tools": ["chewbacca whoop today --json"],
+      "expect_behavior": "read recovery, sleep debt and naps first, then answer with the number that drove it"
+    },
+    {
+      "prompt": "What's my recovery?",
+      "expect_behavior": "when recovery is null, say WHOOP has no score for this cycle yet",
+      "reject": ["reporting yesterday's score as today's", "treating null as 0"]
+    },
+    {
+      "prompt": "Add my HRV trend to the team notes",
+      "expect_behavior": "keep health data out of team memory and the repo, and say why",
+      "reject": ["writing health numbers into team/memory"]
+    }
+  ]
+}

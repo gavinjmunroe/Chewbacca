@@ -3,23 +3,55 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init kit-route.sh 5
-# Route a prompt into an existing kit, at the moment the person types it.
+# Put the kits and projects in front of the model on every prompt, so it can
+# route the work itself.
 #
 # The session briefing lists what kits exist, but a list read once at session
-# start competes with everything else in context by the time it matters. This
-# fires on the actual prompt, says nothing at all unless there is a real match,
-# and when there is one it names the kit and the path.
-#
-# Silence is the common case and it costs nothing.
+# start competes with everything else in context by the time it matters.
 
 # The payload arrives on stdin, and the heredoc below also claims stdin, so it
 # has to be read first and handed over out of band. Without this the script runs
 # fine and silently never matches anything, because sys.stdin is the script.
-KIT_ROUTE_PAYLOAD=$(cat)
+KIT_ROUTE_PAYLOAD=$(head -c 900000)  # macOS refuses a bigger env string, and exec then fails
 export KIT_ROUTE_PAYLOAD
 
-exec python3 <<'PY'
-import json, os, re, subprocess, sys
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
+exec python3 -I <<'PY'
+import atexit, json, os, re, subprocess, sys, time
+
+_T0 = time.time()
+
+def _verdict(kind, name, decision, ms=0, reason="", subject="", event="", session=""):
+    """One row in ~/.chewbacca/logs/verdicts.tsv, the format tools/verdicts.py
+    reads (`chewbacca why --verdicts`). Inlined in skill-route.sh and
+    kit-route.sh because install.sh copies only *.sh into ~/.claude/hooks.
+    Never raises."""
+    try:
+        if os.environ.get("CHEWBACCA_VERDICTS") == "0":
+            return
+        import time as _time
+        path = os.environ.get("CHEWBACCA_VERDICT_LOG") or os.path.join(
+            os.environ.get("CHEWBACCA_LOG_DIR") or os.path.expanduser("~/.chewbacca/logs"), "verdicts.tsv")
+        def c(value, cap):
+            return str(value or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")[:cap]
+        row = "\t".join([str(int(_time.time() * 1000)), kind, c(name, 200), c(event, 60), c(decision, 40),
+                         str(int(ms or 0)), c(session or os.environ.get("CLAUDE_CODE_SESSION_ID", ""), 80),
+                         c(subject, 300), c(reason, 600)]) + "\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, row.encode("utf-8", "replace"))
+        finally:
+            os.close(fd)
+    except Exception:
+        pass
+
+
+# One verdict row per prompt: the kit or project it pointed at, or none.
+_ROUTED = {"decision": "skip", "reason": ""}
+atexit.register(lambda: _verdict("router", "kit-route.sh", _ROUTED["decision"], (time.time() - _T0) * 1000,
+                                 _ROUTED["reason"], event="UserPromptSubmit",
+                                 session=str((globals().get("payload") or {}).get("session_id") or "")))
 
 try:
     payload = json.loads(os.environ.get("KIT_ROUTE_PAYLOAD") or "{}")
@@ -27,8 +59,8 @@ except Exception:
     raise SystemExit(0)
 
 prompt = (payload.get("prompt") or "").strip()
-# Too short to match on, or already a slash command the user chose deliberately.
-if len(prompt) < 12 or prompt.startswith("/"):
+# A slash command is a choice the user already made.
+if not prompt or prompt.startswith("/"):
     raise SystemExit(0)
 
 # Do not re-route somebody who is already standing in a kit.
@@ -61,55 +93,6 @@ def kit_paths():
         return []
     return []
 
-STOP = {
-    "a","an","and","the","or","for","to","of","in","on","at","my","me","i","is",
-    "it","that","this","with","about","from","was","were","be","been","have",
-    "has","had","do","does","did","not","no","any","some","them","they","their",
-    "something","anything","someone","somebody","need","needs","want","help",
-    "get","getting","one","what","when","where","how","why","who","which",
-}
-
-def stems(text):
-    """Crude 5-character stemming. Good enough that apply, applying and
-    application collapse together, which is the whole reason this exists:
-    somebody types "apply to three clubs" and the marker says "applying"."""
-    out = set()
-    for w in re.findall(r"[a-z][a-z0-9'-]+", text.lower()):
-        if w in STOP or len(w) < 3:
-            continue
-        out.add(w[:5])
-    return out
-
-def stem_seq(text):
-    """Content-word stems in order, so adjacency can be checked. Stopwords are
-    dropped from both sides, which makes "a specific role" and "specific role"
-    the same sequence."""
-    out = []
-    for w in re.findall(r"[a-z][a-z0-9'-]+", text.lower()):
-        if w in STOP or len(w) < 3:
-            continue
-        out.append(w[:5])
-    return out
-
-def bigrams(seq):
-    return {(seq[i], seq[i + 1]) for i in range(len(seq) - 1)}
-
-prompt_stems = stems(prompt)
-prompt_bigrams = bigrams(stem_seq(prompt))
-
-# Stems that are English rather than topic, and stems whose 5-character
-# truncation collapses unrelated word families. `inter` is the worst offender:
-# it is interview, internal, internship, interested, international and
-# interaction all at once, and three of those appear in almost any message
-# about a club. Each of these was observed producing a false route on
-# 2026-09-22, in a single message, against both installed kits.
-GENERIC = {
-    "role", "roles", "perso", "speci", "time", "acros", "stand", "profe",
-    "inter", "state", "offic", "reque", "membe", "team", "work", "peopl",
-    "compa", "cover", "under", "gener", "sched", "place", "point", "thing",
-}
-
-
 # PROJECTS ROUTE TOO, AND THEY ARE NOT KITS.
 #
 # A kit is a repo somebody lives inside for weeks while an agent walks them
@@ -132,7 +115,10 @@ def project_paths():
     except OSError:
         pass
     code = os.path.expanduser("~/code")
-    for root in (code, *(os.path.join(code, g) for g in ("kits", "amber", "work", "school", "personal", "tools")),
+    # Team builds live inside the kit now (apps/), so a teammate's clone finds
+    # lemma-replica wherever Chewbacca is checked out.
+    kit_apps = os.path.join(os.environ.get("CHEWBACCA_ROOT") or os.path.join(code, "chewbacca"), "apps")
+    for root in (kit_apps, code, *(os.path.join(code, g) for g in ("kits", "amber", "work", "school", "personal", "tools")),
                  os.path.expanduser("~/dev"), os.path.expanduser("~/Projects")):
         if not os.path.isdir(root):
             continue
@@ -147,9 +133,8 @@ def project_paths():
 
 
 def read_kit(d, marker_name=".kit"):
-    marker = os.path.join(d, marker_name)
     try:
-        with open(marker) as fh:
+        with open(os.path.join(d, marker_name)) as fh:
             raw = fh.read()
     except OSError:
         return None
@@ -158,105 +143,42 @@ def read_kit(d, marker_name=".kit"):
         m = re.search(rf"^{name}:\s*(.+)$", raw, re.M)
         return m.group(1).strip() if m else ""
 
-    if field("status") == "template":
-        return None
     name = field("name")
-    use_when = field("use-when")
-    if not name or "{{" in name or not use_when or "{{" in use_when:
+    if field("status") == "template" or not name or "{{" in name:
         return None
-    # use-when only. `domain:` is a human-readable description, not a matcher
-    # input, and folding it in is where the generic English came from.
-    # Measured 2026-09-22: apply-kit's domain line ("Applications: clubs, jobs
-    # and internships, fellowships, grad school, grants, accelerators")
-    # contributed `clubs` and `role`, and use-when contributed `perso`,
-    # `speci`, `inter`. A 17,000-character message about building a club
-    # website hit all five and routed into an applications kit.
-    kit_stems = stems(use_when) - stems(name.replace("-", " ")) - GENERIC
-    return {"dir": d, "name": name, "use_when": use_when, "stems": kit_stems,
-            "kind": "kit" if marker_name == ".kit" else "project"}
+    return f"{name} ({d.replace(os.path.expanduser('~'), '~')})"
 
-loaded = [k for k in (read_kit(d) for d in kit_paths()) if k]
-loaded += [k for k in (read_kit(d, ".project") for d in project_paths()) if k]
 
-# How many kits claim each stem. A stem claimed by exactly one kit is a strong
-# signal on its own; a stem several kits share, like "letter", is nearly noise.
-claims = {}
-for k in loaded:
-    for st in k["stems"]:
-        claims[st] = claims.get(st, 0) + 1
+# With names alone haiku went hunting the disk for "colin" (2026-11-05), so the
+# path rides along. One entry per name: lemma-replica sits in two folders.
+def by_name(entries):
+    return sorted({e.split(" (")[0]: e for e in entries if e}.values())
 
-best = None
-for k in loaded:
-    d, name, use_when, kit_stems = k["dir"], k["name"], k["use_when"], k["stems"]
-    hits = prompt_stems & kit_stems
 
-    # Loose word overlap is not enough. "write a cover for this book about
-    # letters from a soldier" hits both "cover" and "letter" and has nothing to
-    # do with applying anywhere. A phrase appearing intact is the real signal,
-    # so require either an adjacent two-word match plus one more hit, or three
-    # separate hits with no phrase at all.
-    kit_bigrams = set()
-    for phrase in use_when.split(","):
-        kit_bigrams |= bigrams(stem_seq(phrase))
-    phrase_hit = bool(prompt_bigrams & kit_bigrams)
-
-    # Two words that belong to this kit and no other is as good as a phrase.
-    # "apply" and "essay" only ever point one direction; "letter" does not.
-    #
-    # Rarity needs a population to be rare in. With two kits installed, every
-    # single hit is "claimed by exactly one kit" and this test says yes to
-    # everything. Measured 2026-09-22 on a machine with exactly two kits: all
-    # six apply-kit hits and all four accommodations-kit hits came back
-    # distinctive, so both kits matched one message and the only thing
-    # deciding the route was which scored higher.
-    distinctive = (
-        {h for h in hits if claims.get(h, 0) == 1} if len(loaded) >= 4 else set()
-    )
-
-    # Three scattered hits is evidence in a sentence and noise in a transcript.
-    # The same three stems that correctly route "apply to three clubs,
-    # deadline Friday, need my resume" (6 content words, 50% density) also
-    # routed a 584-stem strategy dump at 1.0% density. Counting hits without
-    # dividing by what was typed means a long enough message matches every kit
-    # on the machine.
-    density = len(hits) / max(len(prompt_stems), 1)
-    dense = len(hits) >= 3 and density >= 0.04
-
-    strong = (
-        (phrase_hit and len(hits) >= 2)
-        or len(distinctive) >= 2
-        or dense
-    )
-    if not strong:
-        continue
-
-    score = len(hits) + len(distinctive) * 2 + (10 if phrase_hit else 0)
-    if best is None or score > best[0]:
-        best = (score, name, d, sorted(hits), k["kind"])
-
-if not best:
+kits = by_name(read_kit(d) for d in kit_paths())
+projects = by_name(read_kit(d, ".project") for d in project_paths())
+if not kits and not projects:
     raise SystemExit(0)
 
-_, name, path, _hits, kind = best
-short = path.replace(os.path.expanduser("~"), "~")
-
+# 2026-11-05, this very hook: the stem matcher routed a sweep of Chewbacca's
+# hooks into colin-kit. It had been wrong before: 25 of 28 routes in two days
+# (2026-10-19) sent Firm Foundation video work there, after a year of tuning
+# stems, density and rarity. Caleb, 2026-11-05: "ur an llm not an if statement".
+# So nothing here reads his words. The model has the use-when lines from the
+# session briefing and this note puts the names in front of it on every prompt.
+named = []
+if kits:
+    named.append("Kits: " + ", ".join(kits) + ".")
+if projects:
+    named.append("Projects: " + ", ".join(projects) + ".")
+_ROUTED.update(decision="note", reason=" ".join(named)[:300])
 print(json.dumps({
     "hookSpecificOutput": {
         "hookEventName": "UserPromptSubmit",
         "additionalContext": (
-            (f"This request matches an existing kit: {name} at {short}. "
-             f"cd there and work inside it. It already holds this person's state, "
-             f"facts and deadlines, and its CLAUDE.md decides what happens next. "
-             f"Answering here instead throws that away and produces advice that is "
-             f"gone when the window closes. If on reading it the kit clearly does "
-             f"not fit, carry on silently. Never mention skills to the user.")
-            if kind == "kit" else
-            (f"This request matches an existing project: {name} at {short}. "
-             f"cd there and read its resume note before doing anything, because "
-             f"it holds the state, the measurements and the decisions already "
-             f"made. Starting fresh here re-derives what is already written down "
-             f"and usually re-derives it wrong. If on reading it the project "
-             f"clearly does not fit, carry on silently. Never mention skills to the user.")
+            " ".join(named) + " If what he wants done is one of these, cd there and read its CLAUDE.md or "
+            "resume note before anything else. A name in passing isn't a match, judge the work. "
+            "Never mention this note."
         ),
     }
 }))

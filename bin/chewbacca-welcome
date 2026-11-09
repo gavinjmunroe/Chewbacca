@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""The first conversation after install: six tappable questions, then a
+personalized Chewbacca.
+
+    chewbacca welcome questions          the question set, as JSON, for the agent
+    chewbacca welcome save --name Rose --goals texts,calendar --comfort new \\
+        --tone short --confirm always --school usc
+    chewbacca welcome status             exit 0 once someone has been welcomed
+    chewbacca welcome stack              the rest of the kit, one tap each: what's done, what's next
+    chewbacca welcome connect <step> [--yes]   do one step (recording needs --yes from the person)
+
+The agent asks; this file decides what each answer means and writes it, so the
+meaning is code with a test rather than prose a model re-derives every time.
+The answers land in the brain file every session already loads (YOU.md, or
+core/identity.md), so the very next reply is already personalized.
+
+Built 2026-10-09 after Caleb's bar: "My grandma should be able to use this."
+The rules come from practitioner teardowns (Appcues on Headspace and Duolingo,
+RevenueCat on Noom, NN/g on older users), written into skills/welcome/SKILL.md:
+every question must change something, four options at most, at most two questions
+per screen, every question skippable with a safe default, and OS permissions asked
+only for the goals the person picked.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+
+BEGIN = "<!-- BEGIN chewbacca-welcome -->"
+END = "<!-- END chewbacca-welcome -->"
+
+# Each answer carries the sentence the agent reads every session. Changing a
+# label here changes what the person sees; changing `rule` changes behavior.
+GOALS = {
+    "texts": {"label": "Keep up with texts and family",
+              "rule": "keeping up with texts and family",
+              "permissions": ["full-disk-access", "automation"],
+              "primer": "So I can read and answer your texts, your Mac has to let me see "
+                        "Messages. I'll open the right screen and show you where to click.",
+              "first_try": "who texted me today that I haven't answered"},
+    "calendar": {"label": "Remember appointments and to-dos",
+                 "rule": "remembering appointments and to-dos",
+                 # Not in the guide: macOS asks for Calendars and Contacts by
+                 # itself the first time they are read, so the job here is the
+                 # one-line warning before that dialog appears.
+                 "permissions": [],
+                 "primer": "The first time I look at your calendar, your Mac will ask "
+                           "once. Click OK.",
+                 "first_try": "what's on my calendar tomorrow"},
+    "writing": {"label": "Write emails, letters and messages",
+                "rule": "writing emails, letters and messages",
+                "permissions": [],
+                "primer": "",
+                "first_try": "help me write a thank-you note"},
+    "questions": {"label": "Answer questions and look things up",
+                  "rule": "answering questions and looking things up",
+                  "permissions": [],
+                  "primer": "",
+                  "first_try": "what did this video actually say (paste a link)"},
+    # Offered only when this Mac shows a school (see questions()). Before, a
+    # USC freshman detected from Brightspace cookies was asked to pick from
+    # texts and family, appointments, letters and look-ups, with nothing about
+    # classes (USC week walk, 2026-10-13).
+    "classes": {"label": "Stay on top of my classes",
+                "rule": "staying on top of my classes: what's due, readings, studying",
+                "permissions": [],
+                "primer": "",
+                "first_try": "what's due this week"},
+}
+# The question tool shows at most four options. A student swaps the calendar
+# one for classes, since lockin covers their deadlines.
+STUDENT_GOALS = ("classes", "texts", "writing", "questions")
+GENERAL_GOALS = ("texts", "calendar", "writing", "questions")
+COMFORT = {
+    "new": {"label": "New to them",
+            "rule": "New to computers. Use plain everyday words, one step at a time, "
+                    "no technical terms, and never ask me to type a command: do it for me."},
+    "getby": {"label": "I get by",
+              "rule": "I get by on a computer. Plain words, and explain any step I have to do myself."},
+    "comfortable": {"label": "Comfortable",
+                    "rule": "Comfortable with computers. Skip the basics."},
+    "builder": {"label": "I build software",
+                "rule": "I build software. Technical detail, file paths and commands are welcome."},
+}
+TONE = {
+    "short": {"label": "Short and simple", "rule": "Short and simple replies."},
+    "warm": {"label": "Warm and chatty", "rule": "Warm, friendly, conversational replies."},
+    "detailed": {"label": "Detailed, with explanations", "rule": "Detailed replies that explain why."},
+}
+CONFIRM = {
+    "always": {"label": "Always ask me first (recommended)",
+               "rule": "Always ask me before sending, deleting or buying anything."},
+    "big": {"label": "Ask only for big things",
+            "rule": "Ask me before anything big or hard to undo; small things you can just do."},
+    "after": {"label": "Just do it and tell me after",
+              "rule": "Go ahead and tell me after, except anything that spends money or "
+                      "deletes something for good: always ask first for those."},
+}
+# Students. USC is the one school whose systems this kit reads end to end, so
+# a USC answer changes the first demo (their own courses, slides and what's
+# due) and adds the free-Codex step: USC students get ChatGPT Edu with their
+# USC email and Codex on request, which makes Codex the zero-cost runtime.
+# Both URLs were read on itservices.usc.edu on 2026-10-10.
+SCHOOL = {
+    "usc": {"label": "USC student",
+            "rule": "I'm a USC student. School comes first: \"lock in\" means my own courses, "
+                    "lecture files and what's due, read from my Brightspace."},
+    "other": {"label": "Student at another school",
+              "rule": "I'm a student; my classes and deadlines matter."},
+    "no": {"label": "Not a student", "rule": ""},
+}
+USC_SCHOOL = {
+    "codex": ("USC gives you ChatGPT Edu free: sign in at chatgpt.com with your USC email. "
+              "Codex is included on request: open a ticket with USC ITS asking for Codex access."),
+    "codex_page": "https://itservices.usc.edu/ai/chatgpt-edu-at-usc/",
+    "codex_request": "https://itsusc.service-now.com/usc_its_support",
+    "primer": ("To read Brightspace I use the sign-in already in your Chrome. The first time, your Mac "
+               "asks to let Chewbacca use Chrome's saved logins: type your Mac password and click "
+               "Always Allow."),
+    "connect_command": "chewbacca usc lockin",
+    "first_try": "I need to lock in on school",
+}
+
+
+def detect_school() -> str | None:
+    """"usc" when a Chrome profile on this Mac has used USC Brightspace.
+    Reads cookie hosts only: no values, no Keychain, no tab."""
+    import shutil
+    import sqlite3
+    import tempfile
+    chrome = Path(os.environ.get("CHEWBACCA_CHROME_DIR")
+                  or Path.home() / "Library/Application Support/Google/Chrome")
+    for db in sorted(chrome.glob("*/Cookies")):
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                copy = Path(tmp) / "Cookies"
+                shutil.copy(db, copy)
+                con = sqlite3.connect(copy)
+                # Brightspace only: any usc.edu cookie would call a parent or an
+                # applicant who read a USC page a student.
+                hit = con.execute("select 1 from cookies where host_key in"
+                                  " ('brightspace.usc.edu', '.brightspace.usc.edu') limit 1").fetchone()
+                con.close()
+        except (OSError, sqlite3.Error):
+            continue
+        if hit:
+            return "usc"
+    return None
+
+
+# What a skipped question means. Conservative on purpose: skipping the
+# confirmation question must never make the agent bolder.
+DEFAULTS = {"comfort": "getby", "tone": "short", "confirm": "always"}
+
+
+def questions():
+    """At most two per screen, three screens: one decision at a time is the older-user
+    rule, four per screen is the tool's limit, and two is the compromise."""
+    def opts(table, keys=None):
+        return [{"value": k, "label": table[k]["label"]} for k in (keys or table)]
+    school = detect_school()
+    return {"screens": [
+        [{"key": "name", "question": "What should I call you?", "header": "Your name",
+          "options": [], "free_text": True},
+         {"key": "goals", "question": "What would help you most? Pick any.", "header": "Help with",
+          "options": opts(GOALS, STUDENT_GOALS if school else GENERAL_GOALS), "multi": True}],
+        [{"key": "comfort", "question": "How do you feel about computers?", "header": "Comfort",
+          "options": opts(COMFORT)},
+         {"key": "tone", "question": "How should I talk to you?", "header": "Style",
+          "options": opts(TONE)}],
+        # A daily check-in question was cut: nothing on a fresh Mac schedules
+        # one, and a question whose answer changes nothing is a broken promise.
+        [{"key": "confirm", "question": "Before I send, delete or buy anything:", "header": "Safety",
+          "options": opts(CONFIRM)},
+         {"key": "school", "question": "Are you a student?", "header": "School",
+          "options": opts(SCHOOL)}],
+    ], "defaults": DEFAULTS, "detected": {"school": school}}
+
+
+def chewbacca_home() -> Path:
+    return Path(os.environ.get("CHEWBACCA_HOME", str(Path.home() / ".chewbacca"))).expanduser()
+
+
+def brain_file() -> Path | None:
+    try:
+        from agent_context import brain_root
+        root = brain_root(Path.home() / ".claude")
+    except Exception:
+        root = None
+    if root is None:
+        return None
+    for rel in ("YOU.md", "core/identity.md"):
+        if (root / rel).is_file():
+            return root / rel
+    return root / "YOU.md"
+
+
+def pick(table, value, field):
+    if field == "school" and value in (None, "", "skip"):
+        # Skipped: what this Mac shows, else nothing assumed.
+        return detect_school() or "no"
+    if value in (None, "", "skip"):
+        return DEFAULTS[field]
+    if value not in table:
+        raise SystemExit(f"welcome: {field} must be one of {', '.join(table)} (got {value!r})")
+    return value
+
+
+def render(ans: dict) -> str:
+    goals = [GOALS[g]["rule"] for g in ans["goals"]] + ans["goals_other"]
+    lines = [BEGIN, f"## How to help me (my welcome answers, {ans['date']})", ""]
+    if ans["name"]:
+        lines.append(f"- Call me {ans['name']}.")
+    if goals:
+        lines.append(f"- I mostly want help with: {'; '.join(goals)}.")
+    lines += [f"- {COMFORT[ans['comfort']]['rule']}",
+              f"- {TONE[ans['tone']]['rule']}",
+              f"- {CONFIRM[ans['confirm']]['rule']}"]
+    if SCHOOL[ans["school"]]["rule"]:
+        lines.append(f"- {SCHOOL[ans['school']]['rule']}")
+    lines += ["", "Change any of this by telling me; I'll rewrite this section.", END]
+    return "\n".join(lines) + "\n"
+
+
+def write_brain(path: Path, block: str, name: str) -> None:
+    text = path.read_text() if path.is_file() else "# You\n"
+    if name:
+        # The template's placeholder, if it is still there. A name already
+        # written by the person is never overwritten by a placeholder swap.
+        text = text.replace("YOUR_NAME", name)
+    pattern = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.S)
+    if pattern.search(text):
+        text = pattern.sub(lambda _m: block, text, count=1)
+    else:
+        # Directly under the title, so it is inside the first lines every
+        # context loader reads even when it truncates the file.
+        head, sep, rest = text.partition("\n")
+        text = head + sep + "\n" + block + "\n" + rest
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
+def save(args) -> int:
+    raw_goals = [g.strip() for g in (args.goals or "").split(",") if g.strip()]
+    goals = [g for g in raw_goals if g in GOALS]
+    # "Other" answers arrive as free text; keep their words, never map them.
+    other = [g for g in raw_goals if g not in GOALS and g != "skip"]
+    ans = {
+        "name": (args.name or "").strip(),
+        "goals": goals,
+        "goals_other": other,
+        "comfort": pick(COMFORT, args.comfort, "comfort"),
+        "tone": pick(TONE, args.tone, "tone"),
+        "confirm": pick(CONFIRM, args.confirm, "confirm"),
+        "school": pick(SCHOOL, args.school, "school"),
+        "date": datetime.date.today().isoformat(),
+    }
+    perms = []
+    for g in goals:
+        perms += [p for p in GOALS[g]["permissions"] if p not in perms]
+    path = brain_file()
+    if path is None:
+        raise SystemExit("welcome: no brain folder found; run chewbacca setup first")
+    write_brain(path, render(ans), ans["name"])
+    home = chewbacca_home()
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "welcome.json").write_text(json.dumps({**ans, "permissions": perms}, indent=2) + "\n")
+    result = {
+        "saved_to": str(path),
+        "permissions": perms,
+        "primers": [GOALS[g]["primer"] for g in goals if GOALS[g]["primer"]],
+        "permission_command": ("chewbacca permissions guide --only " + ",".join(perms)) if perms else None,
+        "first_try": [GOALS[g]["first_try"] for g in goals] or [GOALS["questions"]["first_try"]],
+        "summary": render(ans).splitlines()[3:-3],
+        "school": None,
+    }
+    if ans["school"] == "usc":
+        # The demo that sells it goes first: their own classes, not a feature.
+        result["school"] = USC_SCHOOL
+        result["primers"].append(USC_SCHOOL["primer"])
+        if USC_SCHOOL["first_try"] not in result["first_try"]:
+            result["first_try"].insert(0, USC_SCHOOL["first_try"])
+    elif ans["school"] == "other":
+        if "what's due this week" not in result["first_try"]:
+            result["first_try"].insert(0, "what's due this week")
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="chewbacca welcome", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="cmd")
+    sub.add_parser("questions", help="print the question set as JSON")
+    sub.add_parser("status", help="exit 0 if welcome has been completed")
+    sub.add_parser("stack", help="every piece past the questions, its state and the line to say (reads only)")
+    c = sub.add_parser("connect", help="do one step of the stack")
+    c.add_argument("step")
+    c.add_argument("--yes", action="store_true", help="the person said yes (recording requires it)")
+    s = sub.add_parser("save", help="save the answers into the brain")
+    for flag in ("name", "goals", "comfort", "tone", "confirm", "school"):
+        s.add_argument(f"--{flag}")
+    args = parser.parse_args(argv)
+    if args.cmd == "save":
+        return save(args)
+    if args.cmd in ("stack", "connect"):
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import onboard_stack  # noqa: PLC0415
+        if args.cmd == "stack":
+            print(json.dumps(onboard_stack.stack(), indent=2))
+            return 0
+        got = onboard_stack.connect(args.step, yes=args.yes)
+        print(json.dumps(got, indent=2))
+        return 0 if got["ok"] else 1
+    if args.cmd == "status":
+        done = (chewbacca_home() / "welcome.json").is_file()
+        print("welcomed" if done else "not welcomed yet")
+        return 0 if done else 1
+    print(json.dumps(questions(), indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

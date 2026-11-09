@@ -2,7 +2,7 @@
   "skill": "mac-followups",
   "cases": [
     {"prompt": "What am I forgetting to reply to?",
-     "expect_tools": ["chewie texts --unanswered"],
+     "expect_tools": ["chewie texts", "--unanswered"],
      "expect_behavior": "quote what they actually said, propose per thread, skip closed threads",
      "reject": ["opening the Messages app", "screenshot"]},
     {"prompt": "Turn my texts into a to-do list",

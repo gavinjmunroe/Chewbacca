@@ -1,6 +1,8 @@
 ---
 name: people
-description: 'Remember everything about the people in the user''s life, answer questions about their network, and notice who is slipping. Use when they mention a person by name, share something about someone, ask what you know about someone or who to reconnect with, mention a birthday or job change, or return from a meeting or call. Use before drafting any message to a named person, so the draft is grounded in what is true. Use for last-contact questions: when did I last talk to them, what did we discuss, catch me up, who have I not replied to. ALWAYS use for "who do I know who ..." (in a city, at a company, in an industry, who raised money, founders or investors, from my school, who could introduce me, who moved into a senior role). Also use to import or sync a LinkedIn export, match connections to contacts, or spot job changes. Also fires on: my network, my contacts, mutual connections, warm intro, lost touch, relationship.'
+description: "Remember the people in the user's life and answer about their network. Use when a person is named, before messaging them, for last contact, who do I know who, warm intros, LinkedIn imports, job changes."
+triggers: >-
+  Remember everything about the people in the user's life, answer questions about their network, and notice who is slipping. Use when they mention a person by name, share something about someone, ask what you know about someone or who to reconnect with, mention a birthday or job change, or return from a meeting or call. Use before drafting any message to a named person, so the draft is grounded in what is true. Use for last-contact questions: when did I last talk to them, what did we discuss, catch me up, who have I not replied to. ALWAYS use for "who do I know who ..." (in a city, at a company, in an industry, who raised money, founders or investors, from my school, who could introduce me, who moved into a senior role). Also use to import or sync a LinkedIn export, match connections to contacts, or spot job changes. Also fires on: my network, my contacts, mutual connections, warm intro, lost touch, relationship.
 requires: [people]
 ---
 
@@ -56,6 +58,19 @@ When it refuses, do one of two things and never a third:
 people merge <keep-id> <drop-id>        # same human, one record now
 people brief <id> --force               # genuinely different people
 ```
+
+A merge can be taken back: `people merges` lists them, `people unmerge <id>`
+(or `last`) puts the absorbed person back with their phones, notes and
+messages. So merge a pair the evidence supports instead of leaving it for a
+human, and if it was wrong, unmerge it. Never hand-edit the store to split two
+people: until 2026-10-21 merge silently deleted the absorbed person's phones
+and Slack link through ON DELETE CASCADE, and a hand split repeats that class
+of loss.
+
+`people who "... in <place>"` also lists people with no location whose phone
+area code points there, under its own "Might be in" heading. Present those as a
+guess to check, never as people who live there: a mobile number keeps its area
+code after a move.
 
 Never work around it by reading a different row, by pulling facts out of the
 markdown export, or by going back to the message history by first name. Those
@@ -374,6 +389,12 @@ interactions hold what happened, and neither has anywhere for "I said I'd send
 him the book". When the user says they will do something for a named person, that is
 a `people task add`, not a note.
 
+**Saving or updating a contact in the Mac's Contacts app:** the last name field
+holds the real last name, then the app or company. `mac contacts add --name "Noah
+Kruse Firebox" --phone <number> --org "Firebox"` gives first name "Noah", last name
+"Kruse Firebox". Caleb, 2026-11-05: "this is the standard for any time chewbs
+saves/updates a contact". Read the name back after saving.
+
 `people rel maggie mother declan` writes both directions, so you never have to
 add the inverse yourself.
 
@@ -555,6 +576,28 @@ Three things this does not do, which you should say plainly rather than fake:
   import is macOS Contacts, vCard, or CSV, and everything else is written by
   them or by you.
 
+## Who knows whom: record the edge, not just the person
+
+A CRM with no person to person edges is a contact list. Checked 2026-11-02:
+Caleb's store held 3,346 people and ZERO rows in `relationships`, so "who
+could introduce me to X" could only match company strings and catch-all
+circles. That day, while building his dad's CRM, Caleb wrote "Graph
+engineer!!!!!!" after a build that had skipped the edges entirely, even though
+his dad's own texts were already edges ("Erik Fish and Jim Munroe both know
+Andrew from our college days", "Garland and Erik know each other too").
+
+- When a thread says two people know each other, are family, or one
+  introduced the other, write it: `people rel <a> <kind> <b>` (friend, spouse,
+  parent, mentor, coworker, introduced). A note on one card is not an edge.
+- A circle is an edge only when it's small. Tested the same day: a 94-person
+  "Inner Circle" turned Andrew Laffoon's one real edge (friend of Erik Fish)
+  into row 1 of 19, the rest "both in Inner Circle". joel-os skips circles
+  over 15 members for that reason.
+- Building a CRM for someone else: write the ontology first (person, org,
+  project, event, plus verb-named edges with a source), then extract. The
+  graph-engineering skill has the pipeline. calebnewtonusc/joel-os is the
+  worked example, with `connections`, `intro_path` and `relate` over MCP.
+
 ## Never
 
 - Never invent a fact about a person, or infer one confidently from a name
@@ -570,3 +613,22 @@ Three things this does not do, which you should say plainly rather than fake:
   the derived scores in step, and raw writes silently desynchronize both
 - Never quote a score as if it means something absolute. It is a ranking signal
   built from tunable guesses, and `people dims` shows every one of them
+
+## A network list someone else will work from
+
+When Caleb asks for "a list of everyone in my network who could help X", the
+sources are every place he knows people, not just the people store's titles:
+
+- LinkedIn and Contacts (already in the store)
+- every Gmail inbox's sent mail and every calendar's attendees. Use `gws`
+  per inbox, and fall back to the default `~/.config/gws` login when an
+  inbox's own token has expired (the personal Gmail one had on 2026-11-03)
+- his texts, through `people texts search "<topic>"` per topic. Only the
+  topic words go into a file meant for someone else, never their messages
+
+Build it with `tools/people_list_csv.py` (`--mail` for the inbox and calendar
+harvest) to the column standard in `.claude/rules/deliverables.md`. Never hand
+over a list that only looked at titles. Caleb, 2026-11-03: "The csv needs to
+hv all useful data!", then "Go through everyone on my linkedin, contacts,
+etc.", then "And anyone i've ever had a meeting or email with", then "Scan
+all ppl I've texted too". Each of those was a source the first pass skipped.

@@ -35,6 +35,39 @@ class WorkLedgerTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'bin/work-ledger'), *args,
                                '--scope', str(self.scope)], capture_output=True, text=True, timeout=15)
 
+    def test_update_accepts_unique_id_prefix(self):
+        task = self.add('Prefix', 'p1')['task']
+        updated = ledger.update(self.scope, task['id'][:8], status='done', evidence='seen')
+        self.assertEqual(updated['id'], task['id'])
+        self.assertEqual(ledger.list_tasks(self.scope, include_terminal=True)[0]['status'], 'done')
+        with self.assertRaises(ValueError):
+            ledger.update(self.scope, task['id'][:4], owner='x')
+
+    def test_board_groups_by_project_label_and_orders_views(self):
+        ledger.add(self.scope, 'Midterm', 'k1', next_action='[School | Backlog] later')
+        ledger.add(self.scope, 'Lab coat', 'k2', next_action='[School | Next] Fri')
+        ledger.add(self.scope, 'Loose idea', 'k3')
+        done = ledger.add(self.scope, 'Finished', 'k4', next_action='[School | Next] x')
+        ledger.update(self.scope, done['task']['id'], status='done', evidence='seen')
+        lines = ledger.board(self.scope).splitlines()
+        self.assertEqual(lines[:5], ['School (2)', '  Next', '    - Lab coat', '  Backlog', '    - Midterm'])
+        self.assertEqual(lines[5:], ['Unsorted (1)', '  Backlog', '    - Loose idea'])
+        result = self.cli('board')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('School (2)', result.stdout)
+
+    def test_cli_add_takes_a_plain_title_and_dedupes_it(self):
+        first = self.cli('add', 'Build the microbots', 'side quest')
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        task = json.loads(first.stdout)['task']
+        self.assertEqual(task['title'], 'Build the microbots side quest')
+        self.assertTrue(task['source_key'].startswith('title-'))
+        again = self.cli('add', 'Build the microbots side quest')
+        self.assertFalse(json.loads(again.stdout)['created'])
+        self.assertEqual(self.cli('add').returncode, 2)
+        self.assertEqual(self.cli('add', 'x', '--title', 'y').returncode, 2)
+        self.assertEqual(len(ledger.list_tasks(self.scope)), 1)
+
     def test_context_and_list_do_not_create_storage(self):
         self.assertEqual(ledger.context_for(self.scope), '')
         self.assertEqual(ledger.list_tasks(self.scope), [])

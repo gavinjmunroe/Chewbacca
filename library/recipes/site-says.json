@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "title": "Site says",
+  "description": "Check a live page says what we claim before telling anyone we changed it.",
+  "parameters": [
+    { "key": "url", "type": "url", "description": "The live page" },
+    {
+      "key": "text",
+      "type": "string",
+      "description": "The exact words the page should show"
+    },
+    {
+      "key": "max_seconds",
+      "type": "integer",
+      "min": 1,
+      "max": 120,
+      "default": 20,
+      "description": "How long the fetch may take"
+    }
+  ],
+  "steps": [
+    {
+      "id": "fetch",
+      "run": ["curl", "-fsSL", "--max-time", "{{max_seconds}}", "{{url}}"],
+      "timeout": 130
+    },
+    {
+      "id": "says",
+      "stdin_from": "fetch",
+      "run": ["grep", "-qF", "--", "{{text}}"]
+    },
+    {
+      "id": "no-placeholder",
+      "stdin_from": "fetch",
+      "run": ["grep", "-qiE", "lorem ipsum|localhost:[0-9]+|TODO:"],
+      "expect_exit": 1
+    }
+  ]
+}

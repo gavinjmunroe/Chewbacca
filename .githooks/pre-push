@@ -15,6 +15,9 @@
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 0
+# Nothing below may inherit the hook's GIT_DIR: see scrub-git-env.sh.
+# shellcheck source=/dev/null
+. "$ROOT/.githooks/scrub-git-env.sh"
 
 ZERO=0000000000000000000000000000000000000000
 CHANGED=""
@@ -69,17 +72,48 @@ while IFS= read -r f; do
     *.sh) run "bash -n $f" bash -n "$f" ;;
     *.py) run "compile $f" python3 -m py_compile "$f" ;;
     *.*) ;;
+    # Only a shebang names the interpreter. Matching "python" anywhere on line
+    # one compiled togari/search/Dockerfile ("FROM python:3.11-slim") as Python
+    # and refused the Togari land three times on 2026-10-19.
     *) case "$first" in
-         *python*) run "compile $f" python3 -m py_compile "$f" ;;
-         *bash*|*/sh) run "bash -n $f" bash -n "$f" ;;
+         '#!'*python*) run "compile $f" python3 -m py_compile "$f" ;;
+         '#!'*bash*|'#!'*/sh) run "bash -n $f" bash -n "$f" ;;
        esac ;;
   esac
 done <<< "$CHANGED"
 
 touched '(\.py$|^bin/|^tools/|^mac/|^hud/scripts/)' && run "no undefined names" bash tests/undefined_names.sh
+# Reengineer step 16: a new guard, router or classifier lands with its replay
+# or sealed eval, never without. Runs on every push, since a new one can be
+# any file; a git ls-files walk and a grep per hook, 0.1 to 0.2 s.
+MAIN_REF="$(git rev-parse -q --verify upstream/main >/dev/null 2>&1 && echo upstream/main || echo origin/main)"
+run "no guard, router or classifier without its eval" python3 tools/decision_evals.py verify --base "$MAIN_REF"
 touched '\.md$' && run "doc links resolve" python3 tools/linkcheck.py
 touched '^(setup\.sh|\.claude/hooks/)' && run "every hook is registered" bash tests/hooks_registered.sh
 touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 tests/test_setup_hooks.py
+# A guard that learns a new refusal without the gate word for it is skipped
+# by hookd in silence; the replay over real calls is the only thing that sees
+# it. Unchanged guards are remembered, so this costs one guard's replay.
+touched '^(\.claude/hooks/|crates/hookd/|tools/hookd_replay\.py|tests/fixtures/hookd-replay/)' && \
+  run "gated guards act only where their gate runs" /usr/bin/python3 tests/test_hookd_replay.py
+touched '^(tools/hookd_replay\.py|tools/work_ledger\.py)' && \
+  run "weekly guard false-positive report" /usr/bin/python3 tests/test_guard_fp.py
+touched '^\.claude/hooks/chatdb-guard\.sh' && run "chatdb-guard" bash tests/chatdb_guard.sh
+touched '^\.claude/hooks/mail-app-guard\.sh' && run "mail-app-guard" bash tests/mail_app_guard.sh
+touched '^\.claude/hooks/lesson-guard\.sh' && run "lesson-guard" bash tests/lesson_guard.sh
+# The dispatch entry folds every gated guard into one process; a change to a
+# guard's header, hookd or setup's folding can lose a block, so it runs here.
+touched '^(setup\.sh|\.claude/hooks/|crates/hookd/)' && \
+  run "one hookd dispatch answers like separate hooks" /usr/bin/python3 tests/test_hookd_dispatch.py
+# lib.sh holds every hook's stderr to read its refusal; a change there or in
+# hookd that lost or reordered it would change what the host sees.
+touched '^(\.claude/hooks/lib\.sh|crates/hookd/|tools/verdicts\.py|bin/lib/verdicts\.js|bin/lib/why\.sh)' && \
+  run "every verdict logged, output unchanged" /usr/bin/python3 tests/test_verdicts.py
+touched '^(\.claude/hooks/terminal-loop\.sh|crates/hookd/|mac/lib/terminal(_events)?\.py)' && \
+  run "hookd's board rows match the Python terminal hook" /usr/bin/python3 tests/test_hookd_terminal.py
+# Six team notes reached main with no index line on 2026-10-10 and the
+# team_memory test sat red for a day: only the full suite ran it.
+touched '^team/memory/' && run "team memory index matches its files" bash tests/team_memory.sh
 
 if [ "$fail" -ne 0 ]; then
   echo "pre-push: refused. Fix the above, or for an emergency: git push --no-verify"

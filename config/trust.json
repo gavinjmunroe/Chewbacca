@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "kept_on_mac": "What Chewbacca reads stays in files in your own account on this Mac, mostly in the ~/.chewbacca folder. Words from texts, email and chats are kept in its summary file, ~/.chewbacca/os-graph.sqlite, for at most 7 days, then wiped, not just hidden.",
+  "assistant": "Chewbacca does not have a model of its own. When you ask your assistant something, the parts it reads to answer go to that assistant's company, the same as anything you type to it: Anthropic for the Claude app, OpenAI for ChatGPT or Codex. Nothing goes there until you ask.",
+  "never": [
+    "Chewbacca has no account and no server of its own. Your data stays on this Mac unless you choose to back up your notes to your own GitHub.",
+    "A text or email goes out only when you ask for it in a conversation with your assistant.",
+    "Setup sends nothing about you anywhere. It copies files into your own account."
+  ],
+  "sources": {
+    "imessage": {
+      "name": "Texts",
+      "reads": "Messages on this Mac, read straight from its own file",
+      "leaves": "Only the texts your assistant reads to answer you, and only when you ask."
+    },
+    "mail": {
+      "name": "Email",
+      "reads": "Gmail, through Google's own sign-in, as you",
+      "leaves": "Nothing new: the mail already lives at Google. What your assistant reads to answer you goes to its company."
+    },
+    "calendar": {
+      "name": "Calendar",
+      "reads": "the Calendar app on this Mac",
+      "leaves": "Only the events your assistant reads to answer you."
+    },
+    "reminders": {
+      "name": "Reminders",
+      "reads": "the Reminders app on this Mac",
+      "leaves": "Only the reminders your assistant reads to answer you."
+    },
+    "whatsapp": {
+      "name": "WhatsApp",
+      "reads": "a linked-device copy of your WhatsApp kept on this Mac",
+      "leaves": "Only the messages your assistant reads to answer you."
+    },
+    "meetings": {
+      "name": "Meetings",
+      "reads": "meeting notes recorded and transcribed on this Mac",
+      "leaves": "Only the notes your assistant reads to answer you."
+    },
+    "chats": {
+      "name": "Other chats",
+      "reads": "Signal, Telegram, Discord and similar, from a copy kept on this Mac",
+      "leaves": "Only the messages your assistant reads to answer you."
+    },
+    "slack": {
+      "name": "Slack",
+      "reads": "a copy of your Slack messages kept on this Mac",
+      "leaves": "Only the messages your assistant reads to answer you."
+    },
+    "coursework": {
+      "name": "Classes",
+      "reads": "your class list and due dates, kept as files on this Mac",
+      "leaves": "Only what your assistant reads to answer you."
+    },
+    "people": {
+      "name": "People",
+      "reads": "the people list and to-dos you keep in Chewbacca on this Mac",
+      "leaves": "Only what your assistant reads to answer you."
+    },
+    "agents": {
+      "name": "Assistant sessions",
+      "reads": "which of your assistant chats are running on this Mac",
+      "leaves": "Nothing."
+    },
+    "backlog": {
+      "name": "Project lists",
+      "reads": "to-do files in your own projects on this Mac",
+      "leaves": "Only what your assistant reads to answer you."
+    },
+    "gtme": {
+      "name": "Outreach drafts",
+      "reads": "cold emails you are drafting and the replies to them, kept on this Mac",
+      "leaves": "A draft goes out only after you approve the outreach it belongs to."
+    }
+  }
+}

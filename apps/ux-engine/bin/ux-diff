@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""Measure two pages on the same axes and rank what differs.
+
+Caleb, 2026-09-26, watching me hand-port a reference site section by section:
+"You literally have the power of jev and the power of the entire chewbacca
+brain. There's gotta be a smarter way you can go about doing this?"
+
+There is, and the dumb part was specific. Every gap in that rebuild was found
+the same way: he looked at a screenshot, said it was terrible, and I fixed the
+one thing he pointed at. The work queue was discovered by the user, one item
+at a time, in the order he happened to scroll.
+
+A reconstruction has a ground truth sitting right there. The gaps are
+MEASURABLE and the queue can be generated in full, up front, ranked, before
+anyone opens a browser.
+
+WHAT IT COMPARES. Six axes, each one a thing a rebuild gets wrong by default:
+
+  structure   height, pinned containers, section count, heading sequence
+  density     text nodes, svg elements, paths, images. A page can match on
+              every style rule and still be half as dense, which is exactly
+              what happened here: 9 svgs against a reference's 53.
+  type        the distribution of font sizes and families, not just the set
+  palette     painted colours weighted by how many elements use them
+  motion      the ANIMATION SPEC: durations, easings, stagger steps, and how
+              many loop forever. Nothing else in this repo reads this, and it
+              is the layer a static rebuild misses completely.
+  chrome      nav, header and button geometry, where a default rebuild
+              silently rounds corners and switches to sentence case
+
+WHAT IT DOES NOT DO. It does not say which gap matters most to a person
+looking at the page. That is a semantic judgment, so it is handed to Jev as
+typed questions rather than guessed at here, and never scored by the same
+process that produced the candidate.
+"""
+
+import argparse, json, subprocess, sys, pathlib
+from collections import Counter
+
+MEASURE = r"""() => {
+  const leaves = [...document.querySelectorAll("body *")]
+    .filter(e => e.children.length === 0 && e.textContent.trim());
+  const tally = (arr) => { const o = {}; for (const v of arr) o[v] = (o[v]||0)+1; return o; };
+
+  const anims = [];
+  for (const a of document.getAnimations()) {
+    const t = (a.effect && a.effect.getTiming) ? a.effect.getTiming() : {};
+    let props = [];
+    try { for (const kf of a.effect.getKeyframes())
+            for (const k in kf)
+              if (!["offset","computedOffset","easing","composite"].includes(k)) props.push(k); }
+    catch (e) {}
+    anims.push({p:[...new Set(props)].sort().join("+"), d:t.duration,
+                e:String(t.easing).slice(0,26), i:t.iterations, dl:Math.round(t.delay||0)});
+  }
+  const loops = anims.filter(a => a.i === Infinity || a.i === null || a.i > 100).length;
+  const sig = tally(anims.filter(a => a.i === 1).map(a => `${a.p}|${a.d}ms|${a.e}`));
+
+  const btn = [...document.querySelectorAll("a,button")].map(b => {
+    const s = getComputedStyle(b), r = b.getBoundingClientRect();
+    if (r.height < 12 || !b.textContent.trim()) return null;
+    return {r: s.borderRadius, tt: s.textTransform, fs: s.fontSize, ls: s.letterSpacing};
+  }).filter(Boolean);
+
+  return {
+    height: document.documentElement.scrollHeight,
+    pinned: [...document.querySelectorAll("body *")]
+      .filter(e => ["fixed","sticky"].includes(getComputedStyle(e).position)).length,
+    sections: document.querySelectorAll("section").length,
+    headings: [...document.querySelectorAll("h1,h2")].map(h => h.textContent.trim().slice(0,70)).filter(Boolean),
+    textNodes: leaves.length,
+    svgs: document.querySelectorAll("svg").length,
+    paths: document.querySelectorAll("svg path, svg polyline, svg line, svg circle, svg rect").length,
+    imgs: document.querySelectorAll("img").length,
+    fontSizes: tally(leaves.map(e => getComputedStyle(e).fontSize)),
+    fonts: tally(leaves.map(e => getComputedStyle(e).fontFamily.split(",")[0].replace(/["']/g,""))),
+    colors: tally(leaves.map(e => getComputedStyle(e).color)),
+    animTotal: anims.length, animLoops: loops, animSignature: sig,
+    buttons: tally(btn.map(b => `${b.r}|${b.tt}`)),
+  };
+}"""
+
+
+def measure(url, settle):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 1280, "height": 900})
+        pg.goto(url, wait_until="networkidle")
+        pg.wait_for_timeout(settle)
+        d = pg.evaluate(MEASURE)
+        b.close()
+        return d
+
+
+def ratio(a, b):
+    """How far apart two counts are, 0 identical and 1 unrelated."""
+    a, b = float(a), float(b)
+    if a == 0 and b == 0:
+        return 0.0
+    return abs(a - b) / max(a, b, 1.0)
+
+
+def overlap(a, b):
+    """1 minus the shared mass of two tallies. Compares DISTRIBUTIONS, not
+    sets: a page using 14px twice and one using it 80 times do not have the
+    same typography even though the set of sizes matches."""
+    ka, kb = Counter(a), Counter(b)
+    ta, tb = sum(ka.values()) or 1, sum(kb.values()) or 1
+    shared = sum(min(ka[k] / ta, kb[k] / tb) for k in set(ka) | set(kb))
+    return round(1 - shared, 3)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("reference")
+    ap.add_argument("candidate")
+    ap.add_argument("--settle", type=int, default=2200,
+                    help="ms to wait; must be past the load animations or "
+                         "motion reads as zero on both and the axis looks clean")
+    ap.add_argument("--json", default="")
+    ap.add_argument("--jev", action="store_true",
+                    help="ask Jev which gap a viewer would notice first")
+    a = ap.parse_args()
+
+    ref = measure(a.reference, a.settle)
+    cand = measure(a.candidate, a.settle)
+
+    gaps = {
+        "structure": round((ratio(ref["height"], cand["height"])
+                            + ratio(ref["pinned"], cand["pinned"])
+                            + ratio(len(ref["headings"]), len(cand["headings"]))) / 3, 3),
+        "density":   round((ratio(ref["textNodes"], cand["textNodes"])
+                            + ratio(ref["svgs"], cand["svgs"])
+                            + ratio(ref["paths"], cand["paths"])) / 3, 3),
+        "type":      overlap(ref["fontSizes"], cand["fontSizes"]),
+        "fonts":     overlap(ref["fonts"], cand["fonts"]),
+        "palette":   overlap(ref["colors"], cand["colors"]),
+        "motion":    round((ratio(ref["animTotal"], cand["animTotal"])
+                            + ratio(ref["animLoops"], cand["animLoops"])
+                            + overlap(ref["animSignature"], cand["animSignature"])) / 3, 3),
+        "chrome":    overlap(ref["buttons"], cand["buttons"]),
+    }
+
+    print(f"reference {a.reference}\ncandidate {a.candidate}\n")
+    print(f"  {'axis':<11} {'gap':>6}   reference -> candidate")
+    for k, v in sorted(gaps.items(), key=lambda kv: -kv[1]):
+        detail = {
+            "structure": f"{ref['height']}px/{ref['pinned']}pin -> {cand['height']}px/{cand['pinned']}pin",
+            "density":   f"{ref['svgs']}svg/{ref['paths']}path -> {cand['svgs']}svg/{cand['paths']}path",
+            "motion":    f"{ref['animTotal']}anim/{ref['animLoops']}loop -> {cand['animTotal']}anim/{cand['animLoops']}loop",
+            "type":      f"{len(ref['fontSizes'])} sizes -> {len(cand['fontSizes'])}",
+            "fonts":     f"{list(ref['fonts'])[:2]} -> {list(cand['fonts'])[:2]}",
+            "palette":   f"{len(ref['colors'])} colours -> {len(cand['colors'])}",
+            "chrome":    f"{list(ref['buttons'])[:1]} -> {list(cand['buttons'])[:1]}",
+        }[k]
+        bar = "#" * int(v * 28)
+        print(f"  {k:<11} {v:>6.3f}  {bar:<28} {detail}")
+
+    missing = [h for h in ref["headings"]
+               if not any(h[:26].lower() in c.lower() for c in cand["headings"])]
+    if missing:
+        print(f"\n  headings in the reference and NOT in the candidate ({len(missing)}):")
+        for h in missing[:8]:
+            print(f"    {h}")
+
+    if a.json:
+        pathlib.Path(a.json).write_text(json.dumps(
+            {"gaps": gaps, "reference": ref, "candidate": cand, "missingHeadings": missing}, indent=1))
+        print(f"\n  wrote {a.json}")
+
+    if a.jev:
+        req = {"model": "jev-1.13.0",
+               "state": {"note": "Measured gaps between a reference page and a "
+                                 "reconstruction of it. 0 means identical, 1 unrelated.",
+                         "gaps": gaps, "missingHeadings": missing[:8],
+                         "referenceMotion": {"total": ref["animTotal"], "loops": ref["animLoops"]},
+                         "candidateMotion": {"total": cand["animTotal"], "loops": cand["animLoops"]}},
+               "questions": {"first": {"type": "choice",
+                   "instructions": "Which single axis should be fixed FIRST to most improve "
+                                   "how closely the reconstruction reads as the reference to "
+                                   "a person scrolling it? Consider perceptual impact, not "
+                                   "just the size of the numeric gap.",
+                   "criteria": {k: f"measured gap {v}" for k, v in gaps.items()}}}}
+        tmp = pathlib.Path("/tmp/ux_diff_jev.json"); tmp.write_text(json.dumps(req))
+        r = subprocess.run(["jev", "evaluate", str(tmp)], capture_output=True, text=True)
+        if r.returncode == 0:
+            ans = json.loads(r.stdout)["answers"]["first"]
+            probs = sorted(ans.get("probabilities", {}).items(), key=lambda kv: -kv[1])[:3]
+            print(f"\n  Jev, fix first: {ans.get('choice')} "
+                  f"(confidence {ans.get('confidence', 0):.2f})")
+            print(f"    {probs}")
+            print("    Low confidence means the axes are close; trust the numbers, not this.")
+        else:
+            print(f"\n  Jev unavailable: {r.stderr.strip()[:120]}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

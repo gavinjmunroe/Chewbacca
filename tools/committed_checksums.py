@@ -26,7 +26,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 # Kept in step with tools/checksums.py. A pattern added there and not here
 # means a file the installer verifies that this never looks at.
-PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "tools/*.py", ".claude/hooks/*.sh",
+PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "bin/lib/surfaces/*", "bin/jev-patches/*", "tools/*.py", ".claude/hooks/*.sh",
             "config/runtimes/*.json")
 MANIFEST = "SHA256SUMS.txt"
 
@@ -41,6 +41,33 @@ def blob(rev, path):
     r = subprocess.run(["git", "-C", str(REPO), "show", f"{rev}:{path}"],
                        capture_output=True)
     return r.stdout if r.returncode == 0 else None
+
+
+def blobs(rev, paths):
+    """Committed bytes for many paths through one `git cat-file --batch`.
+
+    One `git show` per path was ~400 forks: 12.4s at load 33 on 2026-10-09,
+    which pushed kit-autopush.sh past its 30s watchdog so it was killed on
+    every Stop instead of pushing. The batch reads the same bytes in one fork.
+    """
+    paths = list(paths)
+    if not paths:
+        return {}
+    request = "".join(f"{rev}:{p}\n" for p in paths).encode()
+    out = subprocess.run(["git", "-C", str(REPO), "cat-file", "--batch"],
+                         input=request, capture_output=True).stdout
+    found, pos = {}, 0
+    for path in paths:
+        end = out.index(b"\n", pos)
+        header = out[pos:end].split()
+        pos = end + 1
+        if len(header) == 2 and header[1] == b"missing":
+            found[path] = None
+            continue
+        size = int(header[2])
+        found[path] = out[pos:pos + size]
+        pos += size + 1  # the bytes, then the newline cat-file adds after them
+    return found
 
 
 def main():
@@ -81,8 +108,10 @@ def main():
     for path in sorted(set(claimed) - expected):
         problems.append(f"listed but not a tracked match at {rev}: {path}")
 
-    for path in sorted(expected & set(claimed)):
-        content = blob(rev, path)
+    listed = sorted(expected & set(claimed))
+    contents = blobs(rev, listed)
+    for path in listed:
+        content = contents[path]
         if content is None:
             problems.append(f"listed but missing from the tree: {path}")
             continue

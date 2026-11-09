@@ -34,6 +34,9 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// out of the thing that asked for it says what caused it; one that slides
     /// in from a corner only says where it lives.
     public var summonedFrom: CGPoint?
+    /// The width of the row it was opened from (`from=`), so the card starts
+    /// that wide instead of at the hyper bar's fixed shrink.
+    public var summonedWidth: CGFloat?
     /// Folded to its title because its region ran out of room. See
     /// `OverlayModel.plan`.
     public var compact = false
@@ -51,6 +54,15 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// reach (reported 2026-10-04).
     public var instance = 0
     public var viewID: String { "\(id)#\(instance)" }
+    /// Whether the sender chose the region with `at=`. A surface that did
+    /// not is placed in the corner that covers least of the window in front
+    /// (see `Occlusion`); one that did keeps the corner it asked for.
+    public var regionAsked = false
+    /// The namespace that claimed this surface and drew it, shown on the
+    /// card so a forged panel cannot pass as the real one. Nil for a surface
+    /// nobody claimed. Set from the socket on every `@`, never from the
+    /// line itself. See `SurfaceClaims`.
+    public var owner: String?
 
     /// Whether this surface is a launcher rail (its Screen holds a Rail). A
     /// rail owns a lane at its edge: it is not stacked or folded with the
@@ -75,8 +87,9 @@ public struct OverlaySurface: Identifiable, Equatable {
     public static func == (a: OverlaySurface, b: OverlaySurface) -> Bool {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
-            && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
-            && a.near == b.near
+            && a.compact == b.compact && a.summonedFrom == b.summonedFrom
+            && a.summonedWidth == b.summonedWidth && a.instance == b.instance
+            && a.near == b.near && a.owner == b.owner
     }
 }
 
@@ -106,6 +119,24 @@ public final class OverlayModel {
 
     /// Where events from any surface go.
     public var onEvent: ((OutboundEvent) -> Void)?
+
+    /// What has keyboard focus on the glass, or nil when the keyboard is
+    /// the person's other apps' (see `KeyboardFocus`).
+    public internal(set) var keyboardFocus: FocusTarget?
+    /// The focused Field was pressed and is taking the keys.
+    public internal(set) var editingField = false
+
+    /// The window in front, in the glass's own points: the window the
+    /// surfaces are most likely about, kept clear of them (see `Occlusion`).
+    /// Nil when there is none or it is not known.
+    public private(set) var frontWindow: CGRect?
+
+    /// Say which window is in front. The app calls this before each `@`.
+    public func describe(frontWindow next: CGRect?) {
+        guard next != frontWindow else { return }
+        frontWindow = next
+        revision += 1
+    }
 
     private var current: String = "main"
     private var nextDepth = 0
@@ -165,6 +196,9 @@ public final class OverlayModel {
     /// and the glass must never.
     public var onChatOpen: (() -> Void)?
     public var onChatClose: (() -> Void)?
+    /// A card's `ask=` after a double-click: main.swift sends it the way the
+    /// panel's own Return does, so the assistant answers it in writing.
+    public var onAsk: ((String) -> Void)?
     private var nextTurn = 0
 
     /// Whether a long answer is written for the panel and only pointed at,
@@ -217,11 +251,12 @@ public final class OverlayModel {
 
     public func apply(_ op: Op) {
         switch op {
-        case .surface(let id, let region, let width, let urgency, let chrome, let life, let near):
+        case .surface(let id, let region, let width, let urgency, let chrome, let life, let near, let from):
             current = id
             open(
                 id, region: region, width: width.map { CGFloat($0) },
-                urgency: urgency, chrome: chrome, life: life, near: near)
+                urgency: urgency, chrome: chrome, life: life, near: near,
+                from: from.flatMap { RowAnchors.shared.screen(of: $0) })
 
         case .presence(let state, let amplitude):
             setPresence(state, amplitude: amplitude)
@@ -232,8 +267,10 @@ public final class OverlayModel {
         case .unmark(let id):
             if id.isEmpty {
                 markers = []
+                anchors = [:]
             } else {
                 markers.removeAll { $0.id == id }
+                anchors[id] = nil
             }
             // The sweep is deliberately *not* cancelled here.
             //
@@ -243,13 +280,26 @@ public final class OverlayModel {
             // is the only condition under which stopping it is correct.
             revision += 1
 
+        case .glance(let id):
+            glances.insert(id)
+
         case .close(let id):
             // A clear from the bridge while an answer is still coming takes
             // the glass, never the conversation panel. On 2026-10-03 the panel
             // closed mid-answer and left the pill loading on its own, which
             // Caleb read as the HUD quitting on him. Escape, the close button,
             // two globe presses and the menu still close it.
-            if id.isEmpty { reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard) } else { close(id) }
+            if id.isEmpty {
+                reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard)
+            } else if holdsUnsavedEdits(id) {
+                // A sender closing a panel the person is typing in would
+                // throw their work away; the person is asked instead, and
+                // the sender is told why it is still there.
+                onEvent?(.problem(
+                    "\(id) has unsaved edits; the person was asked to save or close it"))
+            } else {
+                close(id)
+            }
 
         case .say(let text):
             say(text)
@@ -307,10 +357,12 @@ public final class OverlayModel {
             RimTuner.shared.tuning = RimTuner.shared.tuning.setting(values)
 
         case .openFiles(let path):
-            FilesPanel.shared.open(at: path)
+            files = FilesGlass(path: path)
+            drawFiles()
 
         case .closeFiles:
-            FilesPanel.shared.dismiss()
+            if surfaces.contains(where: { $0.id == FilesGlass.id }) { dismiss(FilesGlass.id) }
+            files = nil
 
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
@@ -454,6 +506,14 @@ public final class OverlayModel {
             ? nil
             : Date().addingTimeInterval(life ?? Marker.defaultLife)
         let marker = Marker(id: id, rect: rect, label: label, tone: tone, expires: expires)
+        // Tied to the element under it when there is one its size, so it
+        // follows a scroll and goes when the element does (bd_2026-Code-j3m).
+        if let handle = resolveAnchor?(rect) {
+            anchors[id] = (handle, rect)
+            startAnchorTracking()
+        } else {
+            anchors[id] = nil
+        }
 
         if let index = markers.firstIndex(where: { $0.id == id }) {
             markers[index] = marker
@@ -463,6 +523,63 @@ public final class OverlayModel {
         }
         revision += 1
         startSweep()
+    }
+
+    /// Finds what a new mark is about. Set by the app to
+    /// `AXMarkAnchor.resolve`; nil leaves every mark an absolute rectangle.
+    @ObservationIgnored public var resolveAnchor: ((CGRect) -> (any MarkAnchorHandle)?)?
+    /// Each anchored mark's element and the rectangle it was drawn at.
+    @ObservationIgnored private var anchors: [String: (handle: any MarkAnchorHandle, drawn: CGRect)] = [:]
+    @ObservationIgnored private var anchorTask: Task<Void, Never>?
+
+    /// Whether a mark is tied to an element.
+    public func isAnchored(_ id: String) -> Bool { anchors[id] != nil }
+
+    /// Read every anchored mark's element once: follow it, or take the mark
+    /// down and say so with `e mark.gone <id>`.
+    public func trackAnchors() {
+        var changed = false
+        for (id, anchor) in anchors {
+            guard let index = markers.firstIndex(where: { $0.id == id }) else {
+                anchors[id] = nil
+                continue
+            }
+            let now = anchor.handle.read()
+            switch MarkAnchoring.verdict(
+                mark: anchor.drawn, anchoredAt: anchor.handle.anchoredAt, now: now.frame, clip: now.clip) {
+            case .stay:
+                if markers[index].rect != anchor.drawn {
+                    markers[index].rect = anchor.drawn
+                    changed = true
+                }
+            case .move(let rect):
+                if markers[index].rect != rect {
+                    markers[index].rect = rect
+                    changed = true
+                }
+            case .remove:
+                markers.remove(at: index)
+                anchors[id] = nil
+                changed = true
+                onEvent?(.action(name: "mark.gone", component: id, payload: [:]))
+            }
+        }
+        if changed { revision += 1 }
+    }
+
+    private func startAnchorTracking() {
+        guard anchorTask == nil else { return }
+        anchorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(MarkAnchoring.interval))
+                guard let self else { return }
+                self.trackAnchors()
+                if self.anchors.isEmpty {
+                    self.anchorTask = nil
+                    return
+                }
+            }
+        }
     }
 
     /// A click on the screen, in points with a top-left origin.
@@ -525,6 +642,8 @@ public final class OverlayModel {
 
     public func reset(keepChat: Bool = false) {
         markers = []
+        anchors = [:]
+        glances = []
         agentCursorTask?.cancel()
         agentCursor = nil
         sweepTask?.cancel()
@@ -534,7 +653,13 @@ public final class OverlayModel {
         pill = PillState()
         pillHideTask?.cancel()
         pillHideTask = nil
+        // Escape always takes the glass back, edits or not; the drafts are
+        // kept on disk and offered again when that file is next opened.
+        for surface in surfaces { surface.store.rescueUnsaved() }
         surfaces = []
+        keyboardFocus = nil
+        editingField = false
+        files = nil
         heights = [:]
         fullHeights = [:]
         current = "main"
@@ -605,6 +730,15 @@ public final class OverlayModel {
         return nextTurn
     }
 
+    /// A double-click on a card with `ask=` (the verse, 2026-10-16: "If I
+    /// double click on them I want it to go into chat w the hud and chewbs
+    /// where I can talk abt the verse"). The request goes in first and the
+    /// panel opens on it, so the first frame already shows what was asked.
+    public func askedFromCard(_ text: String) {
+        onAsk?(text)
+        openChat()
+    }
+
     public func openChat() {
         guard !chatOpen else { return }
         chatOpen = true
@@ -651,8 +785,78 @@ public final class OverlayModel {
         return true
     }
 
-    /// The X on a card: take it down and tell whoever drew it.
+    // MARK: Files on the glass
+
+    /// The folder on the glass, while it is up. See `FilesGlass`.
+    public private(set) var files: FilesGlass?
+    /// Surfaces that a click off their card takes down (`glance <id>`).
+    public private(set) var glances: Set<String> = []
+    /// What a press on it does to the machine. A test swaps this out so it can
+    /// press every row without Finder or Preview opening.
+    public var filesEffect: (FilesGlass.Effect) -> Void = { FilesGlass.perform($0) }
+
+    /// Draw the folder with the same lines any sender writes, then hand
+    /// `current` back, so a sender still streaming into its own surface is not
+    /// redirected into this one by a press.
+    private func drawFiles() {
+        guard let files else { return }
+        let previous = current
+        for line in files.lines() {
+            if let op = try? LineParser.parse(line) { apply(op) }
+        }
+        current = previous
+    }
+
+    /// A press on the folder's surface, answered here: nobody else drew it.
+    /// True when it was one of its controls.
+    private func filesPressed(_ event: OutboundEvent) -> Bool {
+        guard var state = files else { return false }
+        let effect: FilesGlass.Effect
+        switch event {
+        case .rowAction(let name, let row, _) where name == FilesGlass.lookAction:
+            effect = state.look(row)
+        case .action(let name, _, _) where name == FilesGlass.goAction:
+            effect = state.go()
+        default:
+            return false
+        }
+        files = state
+        drawFiles()
+        filesEffect(effect)
+        return true
+    }
+
+    /// A click somewhere on the screen, in the glass's own points. Outside the
+    /// folder's card, the folder goes: it is a glance, and clicking on with
+    /// what you were doing is the person saying they are done with it.
+    public func clickedAway(at point: CGPoint) {
+        var ids = glances
+        if files != nil { ids.insert(FilesGlass.id) }
+        // The same few points of slack the window uses to decide a click is
+        // on a card (`OverlayWindow.updateInteractive`). A click on any card
+        // keeps every glance up: pressing a row on one card isn't done.
+        let cards = surfaces.map { frame(of: $0).insetBy(dx: -3, dy: -3) }
+        guard !cards.contains(where: { $0.contains(point) }) else { return }
+        for surface in surfaces where ids.contains(surface.id) {
+            dismiss(surface.id)
+        }
+    }
+
+    /// Whether `id` has unsaved edits nobody has been warned about yet. If
+    /// so, the card now says so, and the next close goes through.
+    func holdsUnsavedEdits(_ id: String) -> Bool {
+        guard let store = surfaces.first(where: { $0.id == id })?.store,
+              !store.unsaved.isEmpty, !store.closeWarned else { return false }
+        store.closeWarned = true
+        revision += 1
+        return true
+    }
+
+    /// The X on a card: take it down and tell whoever drew it. A card with
+    /// unsaved edits asks first: the first press says so, the second closes
+    /// it and keeps the drafts in `~/.bob/drafts` (bd_2026-Code-vz4).
     public func dismiss(_ id: String) {
+        if holdsUnsavedEdits(id) { return }
         close(id)
         if chatTarget?.surface == id { chatTarget = nil }
         onEvent?(.closed(surface: id))
@@ -854,11 +1058,32 @@ public final class OverlayModel {
     }
 
     public func close(_ id: String) {
+        if id == FilesGlass.id { files = nil }
+        RowAnchors.shared.forget(surface: id)
+        // Whatever closes it, a draft nobody saved is kept on disk.
+        for surface in surfaces where surface.id == id { surface.store.rescueUnsaved() }
+        glances.remove(id)
         surfaces.removeAll { $0.id == id }
         heights.removeValue(forKey: id)
         fullHeights.removeValue(forKey: id)
         if current == id { current = surfaces.last?.id ?? "main" }
         relayout()
+        // Focus on a surface that went moves to what is left, so keyboard
+        // mode never points at nothing.
+        if keyboardFocus?.surface == id {
+            editingField = false
+            keyboardFocus = focusOrder.first
+        }
+    }
+
+    /// Say who vouches for a surface: the namespace the socket says its
+    /// drawer holds, or nil. Called after every `@`, so a surface whose
+    /// claimant hung up and was then redrawn by someone else loses the name.
+    public func attribute(_ id: String, owner: String?) {
+        guard let index = surfaces.firstIndex(where: { $0.id == id }),
+              surfaces[index].owner != owner else { return }
+        surfaces[index].owner = owner
+        revision += 1
     }
 
     /// Move a surface by hand. Dragging outranks placement: an agent said where
@@ -917,7 +1142,8 @@ public final class OverlayModel {
     @discardableResult
     private func open(
         _ id: String, region: Region?, width: CGFloat?,
-        urgency: Urgency?, chrome: Chrome?, life: Double? = nil, near: Near? = nil
+        urgency: Urgency?, chrome: Chrome?, life: Double? = nil, near: Near? = nil,
+        from: CGRect? = nil
     ) -> OverlaySurface {
         if let index = surfaces.firstIndex(where: { $0.id == id }) {
             // Moving or resizing an open surface mid-stream is a normal ask.
@@ -939,8 +1165,15 @@ public final class OverlayModel {
             return existing
         }
 
+        // A row of the last surface of this name, reported while it was
+        // still leaving, must not make the new one look old.
+        RowAnchors.shared.forget(surface: id)
         let store = SurfaceStore()
-        store.onEvent = { [weak self] event in self?.onEvent?(event) }
+        store.onEvent = { [weak self] event in
+            if id == FilesGlass.id, self?.filesPressed(event) == true { return }
+            self?.onEvent?(event)
+        }
+        store.onAsk = { [weak self] text in self?.askedFromCard(text) }
 
         nextDepth += 1
         nextTouch += 1
@@ -953,10 +1186,27 @@ public final class OverlayModel {
             maxHeight: OverlaySurface.ceiling,
             expires: life.map { $0 == 0 ? .distantFuture : Date().addingTimeInterval($0) })
         surface.near = near
+        surface.regionAsked = region != nil
+        // No `at=`: the corner that hides least of the window in front.
+        if region == nil, urgency != .critical, near == nil, let window = frontWindow {
+            let candidates = Occlusion.corners.map { corner -> (region: Region, frame: CGRect) in
+                var trial = surface
+                trial.region = corner
+                trial.slot = surfaces.filter { $0.region == corner && $0.near == nil }.count
+                return (corner, frame(of: trial))
+            }
+            surface.region = Occlusion.leastCovering(candidates, window: window) ?? surface.region
+        }
         surface.touched = nextTouch
         nextInstance += 1
         surface.instance = nextInstance
         surface.summonedFrom = summonOrigin
+        // Opened from a row on another card: it grows out of that row, which
+        // is a better answer to "what caused this" than the hyper bar.
+        if let from {
+            surface.summonedFrom = CGPoint(x: from.midX, y: from.midY)
+            surface.summonedWidth = from.width
+        }
         store.surfaceID = id
         surfaces.append(surface)
         if surface.expires != nil { startSweep() }
@@ -964,6 +1214,7 @@ public final class OverlayModel {
         // for is the one the person is looking for.
         if surfaces.count > Self.maxSurfaces {
             let evicted = surfaces.removeFirst()
+            evicted.store.rescueUnsaved()
             heights[evicted.id] = nil
             fullHeights[evicted.id] = nil
         }
@@ -1097,17 +1348,20 @@ public final class OverlayModel {
     /// Needed because the window has to know whether the pointer is over
     /// something before it decides to accept a mouse event at all.
     public var frames: [CGRect] {
-        var all = surfaces.map { surface in
-            let centre = origin(for: surface)
-            let height = drawnHeight(surface)
-            return CGRect(
-                x: centre.x - surface.width / 2,
-                y: centre.y - height / 2,
-                width: surface.width,
-                height: height)
-        }
+        var all = surfaces.map(frame(of:))
         if let pillFrame { all.append(pillFrame) }
         return all
+    }
+
+    /// One surface's rectangle, in the overlay's own coordinate space.
+    public func frame(of surface: OverlaySurface) -> CGRect {
+        let centre = origin(for: surface)
+        let height = drawnHeight(surface)
+        return CGRect(
+            x: centre.x - surface.width / 2,
+            y: centre.y - height / 2,
+            width: surface.width,
+            height: height)
     }
 
     /// Top-left origin for a surface, in the overlay's coordinate space.
@@ -1164,13 +1418,28 @@ public final class OverlayModel {
         let bottomY = full.height - bottomInset - margin - barLane
         let maxY = bottomY - height
 
-        let x = minX + max(0, maxX - minX) * anchor.x
+        var x = minX + max(0, maxX - minX) * anchor.x
         let column = surfaces
             .filter { $0.region == surface.region && $0.isRail == surface.isRail }
             .map { (slot: $0.slot, height: drawnHeight($0)) }
-        let y = min(max(Self.columnTop(
+        var y = min(max(Self.columnTop(
             slot: surface.slot, column: column, anchorY: anchor.y,
             top: minY, bottom: bottomY), minY), maxY)
+
+        // Never over the whole of the window in front, wherever it was asked
+        // to go: beside it instead, as `near=` would place it.
+        if let window = frontWindow, !surface.isRail,
+           Occlusion.hidesAll(window, by: CGRect(x: x, y: y, width: width, height: height)) {
+            let bounds = CGRect(
+                x: leftInset + margin, y: topInset + margin,
+                width: full.width - leftInset - rightInset - 2 * margin,
+                height: full.height - topInset - bottomInset - 2 * margin)
+            let beside = Self.besideOrigin(
+                target: window, side: anchor.x < 0.5 ? .left : .right,
+                size: CGSize(width: width, height: height), bounds: bounds, gap: Self.nearGap)
+            x = beside.x
+            y = beside.y
+        }
 
         // `.position` places a centre, so hand back the centre of the frame,
         // plus wherever the person has dragged it. Past the edge of the

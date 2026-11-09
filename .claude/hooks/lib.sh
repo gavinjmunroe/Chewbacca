@@ -17,30 +17,96 @@ CHEWBACCA_HOOK_LOG="$CHEWBACCA_LOG_DIR/hooks.log"
 # session-context hook once emitted an unbounded coursework dump.
 CHEWBACCA_HOOK_MAX_BYTES="${CHEWBACCA_HOOK_MAX_BYTES:-8000}"
 
-_hook_ms() { python3 -I -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0; }
+# Every decision a hook makes is one row in the verdict log, read by
+# `chewbacca why --refused` (tools/verdicts.py holds the format and the reader).
+# Before 2026-10-12 the only trace was hooks.log: name, ms and exit code, cut to
+# 3,000 lines, which at 1,500 rows an hour kept about three hours. It held 394
+# refusals from 01:04 to 04:10 that night and not one said why, or in which
+# session, so "why was this refused" meant reading transcripts.
+CHEWBACCA_VERDICT_LOG="${CHEWBACCA_VERDICT_LOG:-$CHEWBACCA_LOG_DIR/verdicts.tsv}"
+# Rotate past this size. 4,658 hook rows landed in 3h06m on 2026-10-12, about
+# 36,000 a day; an allow row is ~110 bytes, so 8 MB is roughly two days per file.
+CHEWBACCA_VERDICT_MAX_BYTES="${CHEWBACCA_VERDICT_MAX_BYTES:-8000000}"
+
+# Perl first, python only where there is no perl. Every hook calls this twice,
+# and a dozen hooks run on every Bash call. Measured 2026-10-11 at load 22:
+# python3 -I took ~62 ms to start and perl ~20 ms, so a hook that did nothing
+# cost ~175 ms with python and ~95 ms with perl. That was the floor under
+# "Bro hurry up" and "Why is it taking that long???" (feedback_slow_means_broken):
+# the tax was paid before any hook did any work.
+_hook_ms() {
+  perl -MTime::HiRes=time -e 'printf "%d\n", time*1000' 2>/dev/null ||
+    python3 -I -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0
+}
 
 hook_init() {
   _HOOK_NAME="${1:-$(basename "${BASH_SOURCE[1]:-hook}")}"
   _HOOK_TIMEOUT="${2:-10}"
   _HOOK_START="$(_hook_ms)"
   mkdir -p "$CHEWBACCA_LOG_DIR" 2>/dev/null || true
+  _HOOK_VERDICT=""; _HOOK_REASON=""; _HOOK_ERR=""
+  _hook_buffers && _HOOK_ERR="${TMPDIR:-/tmp}/chewbacca-hook-err.$$"
 
   # Watchdog. A hook that hangs blocks the session with no error and no
   # explanation, which is the worst failure this kit has shipped.
   if [ "$_HOOK_TIMEOUT" -gt 0 ] 2>/dev/null; then
+    # It ends the hook with exit 0, not SIGKILL. A straight kill -9 made the
+    # hook exit 137, which the host reports as a hook error: on 2026-10-09, at
+    # load 61, kit-autopush.sh ran past its 30s on git and the suite's "survives
+    # empty input" check failed with exit 137. So the stuck child is stopped
+    # first, the TERM trap exits 0, and -9 is only the last resort.
     ( sleep "$_HOOK_TIMEOUT"
       kill -0 $$ 2>/dev/null && {
         _hook_log timeout "killed after ${_HOOK_TIMEOUT}s"
-        kill -9 $$ 2>/dev/null
+        for child in $(pgrep -P $$ 2>/dev/null); do
+          [ "$child" = "$BASHPID" ] || kill -TERM "$child" 2>/dev/null
+        done
+        kill -TERM $$ 2>/dev/null
+        sleep 2
+        # Killed here, the hook never runs its EXIT trap, so what it held is
+        # lost either way (the host sees exit 137); at least the file goes.
+        kill -0 $$ 2>/dev/null && { kill -9 $$ 2>/dev/null; rm -f "$_HOOK_ERR" 2>/dev/null; }
       } ) >/dev/null 2>&1 &
     _HOOK_WATCHDOG=$!
+    trap 'exit 0' TERM
+  fi
+
+  # The hook's stderr is held in a file until it exits, then handed on
+  # unchanged, so its verdict row can say why it refused. The host reads a
+  # hook's stderr only after it exits, so nothing arrives later than before.
+  # hookd reads the stderr of the guards it runs itself (HOOKD_VERDICTS holds
+  # its pid), and a hook that execs a program or replaces the EXIT trap calls
+  # hook_unbuffer first (tests/test_verdicts.py holds every hook to that).
+  #
+  # The host's stderr waits on fd 8 meanwhile, and anything that inherits it
+  # holds the host's pipe open: a review on 2026-10-12 measured stderr EOF at
+  # 5 s instead of 0 when the watchdog's sleep had it. So this runs after the
+  # watchdog forks, and every background spawn in a hook closes it (8>&-).
+  if _hook_buffers; then
+    if { : > "$_HOOK_ERR"; } 2>/dev/null; then
+      exec 8>&2 2>>"$_HOOK_ERR"
+    else
+      _HOOK_ERR=""
+    fi
   fi
   trap '_hook_finish $?' EXIT
 }
 
+# Does this run hold its stderr for the verdict row? Not when hookd started
+# it (hookd reads the guard's stderr itself; HOOKD_VERDICTS is hookd's pid, so
+# a process further down that inherits the variable still logs), and not when
+# the log is switched off.
+_hook_buffers() {
+  [ "${CHEWBACCA_VERDICTS:-1}" != "0" ] || return 1
+  [ -n "${HOOKD_VERDICTS:-}" ] && [ "$HOOKD_VERDICTS" = "$PPID" ] && return 1
+  return 0
+}
+
 _hook_log() {
   local status="$1" detail="${2:-}" ms=0
-  [ -n "${_HOOK_START:-}" ] && ms=$(( $(_hook_ms) - _HOOK_START ))
+  _HOOK_NOW="$(_hook_ms)"
+  [ -n "${_HOOK_START:-}" ] && ms=$(( _HOOK_NOW - _HOOK_START ))
+  _HOOK_ELAPSED="$ms"
   printf '%s|%s|%s|%s|%s\n' \
     "$(date '+%Y-%m-%d %H:%M:%S')" "${_HOOK_NAME:-unknown}" "$ms" "$status" "$detail" \
     >> "$CHEWBACCA_HOOK_LOG" 2>/dev/null || true
@@ -53,14 +119,120 @@ _hook_log() {
 
 _hook_finish() {
   local rc="${1:-0}"
-  [ -n "${_HOOK_WATCHDOG:-}" ] && kill -9 "$_HOOK_WATCHDOG" 2>/dev/null
+  # Reaped here, quietly: otherwise bash reports "Killed: 9" for it on the
+  # stderr hook_unbuffer is about to hand back to the host.
+  # `|| true`: wait returns 137 here, which under `set -e` would end the
+  # EXIT trap before the held stderr goes out (review, 2026-10-12).
+  [ -n "${_HOOK_WATCHDOG:-}" ] && { kill -9 "$_HOOK_WATCHDOG"; wait "$_HOOK_WATCHDOG" || true; } 2>/dev/null
   type hook_cache_release >/dev/null 2>&1 && hook_cache_release
+  [ "$rc" -eq 0 ] || _hook_read_reason
+  hook_unbuffer
   if [ "$rc" -eq 0 ]; then _hook_log ok "${_HOOK_DETAIL:-}"; else _hook_log "exit$rc" "${_HOOK_DETAIL:-}"; fi
+  local decision="${_HOOK_VERDICT:-}"
+  if [ -z "$decision" ]; then
+    case "$rc" in 0) decision=allow ;; 2) decision=refuse ;; *) decision=error ;; esac
+  fi
+  # hookd writes the row for a guard it ran, with the payload in hand.
+  [ -n "${HOOKD_VERDICTS:-}" ] && [ "$HOOKD_VERDICTS" = "$PPID" ] ||
+    hook_verdict_row hook "${_HOOK_NAME:-unknown}" "$decision" "${_HOOK_ELAPSED:-0}" "${_HOOK_REASON:-}"
+}
+
+# The first lines of what the hook printed to stderr, once, before it is
+# handed on: that is the refusal text the agent saw.
+_hook_read_reason() {
+  [ -n "${_HOOK_REASON:-}" ] && return 0
+  [ -n "${_HOOK_ERR:-}" ] && [ -s "$_HOOK_ERR" ] || return 0
+  local line n=0
+  while [ "$n" -lt 4 ] && IFS= read -r line; do
+    [ -n "$line" ] || continue
+    _HOOK_REASON="${_HOOK_REASON}${_HOOK_REASON:+ / }$line"
+    n=$((n + 1))
+  done < "$_HOOK_ERR"
+}
+
+# Hand the held stderr on and stop holding it. A hook calls this itself before
+# it execs another program or sets its own EXIT trap; either would skip
+# _hook_finish and leave the text in the file.
+hook_unbuffer() {
+  [ -n "${_HOOK_ERR:-}" ] || return 0
+  exec 2>&8 8>&-
+  [ -s "$_HOOK_ERR" ] && cat "$_HOOK_ERR" >&2
+  rm -f "$_HOOK_ERR" 2>/dev/null
+  _HOOK_ERR=""
+}
+
+# Say what this run decided when the exit code doesn't: a block printed as
+# JSON on stdout exits 0. hook_verdict refuse "the reason"
+hook_verdict() { _HOOK_VERDICT="$1"; [ -n "${2:-}" ] && _HOOK_REASON="$2"; return 0; }
+
+# One row: epoch ms, kind, name, event, decision, ms, session, subject, reason.
+# Tabs and newlines inside a field become spaces; the reason is capped so one
+# row stays one write. tools/verdicts.py and hookd write the same columns.
+hook_verdict_row() {
+  [ "${CHEWBACCA_VERDICTS:-1}" = "0" ] && return 0
+  local kind="$1" name="$2" decision="$3" ms="${4:-0}" reason="${5:-}" subject="${6:-}" event="${7:-}"
+  local now="${_HOOK_NOW:-}"
+  [ -n "$now" ] || now="$(_hook_ms)"
+  reason="${reason//$'\t'/ }"; reason="${reason//$'\n'/ }"; reason="${reason//$'\r'/ }"
+  subject="${subject//$'\t'/ }"; subject="${subject//$'\n'/ }"; subject="${subject//$'\r'/ }"
+  # Created owner-only, once: a subject is a command, and a command can carry
+  # a token. The subshell for umask costs a fork only when the file is new.
+  [ -f "$CHEWBACCA_VERDICT_LOG" ] || ( umask 077; mkdir -p "$(dirname "$CHEWBACCA_VERDICT_LOG")"; : >> "$CHEWBACCA_VERDICT_LOG" ) 2>/dev/null
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$now" "$kind" "$name" "$event" "$decision" "$ms" \
+    "${CLAUDE_CODE_SESSION_ID:-}" "${subject:0:300}" "${reason:0:600}" \
+    >> "$CHEWBACCA_VERDICT_LOG" 2>/dev/null || return 0
+  # A size check costs a stat; one row in 64 pays it.
+  if [ $((RANDOM % 64)) -eq 0 ]; then
+    local size
+    size=$(stat -f %z "$CHEWBACCA_VERDICT_LOG" 2>/dev/null || stat -c %s "$CHEWBACCA_VERDICT_LOG" 2>/dev/null || echo 0)
+    if [ "${size:-0}" -gt "$CHEWBACCA_VERDICT_MAX_BYTES" ] 2>/dev/null; then
+      # A timestamped name, so two hooks rotating at once can't clobber a file.
+      mv "$CHEWBACCA_VERDICT_LOG" "${CHEWBACCA_VERDICT_LOG%.tsv}-$now.tsv" 2>/dev/null
+      # Eight days: the weekly refusal replay reads the last seven.
+      find "$(dirname "$CHEWBACCA_VERDICT_LOG")" -maxdepth 1 -name 'verdicts-*.tsv' -mtime +8 -delete 2>/dev/null
+    fi
+  fi
+  return 0
 }
 
 # Annotate this run's single log line. Calling _hook_log directly logs a second
 # row for one run, which made every cache hit look like two hook invocations.
 hook_note() { _HOOK_DETAIL="$1"; }
+
+# Ask Jev one yes/no question about text on stdin. Prints a probability, or
+# nothing when there's no judgment (no key, down, slow), and the guard treats
+# nothing as no refusal. A judgment can add a refusal, never grant anything
+# (agent-neutral.md). For the agent's own replies and briefs only: his typed
+# prompts stay on this Mac, a security review pulled them off Jev (822ed4c).
+#   p=$(printf '%s' "$MSG" | hook_judge scope-guard "Does this reply ...?")
+# HOOK_JUDGE_STUB is the test seam: a probability instead of a network call.
+hook_judge() {
+  if [ -n "${HOOK_JUDGE_STUB+set}" ]; then printf '%s' "$HOOK_JUDGE_STUB"; return 0; fi
+  local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  python3 -I -c '
+import os, sys
+name, question = sys.argv[1], sys.argv[2]
+# Both ends: a closing recap and a BLOCKED: line sit at the end of a long reply.
+raw = sys.stdin.buffer.read()
+if len(raw) > 4000:
+    raw = raw[:1500] + b"\n...\n" + raw[-2500:]
+text = raw.decode("utf-8", "replace")
+for d in sys.argv[3:]:
+    if os.path.isfile(os.path.join(d, "jev.py")):
+        sys.path.insert(0, d)
+        break
+else:
+    raise SystemExit(0)
+import jev
+a = jev.ask({"text": text}, {"q": {"type": "noul", "instructions": question}},
+            timeout=3.0, decision="hook:" + name)
+if a and isinstance(a.get("q"), dict) and jev.probability(a["q"].get("noul")) is not None:
+    print(a["q"]["noul"])
+' "$1" "$2" "$here/../../bin/lib" "${CHEWBACCA_ROOT:-/nonexistent}/bin/lib" "$HOME/.chewbacca/kit/current/bin/lib" 2>/dev/null
+}
+
+# True when a hook_judge probability clears the line. Empty is false.
+hook_judge_yes() { [ -n "$1" ] && python3 -I -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)' "$1" "${2:-0.85}" 2>/dev/null; }
 
 # Print, but never more than the cap. Context the user did not ask for is
 # still context the user pays for.

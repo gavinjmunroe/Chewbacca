@@ -62,7 +62,10 @@ _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"  # RFC 6455 section 1.3
 
 # The largest single message accepted. Guessed, never measured: sessions.events
 # defaults to 2000 events per page and a long tool result can be hundreds of
-# KB, so 32 MiB leaves room while refusing a runaway stream.
+# KB, so 32 MiB leaves room while refusing a runaway stream. A caller that
+# knows one answer is bigger raises Connection.max_message for that
+# connection only: import.scan answered with 41,039,576 bytes for 5,446
+# transcripts on 2026-10-10.
 MAX_MESSAGE = 32 * 1024 * 1024
 # Broadcasts kept while waiting on a response or between polls. Guessed, never
 # measured: a streaming Claude turn emits a few events per second, and a poll
@@ -79,6 +82,19 @@ READ_METHODS = frozenset({
     "ships.list", "schedules.list", "runs.list", "runs.get",
     "notifications.list", "review.get",
     "sessions.list", "sessions.get", "sessions.events", "failover.get",
+    # Added from rpc.ts at 59afd9e4 (2026-10-10): a terminal's scrollback from
+    # a cursor and what each terminal is running. Both read realm's own
+    # buffers; neither writes to the pty.
+    "terminals.read", "terminals.programs",
+    # The model picker's public catalog (prices, efforts). Writes nothing in
+    # realm; with force false it answers from realm's cache.
+    "models.catalog",
+    # A browser pane's row: its address and title. Realm's server keeps only
+    # that; the page itself lives in the desktop app (rpc.ts, Plan 11 W1).
+    "browsers.get",
+    # Every session across spaces, read by realm-engine's kit handover to
+    # see whether any turn is in flight (rpc.ts at 59afd9e4, line 1827).
+    "sessions.listAll",
 })
 # Reads that run a process. agents.probe and cli.status take force:true and
 # spawn every agent CLI; the workspace three run git in whatever cwd the
@@ -87,6 +103,14 @@ READ_METHODS = frozenset({
 EXEC_METHODS = frozenset({
     "agents.probe", "cli.status",
     "workspace.gitInfo", "workspace.diff", "workspace.fileDiff",
+    # Added from rpc.ts at 59afd9e4 (2026-10-11) for the agent card's finder
+    # and its `@` picker: ⌘P's file names and ⌘⇧F's text search over a
+    # checkout, and the prompter's `@` list for one session's checkout. Each
+    # runs git (ls-files, grep) in a cwd, so each is exec, not a plain read.
+    "project.files", "project.grep", "mentions.files",
+    # What restoring a checkpoint would cost: read-only by contract, but
+    # asked of git in the environment's checkout at the moment of asking.
+    "checkpoints.preview",
 })
 
 
@@ -170,6 +194,21 @@ def is_realm_server(pid: int, home: Path | None = None) -> bool:
     """
     if not pid_alive(pid):
         return False
+    home = home or realm_home()
+    # The kernel first: no exec, so it answers inside a sandbox where the
+    # setuid `ps` may not run (procargs.py). ps stays the fallback for a
+    # platform where the kernel won't say.
+    try:
+        import procargs  # noqa: PLC0415
+        got = procargs.args(pid)
+    except ImportError:
+        got = None
+    if got is not None:
+        argv, env = got
+        if not any(a.endswith("dist/main.js") for a in argv):
+            return False
+        value = env.get("REALM_HOME")
+        return bool(value) and _same_home(value, home)
     try:
         out = subprocess.run(["ps", "eww", "-o", "command=", "-p", str(pid)],
                              capture_output=True, text=True, timeout=5).stdout
@@ -177,7 +216,6 @@ def is_realm_server(pid: int, home: Path | None = None) -> bool:
         return False
     if "dist/main.js" not in out:
         return False
-    home = home or realm_home()
     # `ps eww` joins the environment with spaces, so a value cannot be split
     # out of it. A home with a space in its path (2026-10-05, verifier: "space
     # home/realm") never matched `\S+`, the engine stopped recognising its own
@@ -222,6 +260,35 @@ def read_engine(home: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def daemon_token(home: Path, eng: dict[str, Any]) -> str | None:
+    """The socket token realm's daemon writes to daemon.json, or None.
+
+    Realm main since 59afd9e4 (apps/server/src/rpc/server.ts) refuses a
+    WebSocket that doesn't offer `realm.<token>` as its subprotocol: the
+    2026-10-10 rebuild answered every call with 401 until this was read. The
+    file must be ours at 0600, like engine.json, and name the same pid and port
+    engine.json does, so a stale or planted file never hands its token to
+    whatever owns the port now. The token is a secret: it is never put in an
+    error message or a log line."""
+    path = home / "daemon.json"
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise RealmUnavailable(f"{path} must be a regular file owned by you with mode 0600")
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        raise RealmUnavailable(f"{path} unreadable") from None
+    if not isinstance(data, dict) or data.get("pid") != eng.get("pid") or data.get("port") != eng.get("port"):
+        return None
+    token = data.get("token")
+    if not isinstance(token, str) or not token or not all(33 <= ord(c) < 127 and c not in ",;" for c in token):
+        raise RealmUnavailable(f"{path} has no usable token")
+    return token
+
+
 _PROVEN = object()
 
 
@@ -233,13 +300,15 @@ class Connection:
     port would, after an engine restart, talk to whatever owns that port now.
     """
 
-    def __init__(self, port: int, timeout: float = 5.0, *, _token: object = None):
+    def __init__(self, port: int, timeout: float = 5.0, *, _token: object = None, secret: str | None = None):
         if _token is not _PROVEN:
             raise RealmError("Connection is not public; use realm_client.connect(), "
                              "which proves the port belongs to this realm home")
         if not isinstance(port, int) or not 0 < port < 65536:
             raise RealmUnavailable(f"bad port {port!r}")
         self.port = port
+        # This connection's ceiling on one message; MAX_MESSAGE unless raised.
+        self.max_message = MAX_MESSAGE
         self.events: deque[dict[str, Any]] = deque(maxlen=MAX_BUFFERED_EVENTS)
         self._buf = bytearray()
         # A fragmented message in progress. Kept on the connection, not in
@@ -250,6 +319,8 @@ class Connection:
         self._sessions: set[str] | None = None
         self._event_names: set[str] | None = None
         self._closed = False
+        # realm.<token>, offered as the WebSocket subprotocol; never logged.
+        self._protocol = f"realm.{secret}" if secret else None
         try:
             self._sock = socket.create_connection((HOST, port), timeout=timeout)
         except OSError as e:
@@ -272,7 +343,8 @@ class Connection:
         key = base64.b64encode(os.urandom(16)).decode()
         req = (f"GET / HTTP/1.1\r\nHost: {HOST}:{self.port}\r\n"
                "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+               + (f"Sec-WebSocket-Protocol: {self._protocol}\r\n" if self._protocol else "") + "\r\n")
         self._sock.sendall(req.encode())
         deadline = time.monotonic() + timeout
         while b"\r\n\r\n" not in self._buf:
@@ -297,6 +369,8 @@ class Connection:
             raise RealmProtocolError("handshake missing Upgrade: websocket")
         if headers.get("sec-websocket-extensions"):
             raise RealmProtocolError("server negotiated an extension we did not offer")
+        if headers.get("sec-websocket-protocol", "") != (self._protocol or ""):
+            raise RealmProtocolError("server answered with a subprotocol we did not offer")
 
     # bytes
     def _fill(self, deadline: float | None) -> None:
@@ -373,8 +447,8 @@ class Connection:
         if opcode >= 0x8:
             if n > 125 or not fin:
                 raise RealmProtocolError("bad control frame")
-        elif self._frag_size + n > MAX_MESSAGE:
-            raise RealmProtocolError(f"message over {MAX_MESSAGE} bytes")
+        elif self._frag_size + n > self.max_message:
+            raise RealmProtocolError(f"message over {self.max_message} bytes")
         if len(buf) < at + n:
             return None
         payload = bytes(buf[at:at + n])
@@ -607,7 +681,7 @@ def connect(timeout: float = 5.0, home: Path | None = None) -> Connection:
     if not descends_from(owner, eng["pid"]):
         raise RealmUnavailable(f"port {eng['port']} is held by pid {owner}, not the engine "
                                f"(pid {eng['pid']}); run realm-engine start")
-    conn = Connection(eng["port"], timeout=timeout, _token=_PROVEN)
+    conn = Connection(eng["port"], timeout=timeout, _token=_PROVEN, secret=daemon_token(home, eng))
     try:
         info = conn.call("system.info", timeout=timeout)
         served = info.get("realmHome") if isinstance(info, dict) else None

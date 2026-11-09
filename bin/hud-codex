@@ -18,6 +18,29 @@ import sys
 import tempfile
 import time
 import uuid
+import re
+
+# Codex's own wording when the ChatGPT plan is spent ("You've hit your usage
+# limit"), read from its JSON events on a failed run.
+LIMIT = re.compile(r"hit your usage limit|usage limit reached", re.IGNORECASE)
+
+# `--no-tools`: a call that must not run anything (kyber-genui's Tier 2 layout
+# model, docs/reference/GENUI.md "No tools"). Every flag is from
+# `codex exec --help` and `codex features list` on codex-cli
+# 0.155.0-alpha.16.3. Measured 2026-10-10: asked to `cat /etc/hosts`, Codex
+# with the voice's flags ran it (a command_execution event); with these it
+# answered that it had no tool, and no tool event came back.
+# --ignore-user-config drops config.toml, so its MCP servers and profile
+# tools never load; the features below are the built-in tools that run or
+# read something; read-only is the backstop if a tool slipped through.
+NO_TOOLS = [
+    "--ignore-user-config", "--ignore-rules", "--ephemeral", "--sandbox", "read-only",
+    "--disable", "shell_tool", "--disable", "unified_exec", "--disable", "view_image",
+    "--disable", "apps", "--disable", "plugins", "--disable", "browser_use",
+    "--disable", "browser_use_external", "--disable", "computer_use", "--disable", "image_generation",
+    "--disable", "multi_agent", "--disable", "code_mode_host", "--disable", "hooks",
+    "--disable", "tool_suggest", "--disable", "skill_search", "-c", 'web_search="disabled"',
+]
 
 
 def session_id(value: object) -> str | None:
@@ -43,7 +66,7 @@ def signal_group(group: int, signum: int) -> None:
                 raise
 
 
-def run(prompt: str, state: Path) -> int:
+def run(prompt: str, state: Path, model: str | None = None, no_tools: bool = False) -> int:
     state.parent.mkdir(parents=True, exist_ok=True)
     cwd = str(Path.cwd().resolve())
     with state.with_suffix(state.suffix + ".lock").open("a") as lock:
@@ -51,7 +74,7 @@ def run(prompt: str, state: Path) -> int:
         previous = None
         try:
             saved = json.loads(state.read_text())
-            if isinstance(saved, dict) and saved.get("cwd") == cwd:
+            if isinstance(saved, dict) and saved.get("cwd") == cwd and not no_tools:
                 previous = session_id(saved.get("thread_id"))
         except (FileNotFoundError, json.JSONDecodeError):
             pass
@@ -61,6 +84,14 @@ def run(prompt: str, state: Path) -> int:
             if previous:
                 argv += ["resume", previous]
             # launchd starts the HUD in the home directory, outside a repository.
+            if model:
+                argv += ["-m", model]
+            if no_tools:
+                # An empty working root as well: nothing to read even if a
+                # tool were offered.
+                empty = Path(directory) / "empty"
+                empty.mkdir()
+                argv += NO_TOOLS + ["--cd", str(empty)]
             argv += ["--skip-git-repo-check", "--json", "--output-last-message", str(final), "-"]
             env = dict(os.environ, CHEWBACCA_HUD_CHILD="1")
             proc = None
@@ -99,11 +130,19 @@ def run(prompt: str, state: Path) -> int:
                 for sig, handler in handlers.items():
                     signal.signal(sig, handler)
             if proc.returncode:
+                # Out of quota: one line hud-listen reads as a limit notice,
+                # so it fails over instead of showing an exit status.
+                if LIMIT.search(events or ""):
+                    print("Codex: You've hit your usage limit.")
                 print(f"hud-codex: Codex exited with status {proc.returncode}", file=sys.stderr)
                 return proc.returncode if proc.returncode > 0 else 1
             if not final.is_file() or not final.read_text().strip():
                 print("hud-codex: Codex returned no final message", file=sys.stderr)
                 return 1
+            if no_tools:
+                # --ephemeral: no session to resume, so nothing to remember.
+                sys.stdout.write(final.read_text())
+                return 0
             thread = previous
             for line in events.splitlines():
                 try:
@@ -126,13 +165,20 @@ def run(prompt: str, state: Path) -> int:
 
 
 def main() -> int:
+    # `--model <name>` from the HUD's switcher and `--no-tools` from
+    # kyber-genui; anything else is ignored, as it always was, so a wrapper
+    # that runs this file keeps working.
+    args = sys.argv[1:]
+    no_tools = "--no-tools" in args
+    args = [a for a in args if a != "--no-tools"]
+    model = args[1] if len(args) >= 2 and args[0] == "--model" else None
     prompt = sys.stdin.read()
     if not prompt.strip():
         print("hud-codex: expected a prompt on stdin", file=sys.stderr)
         return 2
     state = Path(os.environ.get("HUD_CODEX_STATE", str(Path.home() / ".bob" / "hud-codex-session.json")))
     try:
-        return run(prompt, state)
+        return run(prompt, state, model, no_tools)
     except OSError as error:
         print(f"hud-codex: {error}", file=sys.stderr)
         return 1

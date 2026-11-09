@@ -58,7 +58,8 @@ else
 fi
 
 # The window chrome's display face and its licence, which the OFL requires to
-# travel with it. See `Typeface`.
+# travel with it. See `Typeface`. The home panel is set in SF Pro and ships no
+# face of its own.
 mkdir -p "$APP/Contents/Resources/Fonts"
 cp Fonts/DepartureMono-Regular.otf Fonts/DepartureMono-OFL.txt "$APP/Contents/Resources/Fonts/"
 
@@ -86,7 +87,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key>             <true/>
   <key>NSHighResolutionCapable</key> <true/>
   <!-- Registers Contents/Resources/Fonts for this process only: the window
-       chrome's pixel face, never installed into the person's font list. -->
+       chrome's pixel face and the home panel's two, never installed into
+       the person's font list. -->
   <key>ATSApplicationFontsPath</key> <string>Fonts</string>
   <!-- Both are required before the frameworks will even prompt. Without them
        the app is killed on the first call rather than being denied. -->

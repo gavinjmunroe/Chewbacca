@@ -1,6 +1,8 @@
 ---
 name: spiderverse-style
-description: "Apply the Spider-Verse look (Into the Spider-Verse, Across the Spider-Verse) to a website, a WebGL scene, a render or a motion piece, using rules the Sony Pictures Imageworks crew described in their own talks: animating on twos, halftone in the light and hatching in the shadow, CMYK misregistration in place of depth of field, ink lines only where an illustrator would draw them, per-universe palettes, onomatopoeia and panels. Use when asked for a Spider-Verse, spiderverse or Spider-Man style, a comic shader, comic book look, halftone, Ben-Day dots, cross hatching, misregistration or chromatic aberration as depth, a 2D/3D hybrid or NPR look, stepped or choppy animation on twos, Kirby Krackle, or a page that should feel like a printed comic. Also fires on: comic filter looks cheap, halftone looks like a filter, make it look hand drawn, Miles Morales style, Gwen watercolor, Spider-Punk collage, 2099 marker style."
+description: "The Spider-Verse look for a site, WebGL scene, render or motion piece, from Imageworks' own rules: animating on twos, halftone, hatching, misregistration, ink lines. Use for comic or halftone style."
+triggers: >-
+  Apply the Spider-Verse look (Into the Spider-Verse, Across the Spider-Verse) to a website, a WebGL scene, a render or a motion piece, using rules the Sony Pictures Imageworks crew described in their own talks: animating on twos, halftone in the light and hatching in the shadow, CMYK misregistration in place of depth of field, ink lines only where an illustrator would draw them, per-universe palettes, onomatopoeia and panels. Use when asked for a Spider-Verse, spiderverse or Spider-Man style, a comic shader, comic book look, halftone, Ben-Day dots, cross hatching, misregistration or chromatic aberration as depth, a 2D/3D hybrid or NPR look, stepped or choppy animation on twos, Kirby Krackle, or a page that should feel like a printed comic. Also fires on: comic filter looks cheap, halftone looks like a filter, make it look hand drawn, Miles Morales style, Gwen watercolor, Spider-Punk collage, 2099 marker style.
 ---
 
 # Spider-Verse style
@@ -11,7 +13,7 @@ supervisors) or from practitioners who rebuilt it in a shader, and each says
 where it came from. Sources and what was actually read are in
 [references/sources.md](references/sources.md). Tags like `[SIG23]` point there.
 
-The thesis, from the crew. Danny Dimian (VFX supervisor, Into): "We basically
+The crew stated the thesis. Danny Dimian (VFX supervisor, Into): "We basically
 tried to avoid anything that looked like it was a smooth gradation." `[CB]`
 Phil Lord: freeze any frame and it reads as an illustration. `[INS]` Pav
 Grochola (effects, Across): the technology should serve the artist, and
@@ -26,8 +28,8 @@ equally creative as it within the 2d 3d space." When someone asks for
 "Spider-Verse level", they mean that level of invention, in their own
 visual language. Take the method (per-element decisions, 2D drawn over 3D,
 frame rate and camera as storytelling, one unforgettable shot) and leave
-the film's surface alone: no comic covers, no named universes, no
-lettering or misregistration just because the film had them. Write three
+the film's surface alone: skip the comic covers, the named universes, and
+any lettering or misregistration added just because the film had them. Write three
 genuinely different directions before building. Use the film's look only
 when they literally ask for the Spider-Verse look.
 
@@ -152,8 +154,12 @@ Each rule is phrased so it can be built and checked. Source tags follow.
 3. **Different parts can run at different rates.** Spider-Punk: body on twos
    and threes, jacket on fours, guitar on sixes, because separating body
    parts looked like South Park. Alan Hawkins (head of character animation). `[GNO]`
-   (No The Robot reports threes and fours `[NTR]`; trust the head of
-   animation.)
+   (No The Robot reports threes and fours `[NTR]`, and Google's AI Mode on
+   2026-10-26 said guitar on fours, jacket on an offset, citing a YouTube
+   recap. Both are secondhand; trust the head of animation.)
+   Unconfirmed: CG Spectrum says hair and cloth sims stayed on ones under
+   characters on twos, so stepped poses had to sit against smoothly moving
+   fabric. No Imageworks source yet; don't state it as their rule.
 4. **No in-betweens on impacts.** Anticipation pose, then the impact pose,
    held two frames. A smear goes on the second held frame only. `[NTR] [CW]`
 5. **Smears and ink effects live one or two frames.** Any longer and they
@@ -506,6 +512,271 @@ strip. `[ACR-Q]`
 - Random jitter over the whole frame instead of placed imperfections.
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
+
+## Stepping time in Blender
+
+Timing is separate from the shading below. Two ways to put a character on twos:
+
+- Select keys in the Dope Sheet or Graph Editor, press T, pick Constant. Holds
+  each key until the next one, which is blocking, not twos: keys must already
+  sit every 2 frames.
+- Add the Stepped Interpolation F-curve modifier (Graph Editor, Modifiers tab)
+  with Step Size 2. Keeps smooth keys underneath and samples them on twos, so
+  the rate changes per channel without rekeying (rule 3: jacket and guitar on
+  their own step sizes). Keep the camera's curves unstepped (rule 1).
+
+In After Effects the same move is Posterize Time on a precomp at 12 fps.
+
+## Tested in Blender (measured, Waves 1 to 7 of the replica study)
+
+From `~/code/work/spiderverse-replica` (private): eight structurally different
+shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
+frames on 11 axes, with every result checked against a control (the same render
+scored against five other shots). All figures are original plain mannequins.
+**tested** means a single change moved a measured axis; **hypothesis** means
+reasoned, not yet measured. Numbers are 0 to 1, 1 identical.
+
+- **tested: the world background must not light a toon scene.** Diffuse to
+  Shader to RGB to a constant ramp, under a world at strength 1, sat in the
+  light band whatever the sun did (mean 0.84 at 30 degrees, 0.90 at 85). World
+  at 0: the sun drove the bands (0.227 against 0.452). Make the sky
+  camera-ray only (Light Path, Is Camera Ray, mixing a dim ambient Background
+  with the visible one) and set ambient as its own number.
+- **tested: a three-band toon goes bimodal once it's lit right.** With the
+  world fixed, a crowd shot went from 3% darks to 74% darks with 2% mids; the
+  film's frame was 42% darks and 43% mids. The mid band is the film's widest,
+  so build a ramp whose middle band carries that share instead of tuning the
+  light.
+- **tested: solve the camera from the reference, never guess it.** Pitch
+  for a horizon row: tan(pitch) = (row - 0.5) x (sensor / aspect) / focal.
+  Distance for a subject: height x focal / (frame share x sensor / aspect).
+  Guessed cameras put one city shot inside the buildings with no horizon and
+  drew a figure at a fifth of its size; layout axes stay near zero until the
+  camera is solved, which cost every built-layout shot 0.1 to 0.2.
+- **tested: in a void shot the darkest band is the subject.** Holding the
+  bottom fifth near black moved subject position 0.203 to 0.763 and the shot
+  0.782 to 0.832. A small light's halo edge comes from core size: radius
+  0.055 to 0.09 moved edge density 0.374 to 0.507 (shot 0.867).
+- **tested: ink coverage is blot size, not blot count.** Scaling blots 1.5x
+  moved the value split 0.262 to 0.489; raising the count 150 to 220 instead
+  lowered the shot. Blots read as ink with a soft grey bleed under a hard
+  core plus a ring of spray specks.
+- **tested, negative: Kuwahara alone adds no paint texture.** On a painted
+  interior, edge density stayed 0.065 to 0.074 and high-frequency energy 0.010
+  to 0.011 with and without the anisotropic Kuwahara node, against 0.120 and
+  0.020 in the film. It removes CG edges and adds no marks. **hypothesis:** the
+  texture needs a painted stroke plate or a stroke layer on top.
+- **tested, pipeline: Blender 5.x compositing needs `render.use_compositing =
+True`.** The node group attaches and silently never runs without it: a bloom
+  that should have given a ~31px halo rendered a 16px pip.
+- **tested, process: one change per version.** Changing four or five things at
+  once moved every targeted axis and dropped four shot scores, with nothing
+  attributable. An axis that reads the same to three decimals after a change
+  means the render didn't change: pixel-diff it before tuning further.
+
+Wave 2 (six new shots, three re-runs; same rules, every figure an original
+mannequin):
+
+- **tested: solve the camera before the first render.** Six shots with a
+  solved v1 camera averaged 0.551 at v1, against 0.390 for Wave 1's guessed
+  v1 cameras; one camera solve alone was worth +0.106.
+- **tested: marks need a layer, not a filter.** Overlaying a brush-wash
+  plate (thousands of bristled dabs, painted by our own script) after the
+  Kuwahara pass raised high-frequency texture 0.214 to 0.342 on a painted
+  interior, where Kuwahara alone moved it under 0.005 across three versions.
+  Paint the plate in Krita for real work; it can't paint headless.
+- **tested: a painted backdrop must not cast shadows.** A backlit set put
+  its whole floor in the backdrop's shadow; a probe at 10x key energy read
+  the same value split as 1x, which is how a blocked light differs from a
+  weak one. Turn off `visible_shadow` on flats.
+- **tested: a sun's rotation is not its elevation.** -60 degrees about X
+  leaves the light 30 degrees above the horizon. Set elevation, then convert.
+- **tested: match the palette before the structure.** Pulling a line-web
+  shot's haze from magenta to the measured navy-violet moved it 0.614 to
+  0.696, more than any geometry change on that shot.
+- **tested, negative: a bigger graphic shape isn't more of its colour.**
+  Enlarging a star burst 1.3x to chase its colour share cost 0.038.
+- **hypothesis: test a value ramp on a front-lit scene.** In a backlit set
+  everything facing camera is meant to be in shadow, so a ramp's middle
+  bands never get reached and the test says nothing.
+
+Wave 3 (13 city shots through one parameterised template):
+
+- **tested: probe a procedural texture on a plane before trusting it.** A
+  Brick texture with Mortar Size 0.55 (texture units, UI max 0.125) is all
+  mortar: windows rendered flat in every city scene until a one-plane probe
+  showed the same pixel std at every scale. Fixed, canyon edge density went
+  0.025 to 0.085.
+- **tested: size procedural cells by where they land on screen.** Window
+  cells of ~4 m in a street canyon and ~10 m on a skyline; half-metre cells
+  are sub-pixel at city distance and average to flat colour.
+- **tested: keep a distance ramp's middle stop near the camera.** At 15% of
+  the depth range instead of 50%, the city steps back in value instead of
+  sitting in its near colour.
+- **tested: the darkest dominant colour is often a ledge or a figure, not the
+  city.** Choose per shot which colour the scene is built from.
+- **tested: a texture plate helps frames short of marks and hurts frames
+  that already have them.** Decide it per shot from the measured edge gap.
+- **tested: one template per family carries palette and texture, not
+  layout.** Shots defined by one specific geometry (a diagonal tower, a dome
+  in front of a wall of towers) need their own layout.
+
+Wave 4 (23 graphic shots: swirls, bursts, beams, debris, voids):
+
+- **tested: a coarse colour script carries a quarter of a graphic frame.**
+  A field built from 18 measured cell averages, with nothing on it, scored
+  0.27 mean against these frames; the finished shots reached 0.37. Block the
+  colour script, then spend the effort on shapes, edges and value.
+- **tested: add only the shapes the frame contains.** Swirl bands, debris
+  and ink chaos added +0.13 to +0.27 over the colour field; extra shapes on
+  four frames left them at or below the bare field.
+- **tested: the brush plate helps every frame short of marks.** 12 of 12
+  graphic shots improved with it (mean +0.034). Across four waves it has
+  only hurt frames whose edge density already matched.
+- **tested, pipeline: check a generated image against its source numbers.**
+  An image filled in memory rendered black in Blender's EEVEE; write it to a
+  file and load it.
+
+Wave 5 (portals, crowds, environment-only rebuilds):
+
+- **tested: build a portal as concentric emissive rings with bloom.** Rings,
+  radial streaks and a bloom pass took one portal shot from 0.214 (colour
+  field only) to 0.516, the largest single element gain in the study.
+- **tested: identical stand-ins don't read as a crowd.** Bands of identical
+  figures added little and two crowd shots never matched; a crowd needs
+  varied silhouettes and poses.
+- **tested: add a texture plate or bloom, rarely both.** The plate moved
+  bloomed frames by -0.002 to +0.010 and unbloomed frames by +0.023 to +0.035.
+
+Waves 6 and 7 (streets, interiors, and character shots recreated with an
+original lead of our own design, never a film character):
+
+- **tested: relight a figure into the frame's light.** Shifting a figure's
+  costume colours toward the shot's light (a dark-blue relight, dark
+  palettes against a lit window) scored 0.45 to 0.52; the same figure left
+  in its daylight colours on a coloured field scored 0.20 to 0.30.
+- **tested: back a close-up with one soft glow.** A single soft emissive disc
+  behind the head beat scattered background shapes on every close-up tried.
+- **tested: one value contrast can carry a frame.** A single bright plain
+  shape in a dark rain field scored 0.627, the best street.
+- **tested: window grids carry flat facades.** A grid of window cells added
+  +0.078 over the bare colour field on a facade shot.
+- **hypothesis: a flat figure can't carry a face close-up.** Face close-ups
+  were the lowest group (0.31); the film's faces carry line and hatching.
+
+Depth passes (an unattended driver tried one post-render change per version
+on ~90 shots, keeping it only if it beat both the best score and the best
+margin over the control):
+
+- **tested: crisp ink hatching is the most reliable single upgrade.** A plate
+  of thin parallel hatch strokes was kept 17 of 24 times (mean +0.056); a
+  denser version 10 of 15 (+0.043). The soft brush plate, as a second layer,
+  only 4 of 8 (+0.019). The reel's texture is crisp line, not soft paint.
+- **tested: spread values with contrast; don't brighten.** A contrast spread
+  was kept 9 of 11 times (+0.049). Brightening a flat emission frame was kept
+  3 of 17, and a double step 0 of 11: it lifts the darks with everything else.
+  Darkening split 7 kept to 9 reverted.
+- **tested: one step, not two.** Every doubled step (contrast, brighten,
+  darken) was kept once in 37 tries; when a step helps, doubling it doesn't.
+- **tested: a texture can raise the score and still be wrong.** 8 of 12 early
+  keeps raised the score while the render also matched other shots' frames
+  better; judge a change by its margin over a control, not by the score.
+
+- **tested: a score built from histograms can be met without the picture.**
+  Hatch plates raised palette, value, edge and texture scores on frames whose
+  figures had left the frame. A coarse layout check (light/dark correlation
+  at 24x10) showed 24 of 67 "improved" shots had lost structure; mean
+  structure didn't move. Check a contact sheet against the reference, and
+  guard any automated keep with a measure the change can't fake.
+- **tested, negative: nudging the main shape toward the measured subject
+  point rarely helps.** 4 of 55 nudges kept; the remaining gap was the value
+  structure inside the frame, not placement.
+
+Structure pass (by hand, kept only when both the score and the light/dark
+layout match rose):
+
+- **tested: add the one dominant light mass the frame is built on.** A lit
+  facade, a light column, a bright horizon band each raised layout match by
+  +0.17 to +0.57 with the score rising too. Removing shapes to clear the
+  layout usually cost more score than it gained.
+- **tested: place a figure by the part the frame is about.** In a close-up,
+  anchor by the head (measure where the head lands after posing, then move
+  the figure); placed by its body centre, the figure showed only its legs.
+- **tested: check figure orientation under an orthographic top-down camera.**
+  +90 degrees about X turns a standing figure upside down there; -90 is
+  upright. One render caught what weeks of scores missed.
+- **tested: an original character caps a close-up's layout match.** A figure
+  of your own design puts light and dark in different places from the
+  film's; relight it to the frame's values, and stop before reshaping it
+  toward anyone else's design.
+
+Full hand-built sets, kept by a blind pairwise judge (a fresh model sees
+reference | A | B in both side orders and must prefer the same render both
+times) plus a light/dark layout guard:
+
+- **tested: a street canyon seen looking up is a reusable set.** Won 3 of 4
+  judged pairs (looking up at a pale sky, a warm sunset gap, a cream sky with
+  towers in the corners; lost on a dark navy street). The recipe: camera at
+  street level pitched up 25 to 62 degrees, lens 18 to 24; two walls of
+  boxes along the street plus a taller second row behind each, heights
+  drawn per side; four flat toon bands from the frame's own palette; a sky
+  gradient seen by the camera only, with its ramp set to the view
+  directions the pitched camera actually sees (looking up 60 degrees sees
+  view Z of about 0.6 to 1, so a ramp over 0 to 0.5 renders one flat
+  colour); Line Art ink; a hatch plate and a light Kuwahara.
+- **tested: place big shapes and figures by screen position, then solve
+  depth.** Cast a ray through the measured screen point to a chosen depth
+  for a figure (size from the frame share it fills) and for camera-aligned
+  blocks (a near wall, a ledge, one tower face). Guessed world positions
+  missed; solved ones landed. Keep figures upright with no camera roll so
+  the head stays up.
+- **tested: a city set needs a ground plane**, or the sky's bottom colour
+  shows through every gap below the horizon.
+- **tested: a figure needs contrast with what is behind it.** A dark figure
+  in a dark canyon vanished; the same figure in a mid colour from the
+  frame's palette read at once.
+- **tested: the judge rewards the right objects, the layout guard rewards
+  the right light falloff.** Two rebuilds won the judge and failed the
+  guard: each had the right subject and setting but lost the frame's
+  value ramp (a near dark mass stopped short of the corner it fills, a sky
+  without its glow side, a canyon gap aimed at the wrong column). Read
+  where the frame is brightest and darkest first, match that, then place
+  the subject. For a canyon, aim the gap at the reference's brightest
+  column.
+- Check the machine before a render campaign. On 2026-10-10 batch 4 sat in
+  the heavy lane from 11:42 until Caleb parked the study, because the queue
+  only admits heavy work under load 18.2 and ten other tabs kept it between
+  85 and 268 all afternoon. Run `uptime` first. If load won't come under the
+  gate, render overnight with the tabs closed or on a second machine, and
+  tell Caleb that plainly instead of reporting "waiting" every half hour.
+- Judge without a subagent when the slots are full. The orchestrator can
+  judge a batch blind by reading the tiles and recording its picks before it
+  opens manifest.json, then decoding. Done that way for interiors batch 3
+  (b94e394); every pair agreed in both orders.
+
+## Tools worth reaching for
+
+The full ranked list, with licenses and the file each one plugs into, is
+[docs/plans/ANIMATION-ART-REPOS.md](../../docs/plans/ANIMATION-ART-REPOS.md) (319 repos,
+checked 2026-10-09). The ones that map straight onto rules in this file:
+
+- Halftone in the light: paper-design/shaders `halftone-cmyk` (raw WebGL2,
+  Apache-2.0) and spite/sketch `post-cmyk-halftone-i`. Add the per-plate UV
+  shift for misregistration yourself; neither has it.
+- Lines only where an illustrator would draw them: OmarShehata/webgl-outlines
+  (surface-ID outlines), vpalos/Krbn and gkjohnson/three-edge-projection (exact
+  silhouettes to vectors), Malt's line pass in Blender.
+- Painterly shading: GarrettGunnell/Post-Processing anisotropic Kuwahara to
+  port, Blender's own Kuwahara node offline, ebsynth to carry one painted
+  keyframe across a shot.
+- Motion without blur: MoStyle/SMEAR bakes smear frames and motion lines in
+  Blender.
+- Shots that morph: oframe/ogl GPGPU for point morphs, ToonCrafter (RunPod) to
+  prototype a two-keyframe morph.
+- Scrubbing: Vanilagy/mediabunny or plutotcool/fsv for exact frames over
+  WebCodecs, lenis for the one smooth scroll value.
+
+lygia is noncommercial without its Patron license; check before shipping it.
 
 ## Accessibility
 

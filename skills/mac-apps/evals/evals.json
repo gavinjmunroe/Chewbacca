@@ -1,8 +1,8 @@
 {
   "skill": "mac-apps",
   "cases": [
-    {"prompt": "What tab is open in Safari?", "expect_tools": ["osascript"], "reject": ["screenshot"]},
-    {"prompt": "Read my last 5 emails", "expect_tools": ["osascript", "Mail"]},
+    {"prompt": "What tab is open in Safari?", "expect_tools": ["chewie run"], "reject": ["screenshot"]},
+    {"prompt": "Read my last 5 emails", "expect_tools": ["chewie run", "Mail"]},
     {"prompt": "Search my texts for 'dinner'", "expect_tools": ["sqlite3"],
      "why": "SQL over chat.db beats scrolling the UI"},
     {"prompt": "Send a text to Mom", "expect_behavior": "confirm before sending"},

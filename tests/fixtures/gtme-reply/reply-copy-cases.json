@@ -1,0 +1,157 @@
+{
+  "about": "Next-step copy per client, shared verbatim with Chewbacca tests/fixtures/reply-copy-cases.json. Both suites run every case and pin this file's sha256, so a change lands in both copies or one suite fails (team/memory/feedback_ported_logic_fix_both_copies.md).",
+  "clients": {
+    "zeutara": {
+      "principal": "Jonah",
+      "clientName": "Zeutara",
+      "raisesDebt": false,
+      "callWith": "the founder"
+    },
+    "harborline": {
+      "principal": "Pat",
+      "clientName": "Harborline",
+      "raisesDebt": true,
+      "callWith": "our service lead"
+    },
+    "none": null
+  },
+  "inputs": [
+    {
+      "id": "lender",
+      "body": "Thanks. We are a lender, venture debt only.",
+      "company": "Qube Finance"
+    },
+    {
+      "id": "form_link",
+      "body": "Please fill out our intake form at https://fund.example/apply and we'll take a look.",
+      "company": "Qube Finance"
+    },
+    {
+      "id": "form_bare",
+      "body": "Best next step is to apply through our website.",
+      "company": null
+    },
+    { "id": "deck", "body": "Can you send the deck?", "company": "Ivy" },
+    {
+      "id": "question",
+      "body": "What's the valuation and how much are they raising?",
+      "company": "Ivy"
+    },
+    {
+      "id": "interested",
+      "body": "Interested, let's set up a call next week.",
+      "company": "Vertocol"
+    },
+    {
+      "id": "pass",
+      "body": "Thanks for thinking of us. I have to pass on this one.",
+      "company": "Ivy"
+    },
+    {
+      "id": "unsubscribe",
+      "body": "Remove me. My mailbox is full of these.",
+      "company": "Ivy"
+    }
+  ],
+  "expected": {
+    "zeutara": {
+      "lender": {
+        "kind": "pass",
+        "nextStep": "No reply needed. Zeutara isn't raising debt, so it's logged as replied."
+      },
+      "form_link": {
+        "kind": "form",
+        "nextStep": "Fill out their form as Jonah with Qube Finance's details: https://fund.example/apply"
+      },
+      "form_bare": {
+        "kind": "form",
+        "nextStep": "Fill out the form on their website as Jonah with the company's details."
+      },
+      "deck": {
+        "kind": "deck",
+        "nextStep": "Send the Ivy deck, then offer a call with the founder."
+      },
+      "question": {
+        "kind": "question",
+        "nextStep": "Answer it in Jonah's words, then offer a call with the founder."
+      },
+      "interested": {
+        "kind": "interested",
+        "nextStep": "Book the call with the founder."
+      },
+      "pass": {
+        "kind": "pass",
+        "nextStep": "No reply needed. Logged as replied."
+      },
+      "unsubscribe": {
+        "kind": "unsubscribe",
+        "nextStep": "Blocklisted. Never email them again."
+      }
+    },
+    "harborline": {
+      "lender": {
+        "kind": "pass",
+        "nextStep": "No reply needed. They're a lender, so it's logged as replied."
+      },
+      "form_link": {
+        "kind": "form",
+        "nextStep": "Fill out their form as Pat with Qube Finance's details: https://fund.example/apply"
+      },
+      "form_bare": {
+        "kind": "form",
+        "nextStep": "Fill out the form on their website as Pat with the company's details."
+      },
+      "deck": {
+        "kind": "deck",
+        "nextStep": "Send the Ivy deck, then offer a call with our service lead."
+      },
+      "question": {
+        "kind": "question",
+        "nextStep": "Answer it in Pat's words, then offer a call with our service lead."
+      },
+      "interested": {
+        "kind": "interested",
+        "nextStep": "Book the call with our service lead."
+      },
+      "pass": {
+        "kind": "pass",
+        "nextStep": "No reply needed. Logged as replied."
+      },
+      "unsubscribe": {
+        "kind": "unsubscribe",
+        "nextStep": "Blocklisted. Never email them again."
+      }
+    },
+    "none": {
+      "lender": {
+        "kind": "pass",
+        "nextStep": "No reply needed. They're a lender, so it's logged as replied."
+      },
+      "form_link": {
+        "kind": "form",
+        "nextStep": "Fill out their form with Qube Finance's details: https://fund.example/apply"
+      },
+      "form_bare": {
+        "kind": "form",
+        "nextStep": "Fill out the form on their website with the company's details."
+      },
+      "deck": {
+        "kind": "deck",
+        "nextStep": "Send the Ivy deck, then offer a call."
+      },
+      "question": {
+        "kind": "question",
+        "nextStep": "Answer it, then offer a call."
+      },
+      "interested": { "kind": "interested", "nextStep": "Book the call." },
+      "pass": {
+        "kind": "pass",
+        "nextStep": "No reply needed. Logged as replied."
+      },
+      "unsubscribe": {
+        "kind": "unsubscribe",
+        "nextStep": "Blocklisted. Never email them again."
+      }
+    }
+  }
+}

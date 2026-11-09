@@ -7,8 +7,10 @@ Evidence and owner fields are declarations, not independent verification.
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -125,11 +127,19 @@ def update(scope, task_id, **changes):
     for field in set(changes) - {'status'}:
         changes[field] = text(changes[field], field)
     with connection(write=True) as db:
-        row = db.execute('SELECT * FROM tasks WHERE scope=? AND id=?',
-                         (scope_path(scope), task_id)).fetchone()
-        if row is None:
+        # Board and cleanup lists print 8-character id prefixes, and on
+        # 2026-11-03 an update by prefix failed with a generic error until the
+        # full uuid was looked up. A unique prefix of 8+ characters resolves.
+        rows = db.execute("SELECT * FROM tasks WHERE scope=? AND (id=? OR (length(?)>=8 AND id LIKE ? || '%'))",
+                          (scope_path(scope), task_id, task_id, task_id)).fetchall()
+        exact = [r for r in rows if r['id'] == task_id]
+        rows = exact or rows
+        if not rows:
             raise ValueError('task not found in this workspace scope')
-        task = dict(row)
+        if len(rows) > 1:
+            raise ValueError('id prefix matches more than one task')
+        task = dict(rows[0])
+        task_id = task['id']
         desired = changes.get('status', task['status'])
         if desired == 'done' and task['status'] != 'done' and not changes.get('evidence'):
             raise ValueError('marking done requires evidence in this update')
@@ -194,15 +204,45 @@ def context_for(cwd):
     return '\n'.join(lines)
 
 
+VIEWS = ('Next', 'Quick', 'Decision', 'Waiting', 'Check status', 'Thinking', 'Backlog')
+LABEL = re.compile(r'^\[([^|\]]+)\|([^\]]+)\]\s*')
+
+
+def board(scope):
+    """Open tasks grouped by the '[Project | View]' label that leads next_action.
+
+    Caleb, 2026-10-18: "reorganize the work ledger". 414 open tasks read as one
+    flat list ordered by status; the label is how both ledgers were sorted.
+    """
+    groups = {}
+    for task in list_tasks(scope):
+        match = LABEL.match(task['next_action'])
+        project, view = (match.group(1).strip(), match.group(2).strip()) if match else ('Unsorted', 'Backlog')
+        groups.setdefault(project, {}).setdefault(view, []).append(task)
+    rank = {view: index for index, view in enumerate(VIEWS)}
+    lines = []
+    for project in sorted(groups, key=lambda name: (name == 'Unsorted', -sum(map(len, groups[name].values())), name)):
+        lines.append(f'{project} ({sum(map(len, groups[project].values()))})')
+        for view in sorted(groups[project], key=lambda name: rank.get(name, len(VIEWS))):
+            lines.append(f'  {view}')
+            lines += [f"    - {task['title'][:110]}" + (' [active]' if task['status'] == 'active' else '')
+                      for task in groups[project][view]]
+    return '\n'.join(lines)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    for name in ('add', 'list', 'update', 'context'):
+    for name in ('add', 'list', 'update', 'context', 'board'):
         command = commands.add_parser(name)
         command.add_argument('--scope', default=os.getcwd(), help='exact workspace path; canonicalized, no parent-scope lookup. Use ~ for a personal todo that shows in every workspace')
         if name == 'add':
-            command.add_argument('--title', required=True)
-            command.add_argument('--source-key', required=True, help='idempotency key unique within this workspace')
+            # 2026-10-18: an agent saving "save to todo" ran
+            # `work-ledger add --scope ~ "<text>"`, the spelling AGENTS.md
+            # implies, and got an argparse error. A plain title now works.
+            command.add_argument('words', nargs='*', help='the task title, when --title is not given')
+            command.add_argument('--title')
+            command.add_argument('--source-key', help='idempotency key unique within this workspace; defaults to a hash of the title')
             command.add_argument('--owner', default='')
             command.add_argument('--next-action', default='')
         elif name == 'update':
@@ -215,12 +255,21 @@ def main(argv=None):
     args = vars(parser.parse_args(argv))
     command, scope = args.pop('command'), args.pop('scope')
     try:
-        if command == 'context':
-            result = context_for(scope)
+        if command in ('context', 'board'):
+            result = (context_for if command == 'context' else board)(scope)
             if result:
                 print(result)
         else:
             if command == 'add':
+                words = ' '.join(args.pop('words'))
+                if args['title'] and words:
+                    raise ValueError('give the title once, positionally or with --title')
+                args['title'] = args['title'] or words
+                if not args['title']:
+                    raise ValueError('a task title is required')
+                if not args['source_key']:
+                    digest = hashlib.sha256(' '.join(args['title'].split()).encode()).hexdigest()
+                    args['source_key'] = 'title-' + digest[:16]
                 result = add(scope, **args)
             elif command == 'list':
                 result = list_tasks(scope, include_terminal=args['all'])

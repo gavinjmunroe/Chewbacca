@@ -22,6 +22,7 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | --- | --- | --- | --- |
 | [31Carlton7/plynn](https://github.com/31Carlton7/plynn) | Carlton Aikins | MIT | On-device Mac dictation. **Forked and vendored** at `plynn/`, ported back to macOS 15 and given the Chewie voice route. See [plynn/NOTICE.md](plynn/NOTICE.md) |
 | [fastrepl/anarlog](https://github.com/fastrepl/anarlog) | fastrepl | MIT | The macOS permission assistant: the card pinned over System Settings, its sketch arrow, guide cursor, hatched drag placeholder, motion and placement, and the drag of the app's own file URL into a Privacy list. **Ported** from Rust and objc2 (`plugins/permissions`, `crates/overlay-kit`, read at `abbaf07f9e40`) to Swift in `mac/permission-guide/`, driven by `bin/chewbacca-permissions` |
+| [fastrepl/anarlog](https://github.com/fastrepl/anarlog) | fastrepl | MIT | Meeting autopilot: the mic-in-use detector (Core Audio process objects with IsRunningInput, outermost-.app resolution, Apple call daemon relabel, `crates/detect`), the 15 s start threshold and stop confirmation (`plugins/detect`, `apps/desktop/src/stt/auto-stop.ts`), the call-app bundle ids (`meeting-apps.ts`), and the Core Audio process tap for system audio (`crates/audio-actual/src/speaker/macos.rs`), read at `dd55e8c26567`. **Ported** to Swift in `mac/room-capture/Sources/RoomCapture/MicUsers.swift` and `TapAudio.swift` and to Python in `bin/lib/meeting_autopilot.py`. Copyright (c) 2023-present Fastrepl, Inc. Nothing from its `enterprise/` tree (commercial license) was read or used |
 | [31Carlton7/mac-cli](https://github.com/31Carlton7/mac-cli) | Carlton Aikins | MIT | The `mac` command. Cloned and built by `setup.sh` |
 | [31Carlton7/skills](https://github.com/31Carlton7/skills) | Carlton Aikins | see upstream | The `deslop` skill, which holds the judgement half of code slop review |
 | [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo) | Peter Steinberger | MIT | The widest macOS control surface anywhere: see, click, type, menus, Dock, Spaces, dialogs, windows |
@@ -31,9 +32,15 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | [onvoyage-ai/gtm-engineer-skills](https://github.com/onvoyage-ai/gtm-engineer-skills) | OnVoyage AI | MIT | Twelve SEO, AEO and GEO skills (keyword research, AI-search audits, content, backlinks, Reddit), linked per skill from a clone by `setup.sh` |
 | [Shubhamsaboo/awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps) | Shubham Saboo | Apache-2.0 | Two skills cloned by `setup.sh`: `thinking-out-loud` echoes a voice ramble back before acting on it, and `first-reader` runs simulated beta readers over a draft before it is posted |
 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | Corey Haines | MIT | Six of its 50 marketing skills, linked per skill from a clone by `setup.sh`: offers, pricing, cold-email, copywriting, marketing-psychology, social |
+| [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) | Cathryn Lavery | MIT | The `diagram` skill, vendored at a pinned commit with its `verify-geometry.py` checker. Onboarding, profiles, auto-update and the editorial template are left out; see `skills/diagram/UPSTREAM.md` |
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | Paul Bakaus | Apache-2.0 | The four page modes and the Verify and Refuse lists in `skills/interface/references/craft-floor.md`. The plugin itself is not installed |
+| [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) | Leonxlnx | MIT | "Motion claimed, motion shown", the dials and two countable checks in the interface skill |
+| [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop) | Hardik Pandya | MIT | Two writing patterns, false agency and narrator-from-a-distance, in `.claude/rules/writing.md` |
+| [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | Zara Zhang | MIT | The stage size, reading-or-speaking question and no-process-labels rules in `crafts/deck.md`. Its public deploy script is not used |
 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | Karim Shoair | BSD-3-Clause | The fetcher and hidden-text sanitizer under `scrape`, installed into its own venv on first run. Its stealth fetcher and Cloudflare solver are deliberately not used |
 | [browser-use/macOS-use](https://github.com/browser-use/macOS-use) | browser-use | MIT | The runtime under `mac-use`. Chewbacca owns the provider adapters, macOS-use supplies the agent loop |
-| [lahfir/agent-desktop](https://github.com/lahfir/agent-desktop) | lahfir | Apache-2.0 | The accessibility-tree driver. Stable element refs, JSON out |
+| [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | lahfir, ctate | Apache-2.0 | The accessibility-tree driver and `chewie notifications`. Its cursor overlay is the idea behind the marker `chewie app press` draws |
+| [quiet-node/thuki](https://github.com/quiet-node/thuki) | quiet-node | Apache-2.0 | `src-tauri/src/ocr.rs` is the idea behind `chewie text`: macOS Vision OCR with no model call. Written fresh in `mac/appctl/appctl.swift` |
 | [BlueM/cliclick](https://github.com/BlueM/cliclick) | BlueM | custom | Synthetic input. Does one thing and has since forever |
 | [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop) | Peter Yang | MIT | 20+ AI slop patterns, voice-preserving edit pass |
 | [conorbronsdon/avoid-ai-writing](https://github.com/conorbronsdon/avoid-ai-writing) | Conor Bronsdon | MIT | 61 pattern categories, a 112-word replacement table, and the deterministic Node detector that `ai-scan` wraps |
@@ -65,7 +72,7 @@ most-engaged entries did not survive that check.
 
 Read, learned from, and deliberately not installed. The full verdicts are in
 [docs/mac/LANDSCAPE.md](docs/mac/LANDSCAPE.md) (every tool in the space with
-stars, license, and a reason) and [docs/STARRED-AUDIT.md](docs/STARRED-AUDIT.md)
+stars, license, and a reason) and [docs/plans/STARRED-AUDIT.md](docs/plans/STARRED-AUDIT.md)
 (115 starred repos, 17 installed, and a stated reason for each of the other 98).
 
 The three worth reading even if you never install them:
@@ -80,6 +87,42 @@ The three worth reading even if you never install them:
   every action through one safety gate.
 - [anthropics/claude-quickstarts](https://github.com/anthropics/claude-quickstarts)
   `computer-use-demo`. The canonical see-act-see loop in under a thousand lines.
+
+[block/goose](https://github.com/block/goose) (Apache-2.0). `chewbacca recipe`
+takes its parameter types, its 32 parameter cap, its refusal of Unicode tag
+characters and its rule that a file parameter has no default. No code is copied:
+goose renders a template into a model prompt, and `tools/recipe.py` runs argv
+with no shell and no model.
+
+realm became MIT on its own later, so ideas taken from it after that can carry
+code. From [31Carlton7/realm](https://github.com/31Carlton7/realm) and
+[31Carlton7/mcp-manager](https://github.com/31Carlton7/mcp-manager), both MIT,
+by Carlton Aikins, 2026-11-02:
+
+- `bin/mcp-hub`, which runs each local MCP server once for every tab. The
+  design is realm's `McpHub` (one client per server across sessions, a
+  three-failure circuit breaker, idle sleep, `credentialValues` redaction with
+  its four-character floor) and mcp-manager's gateway (a path per server on
+  loopback, a Host check against DNS rebinding, secrets in the Keychain).
+  Rewritten without dependencies, since the kit ships no node_modules.
+- `chewbacca mcp add` reading a pasted URL, command, `claude mcp add` line or
+  JSON (mcp-manager's `SmartPasteParser`), `chewbacca mcp search` over the
+  official registry, `chewbacca mcp test`, and the Cursor and Claude Desktop
+  targets with a backup before every write.
+- `memory` and `filesystem` in `config/mcp/catalog.json`, from mcp-manager's
+  curated catalog.
+- `skills/lecture-notes`, adapted from realm's skill of the same name.
+- Six skills from [31Carlton7/skills](https://github.com/31Carlton7/skills)
+  (MIT): app-growth, app-review, ghostwrite, heavy-work, ship-feature and
+  swiftui, installed the way `deslop` already was.
+
+From Amber's own amber-id (`amber/id/src/lib`, 9d29252), under Karthik's
+2026-10-20 ruling that features move between Amber and Chewbacca freely:
+`people-rank-realness`, `name-nicknames`, `contact-duplicates`, `source-trust`,
+`transcript-filler` and `person-mentions`, with the five files they import and
+their tests, in `bin/lib/people-amber/` (2026-11-02). `chewbacca people-check`
+runs them over the people store and sends the cases they can't settle to Jev;
+meeting capture uses a Python twin of `transcript-filler`.
 
 The import design came from one repo:
 [31Carlton7/realm](https://github.com/31Carlton7/realm), by Carlton Aikins.
@@ -145,7 +188,7 @@ read-receipt and secure-input taxonomy, ported),
 never copied), WhisperKit, parakeet-mlx, and Apple's WWDC25 session 277 plus
 TN2150.
 
-Ecosystem and method reading, in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md):
+Ecosystem and method reading, in [docs/reference/ECOSYSTEM.md](docs/reference/ECOSYSTEM.md):
 [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk),
 [coleam00/context-engineering-intro](https://github.com/coleam00/context-engineering-intro),
 [sha256/local-d1](https://github.com/sha256/local-d1),
@@ -192,13 +235,14 @@ practitioner. The rule that forced this is
 | [Application essay](library/crafts/application-essay.md) | A former Dartmouth admissions officer's account of reading the pile, College Essay Guy and Collegewise on show-don't-tell, plus one outcome retro diffing five rejections against two advances in a single cycle |
 | [Study guide](library/crafts/study-guide.md) | Roediger and Karpicke, above |
 | [Onboarding kit](library/crafts/onboarding-kit.md) | Diátaxis, above |
+| [Deck](library/crafts/deck.md) | zarazhangrui/frontend-slides, above |
 
-### People, by permission
+### Amber
 
-The `people` skill and CLI are ported from **Amber's identity service** with the
-permission of its authors, **Karthik Devarakonda** and **Sagar Tiwari**. Amber
-is a multi-tenant Cloud SQL service. This is one SQLite file on a laptop. The
-ideas carried over, the tenancy did not.
+Amber and Chewbacca build the same things, so features move between them with
+no credit exchanged (Karthik, 2026-10-20). Every Amber repo is copied into
+`amber/` (removed from main on 2026-11-05, still in git history), and the `people` layer started from amber-id's
+design. Upstream pointers there are for resyncing only.
 
 `skill-scan`'s rubric weights started from a public review of 100 Claude skills
 that reported roughly 70% of them failing it. The five dimensions and the
@@ -269,10 +313,8 @@ stored twice for editing a LinkedIn vanity URL between exports. Resolve the
 person before writing the fact, and treat a refusal to resolve as the answer
 rather than the obstacle.
 
-**A coursework ledger, machine-readable, with per-course AI policy.** Built out
-of the actual syllabi. It is checked before helping with graded work, because
-one course bans AI, one requires prompt disclosure, and one allows ideation
-only. Nothing in a general assistant knows that a given class forbids it.
+**A coursework ledger, machine-readable.** Built out of the actual syllabi:
+deadlines, attendance budgets and grade math, each with the page it came from.
 
 **Second brain as one repo with enforced invariants.** One fact, one home, plus
 a `brain-check.sh` that refuses a commit over broken wikilinks, an orphaned
@@ -317,8 +359,8 @@ with the session. A guide is one HTML file plus a JSON sidecar of per-topic
 results, so the next session opens on the three things that were missed instead
 of asking what to review.
 
-**The thousand-things list.** [docs/1000.md](docs/1000.md) is a thousand
-specific ways this kit is incomplete, and [docs/1000-STATUS.md](docs/1000-STATUS.md)
+**The thousand-things list.** [docs/plans/1000.md](docs/plans/1000.md) is a thousand
+specific ways this kit is incomplete, and [docs/plans/1000-STATUS.md](docs/plans/1000-STATUS.md)
 is generated from the commit log rather than written by hand: a commit closes an
 item by naming it. It also records the 14 items that were simply wrong when
 written. This page is item 814.

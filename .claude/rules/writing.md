@@ -115,6 +115,32 @@ Before writing any headline, ask: could this headline appear on a competitor's s
 
 If yes, it is not specific enough. Rewrite it.
 
+### Name who did it
+
+**False agency** gives an inanimate thing a human verb, which hides the person
+who acted. Complaints do not become fixes, decisions do not emerge, data does
+not tell. Name the human, or put the reader in the seat with "you".
+
+```
+WRONG: "The complaint becomes a fix."
+RIGHT: "The team fixed it that week."
+
+WRONG: "The data tells us retention dropped."
+RIGHT: "We read the cohort table: retention dropped 8 points."
+```
+
+**Narrator-from-a-distance** floats above the scene instead of putting the
+reader in it: "Nobody designed this", "This is why...", "People tend to...".
+
+```
+WRONG: "Nobody designed this. It just accumulated."
+RIGHT: "You don't sit down one day and decide to run 40 tabs."
+```
+
+Both are from Stop Slop (hardikpandya/stop-slop, MIT, `8da1f03`,
+`references/structures.md`). Neither has a fixed vocabulary, so `slop-check`
+does not catch them. Read for them.
+
 ---
 
 ## TWO SHAPES THAT READ AS GENERATED
@@ -218,6 +244,48 @@ explicit list of what to stop doing.
 - Ask whether any sentence could be moved into a different person's essay
   unchanged. If yes, it is yours, not theirs.
 
+### Group papers: the teammate's section is the spec
+
+On 2026-10-11 a 1,285-word Miyake half went into a team paper next to Andy's
+hand-written Douglas half. Every scanner scored it clean. Andy read it once and
+called it "the slop version." Measured side by side, the tells were:
+
+- **Comparison by symmetry.** "both" 10 times in mine, once in his. Two people
+  compared in paired sentences ("Both of them... and both of them...") reads
+  as a template. Pick the one specific overlap and show it.
+- **Quote confetti.** 23 short phrases lifted from museum and press copy
+  ("a laboratory," "rings of color," "making things"). He quoted 4 times and
+  spent a whole paragraph on one primary source, Johnson's God's Trombones.
+- **"Not just" contrasts.** "Technical, but it was also democratic." "Shape
+  light, not just clothing." Same move as "it's not X, it's Y" in a new coat.
+- **Signposted scaffolding.** Paragraphs opened on "His pleats were also about
+  motion." and "That opening motion does two things." and closed on a kicker
+  ("The dress doesn't really exist until someone moves in it"). His open on a
+  fact and end on a fact.
+- **No point of view.** Mine summarized research notes. His tells a life with
+  texture (busboy, glass factory, the preacher's trombone) and says what it means.
+
+The bar is higher than matching the teammate: beat their section. Andy's half
+was good because it told a life with texture and spent a paragraph on one
+primary source. It also had typos, two tacked-on "-ing" clauses, and a closer
+that said nothing ("it's no wonder why his impact is still relevant today").
+So every paragraph of ours:
+
+1. Opens on one claim a reader could argue with, stated plainly.
+2. Proves it with one specific: a work, a date, an object you could point at.
+3. Quotes one primary source (the designer's own words, the work itself) and
+   says what the quote shows, in a sentence of our own.
+4. Ends on the most concrete fact in the paragraph, never a moral.
+5. Has zero typos, sentence lengths that vary, and the course's register.
+
+Then score both sections with `slop-check --essay`. Ours goes in only if it
+scores at or under theirs. The essay-gate hook refuses any Google Doc write of
+150+ words that scores "rewrite" (20+).
+
+Before anything goes into a shared doc, read the teammate's section first and
+match its moves, and run `slop-check --essay` on the draft. A file that scores
+"rewrite" there does not go in.
+
 ### When the two rulesets conflict
 
 Their voice wins on anything going out under their name. The slop bans and the
@@ -255,9 +323,17 @@ Instead:
 - **When the user is frustrated, get shorter.** Swearing, "bruh", one-line
   messages: cut the preamble entirely and act.
 
+**A closing report is one screen on a phone, at most.** Lead with what's done and what he has to do, and leave the rest in a file. On 2026-11-05 he came back to a report with lists, a second report and a note about a memory pointer, and wrote "Holy yap bruh".
+
 Formatting follows content. A table is right for six rows of comparable data and
 wrong for three thoughts. Headers are right for a document someone will scan
 later and wrong for a reply they will read once.
+
+**Never hand him a tool's internal label.** A draft number, job id, ticket or commit hash means nothing to him, so say what the thing is: "the Parker text", "the speed job". If he has to pick one, quote it. On 2026-11-06 a reply told him to send "#148", and he wrote "stop telling me numbers that mean nothing to be what the heck is a 148".
+
+### Showing him a draft in chat
+
+When he asks to see a draft, or a reply ends on anything he'd paste or send, format it so he can tell what he's looking at. Put it at the bottom of the reply, after anything you have to say. Each thing he'd paste gets its own fenced block with a plain label line above it: one block per text, per email or per form field. Open items go above the blocks as a short list. Never run a draft into a paragraph, and never point him at a file instead when he asked to see it here. Caleb, 2026-11-06, asking to see the Ignite application: "fix chewbs to always format things well when u show me them". That morning another tab heard the same thing about texts: "always show me them at the bottom formatted well so I can know what I'm looking at".
 
 ### Shorter is not the same as their register
 

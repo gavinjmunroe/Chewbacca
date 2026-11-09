@@ -1,0 +1,15 @@
+{
+  "name": "rrf3 k=10 + prf 0.6x5",
+  "cfg": {
+    "fusion": "rrf3",
+    "rrf_k": 10,
+    "prf_b": 0.6,
+    "prf_m": 5,
+    "folder_cap": 1,
+    "w_dense": 0.7
+  },
+  "chosen_by": "net queries gained over dev (24), dev2 (46), dev3 (70) against minmax fusion on the same frozen index: +14 -1. Tie-break MRR.",
+  "index": "frozen copy of ~/second-brain/.brain at 2026-10-12 22:50, 839 files, 4006 chunks",
+  "frozen_at": "2026-10-12T23:07:15-0700",
+  "note": "frozen_at was first written as 23:20, a time typed by hand; the file was written at 23:07:15 (its mtime) and the run is stamped 23:07:17. cfg documents brain.py's constants; sealed() runs brain.rank() defaults. Review found rrf3 broke score ties by file name; fixed after this run, so this run measured the name-ordered ties."
+}

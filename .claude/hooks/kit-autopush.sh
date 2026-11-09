@@ -144,15 +144,45 @@ gate() {
   "$@" >/dev/null 2>&1 || FAILED="$FAILED $name"
 }
 
-gate checksums   python3 tools/checksums.py --check
-# The one above compares disk to disk, so it passes while the commit is
-# already lying. This compares what git would hand a stranger to what the
-# manifest claims, which is the comparison an installer actually makes.
+# The gates read what the push would ship, never the working tree. They used
+# to run on disk, so another tab's uncommitted file failed them for everyone:
+# autopush.log from 2026-09-20 to 2026-10-11 holds 156 BLOCKED pushes against
+# 37 that went out, and 84 of the 156 failed only `checksums` or `counts`,
+# the two that compare disk to disk. That is why "Your 2 commits are still
+# local, they'll push once the other tab commits" kept coming back, and why
+# Caleb kept saying "push everything get it all on main"
+# (feedback_always_land_on_main, 2026-10-05, 10-08, 10-09 twice).
+#
+# So HEAD is exported to a scratch dir (0.6 s for 2,994 files on 2026-10-11)
+# and counts, frontmatter and evals run there. `committed` already checks the
+# manifest against HEAD, which is the comparison an installer makes, so the
+# disk-to-disk `checksums` gate is gone.
 gate committed   python3 tools/committed_checksums.py
-gate counts      python3 tools/counts.py --check
-gate frontmatter python3 tools/frontmatter.py
-gate evals       python3 tools/evals.py
-gate secrets     python3 bin/secret-scan .
+HEADTREE="$(mktemp -d "${TMPDIR:-/tmp}/autopush-head.XXXXXX")"
+if git archive HEAD 2>/dev/null | tar -x -C "$HEADTREE" 2>/dev/null; then
+  gate counts      python3 "$HEADTREE/tools/counts.py" --check
+  gate frontmatter python3 "$HEADTREE/tools/frontmatter.py"
+  gate evals       python3 "$HEADTREE/tools/evals.py"
+else
+  FAILED="$FAILED export"
+fi
+rm -rf "$HEADTREE"
+# Only the files this push changes. Everything else is already on the remote,
+# so scanning it cannot stop a leak, and the whole-tree scan took 41-54s at
+# load 33 on 2026-10-09: with the 12s checksum gate that put this hook past
+# its 30s watchdog, so it averaged 27s per Stop and pushed nothing.
+# NUL-separated so a name with a space or newline is one path, "./" so a name
+# starting with "-" is never read as a flag, and a failed diff falls back to
+# the whole tree: an unreadable list must never mean nothing was scanned.
+PUSHED=()
+NAMES="$(mktemp "${TMPDIR:-/tmp}/autopush-names.XXXXXX")"
+if git diff -z --name-only --diff-filter=d '@{u}..HEAD' >"$NAMES" 2>/dev/null; then
+  while IFS= read -r -d '' f; do PUSHED+=("./$f"); done <"$NAMES"
+  [ "${#PUSHED[@]}" -gt 0 ] && gate secrets python3 bin/secret-scan "${PUSHED[@]}"
+else
+  gate secrets python3 bin/secret-scan .
+fi
+rm -f "$NAMES"
 
 # Shell syntax, but only on the files this push would actually ship. Running
 # bash -n over the whole tree on every turn is the kind of cost that gets a
@@ -168,17 +198,17 @@ done < <(git diff --name-only '@{u}..HEAD' 2>/dev/null)
 
 if [ -n "$FAILED" ]; then
   note "BLOCKED $AHEAD commit(s), failed:$FAILED"
-  REASONS="$FAILED" AHEAD="$AHEAD" python3 <<'PY' | say_once "blocked|$(git rev-parse HEAD 2>/dev/null)|$FAILED"
+  REASONS="$FAILED" AHEAD="$AHEAD" python3 -I <<'PY' | say_once "blocked|$(git rev-parse HEAD 2>/dev/null)|$FAILED"
 import json, os
 reasons = os.environ.get("REASONS", "").split()
 ahead = os.environ.get("AHEAD", "?")
 hint = {
-    "checksums": "run: python3 tools/checksums.py",
+    "export": "git archive HEAD failed, so nothing was checked",
     "committed": "the committed SHA256SUMS.txt does not describe the committed tree, so an install would refuse. Commit everything, then: python3 tools/checksums.py and amend",
     "counts": "run: python3 tools/counts.py",
     "frontmatter": "a SKILL.md yaml block does not parse, so that skill is silently unregistered",
     "evals": "a skill has malformed or missing evals",
-    "secrets": "run: python3 bin/secret-scan . and remove the literal",
+    "secrets": "run: python3 bin/secret-scan $(git diff --name-only @{u}..HEAD) and remove the literal",
 }
 lines = [f"- {r}: {hint.get(r.split(':')[0], 'see the check output')}" for r in reasons]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (
@@ -215,7 +245,7 @@ rm -rf "$LOCK" 2>/dev/null
 
 if [ "$PUSH_RC" -eq 0 ]; then
   note "pushed $AHEAD commit(s) from $BRANCH"
-  AHEAD="$AHEAD" python3 <<'PY'
+  AHEAD="$AHEAD" python3 -I <<'PY'
 import json, os
 n = os.environ.get("AHEAD", "?")
 s = "" if n == "1" else "s"
@@ -241,7 +271,7 @@ case "$PUSH_ERR" in
       exit 0
     fi
     : > "$DENIED_STAMP" 2>/dev/null || true
-    python3 <<'PY2'
+    python3 -I <<'PY2'
 import json
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (
     "Kit auto-push is on by default, and this checkout has no push access to its "
@@ -255,7 +285,7 @@ PY2
     exit 0
     ;;
 esac
-PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 <<'PY' | say_once "failed|$(git rev-parse HEAD 2>/dev/null)"
+PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 -I <<'PY' | say_once "failed|$(git rev-parse HEAD 2>/dev/null)"
 import json, os
 err = " ".join(os.environ.get("PUSH_ERR", "").split())[:300]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (

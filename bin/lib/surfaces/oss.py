@@ -8,7 +8,7 @@ license buckets:
 
     remixable   a permissive license GitHub detected itself (MIT, Apache, BSD...)
     caveat      MPL-2.0 or open core a person read and recorded; build with care
-    copyleft    GPL, AGPL, LGPL and friends: usable, not remixable into a product
+    copyleft    GPL, AGPL, LGPL and friends: a shipped derivative carries the same license
     none        no license, source-available, or one GitHub could not classify
 
 "More" on a row shows that one entry in full. Under the list sit the engines

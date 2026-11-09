@@ -1,0 +1,186 @@
+[
+  {
+    "snap": "calculator",
+    "intent": "make the number negative",
+    "expect": "Change Sign",
+    "got": "Change Sign",
+    "confidence": 1.0,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "times",
+    "expect": "Multiply",
+    "got": "Multiply",
+    "confidence": 0.98,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "minus",
+    "expect": "Subtract",
+    "got": "Subtract",
+    "confidence": 1.0,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "plus",
+    "expect": "Add",
+    "got": "Add",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "show me the result",
+    "expect": "Equals",
+    "got": "Equals",
+    "confidence": 0.97,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "add a decimal point",
+    "expect": "Point",
+    "got": "Point",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "remove the last digit I typed",
+    "expect": "Delete",
+    "got": "Delete",
+    "confidence": 0.84,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "divided by",
+    "expect": "Divide",
+    "got": "Divide",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "turn it into a percentage",
+    "expect": "Percent",
+    "got": "Percent",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "compute the square root",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.97,
+    "via": "jev"
+  },
+  {
+    "snap": "calculator",
+    "intent": "open the history tape",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "make the text bold",
+    "expect": "bold",
+    "got": "bold",
+    "confidence": 0.96,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "italicize it",
+    "expect": "italic",
+    "got": "italic",
+    "confidence": 0.97,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "center the paragraph",
+    "expect": "align center",
+    "got": "align center",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "right-align this",
+    "expect": "align right",
+    "got": "align right",
+    "confidence": 0.98,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "change the font size",
+    "expect": "font size",
+    "got": "font size",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "pick a different typeface",
+    "expect": "typeface",
+    "got": "typeface",
+    "confidence": 1.0,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "underline the words",
+    "expect": "underline",
+    "got": "underline",
+    "confidence": 0.96,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "make it a bulleted list",
+    "expect": "list style",
+    "got": "list style",
+    "confidence": 0.84,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "change the color of the text",
+    "expect": "text color",
+    "got": "text color",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "double space the lines",
+    "expect": "line spacing",
+    "got": "line spacing",
+    "confidence": 0.97,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "insert a table",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.89,
+    "via": "jev"
+  },
+  {
+    "snap": "textedit",
+    "intent": "check the spelling",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.89,
+    "via": "jev"
+  }
+]

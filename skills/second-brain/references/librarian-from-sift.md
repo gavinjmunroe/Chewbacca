@@ -174,8 +174,7 @@ Two stages, both grounded in the page text:
    filler. Reject any question whose answer is not in the cited passage.
 
 This pairs with the `study-guide` and `quiz` skills; use it when the material
-lives in `wiki/` rather than in lecture files, and respect
-`coursework policy <course> ai` before generating anything for a graded class.
+lives in `wiki/` rather than in lecture files.
 
 ## 10. Cadence with a budget (the heartbeat idea)
 

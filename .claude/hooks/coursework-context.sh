@@ -34,7 +34,7 @@ COURSEWORK_JSON="$(coursework due --days 10 --json 2>/dev/null || true)"
 [ -n "$COURSEWORK_JSON" ] || exit 0
 export COURSEWORK_JSON
 
-python3 <<'PY' > "$CACHE.tmp"
+python3 -I <<'PY' > "$CACHE.tmp"
 import json, os
 
 raw = os.environ.get("COURSEWORK_JSON", "")
@@ -58,7 +58,7 @@ print(json.dumps({
         "additionalContext": (
             "Coursework deadlines: " + "; ".join(bits) + ". "
             "Source: the ledger at ~/coursework. Run `coursework due`, "
-            "`coursework attendance`, or `coursework policy <course> ai` "
+            "or `coursework attendance` "
             "rather than guessing, and never state a date you did not read."
         ),
     }

@@ -8,7 +8,7 @@
  *   coursework week                   the next seven days, day by day
  *   coursework attendance [course]    absences used against the budget
  *   coursework grade [course]         weighted standing and what is left
- *   coursework policy <course> [key]  ai | late | attendance | exams | grading
+ *   coursework policy <course> [key]  late | attendance | exams | grading
  *   coursework ics [--out file.ics]   every deadline as a calendar file
  *   coursework check                  validate the ledger, loudly
  *
@@ -50,6 +50,10 @@ const c = {
 let RAW_LINES = [];
 
 function parseYaml(text, file) {
+  // A BOM made the first row indent 1, parseMap stopped before
+  // `deliverables:`, and `due` said "Nothing due" over real deadlines
+  // (break-it, 2026-10-19).
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   const lines = text.split("\n");
   RAW_LINES = lines;
   const rows = [];
@@ -60,6 +64,7 @@ function parseYaml(text, file) {
     const indent = stripped.length - stripped.trimStart().length;
     rows.push({ indent, text: stripped.trim(), line: i + 1 });
   }
+  joinFlowRows(rows, file);
   const [value] = parseBlock(
     rows,
     0,
@@ -68,6 +73,48 @@ function parseYaml(text, file) {
     file,
   );
   return value;
+}
+
+// A flow map or list written across lines ("- {" then one key per line, then
+// "}") is joined back into one row before parsing. Without this, BISC 101's
+// 21 deliverables, every one written that way, each parsed as the string "{"
+// and silently vanished from `due`, `week` and the session briefing, so
+// weekly Quiz #5 (closes Mon 9am, no late attempts) was found only by hand on
+// 2026-10-11.
+function flowDepth(text) {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote && text[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      // An apostrophe inside a bare word ("Mrs. O'Neil") is not a quote.
+      if (ch === "'" && /\w/.test(text[i - 1] || "")) continue;
+      quote = ch;
+    } else if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return depth;
+}
+
+function joinFlowRows(rows, file) {
+  for (let i = 0; i < rows.length; i++) {
+    let depth = flowDepth(rows[i].text);
+    if (depth <= 0) continue;
+    let j = i + 1;
+    while (depth > 0 && j < rows.length) {
+      const next = rows[j].text;
+      const sep = /[{[,]$/.test(rows[i].text) || /^[}\]]/.test(next) ? " " : ", ";
+      rows[i].text += sep + next;
+      depth += flowDepth(next);
+      j++;
+    }
+    if (depth > 0) throw err(file, rows[i].line, "a { or [ here is never closed");
+    rows.splice(i + 1, j - i - 1);
+  }
 }
 
 function stripComment(s) {
@@ -110,6 +157,11 @@ function parseMap(rows, start, end, indent, file) {
     const m = text.match(/^([A-Za-z0-9_.\- ]+):(?:\s+(.*))?$/);
     if (!m) throw err(file, line, `expected "key: value", got "${text}"`);
     const key = m[1].trim();
+    // A second `deliverables:` silently replaced the first list, deadlines
+    // and all (break-it, 2026-10-19). A repeated key is an error now.
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      throw err(file, line, `"${key}" appears twice in the same block; merge them`);
+    }
     const inline = (m[2] || "").trim();
     // Block scalars: "key: >-" folds the indented lines below into one string,
     // "key: |" keeps the line breaks. Policy text is prose and belongs in a
@@ -305,7 +357,16 @@ function loadLedger() {
   if (fs.existsSync(semesterFile)) {
     semester = read(semesterFile) || {};
   }
-  if (Number.isFinite(Number(semester.assume_done_after_days))) {
+  if (
+    semester.assume_done_after_days !== undefined &&
+    semester.assume_done_after_days !== null &&
+    semester.assume_done_after_days !== "" &&
+    Number.isFinite(Number(semester.assume_done_after_days))
+  ) {
+    // A negative grace hid an item due in 2 days (break-it, 2026-10-19).
+    if (Number(semester.assume_done_after_days) < 0) {
+      throw err(semesterFile, 0, "assume_done_after_days can't be negative");
+    }
     GRACE_DAYS = Number(semester.assume_done_after_days);
   }
   const courses = [];
@@ -353,7 +414,11 @@ function parseDate(v) {
   const s = String(v).trim();
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // new Date rolls 2027-02-30 over to Mar 2. An impossible date is no date,
+  // so `check` reports it instead of a deadline landing on the wrong day.
+  if (d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) return null;
+  return d;
 }
 
 function today() {
@@ -376,18 +441,24 @@ function iso(d) {
 
 // ── Model ────────────────────────────────────────────────────────────────────
 
-// Caleb's rule, set 2026-09-20: he either does a thing within two days of its
-// deadline or he does not do it at all. So a `todo` that is further past due
-// than GRACE_DAYS stops being an action item and is reported as `assumed-done`.
-// It is deliberately a separate word from `done`: `done` means somebody saw it
-// land, `assumed-done` means the window closed. Override per semester with
-// `assume_done_after_days` in semester.yml.
-let GRACE_DAYS = 2;
+// An opt-in rule, first set by Caleb on 2026-09-20: he either does a thing
+// within two days of its deadline or he does not do it at all. With
+// `assume_done_after_days: N` in semester.yml, a `todo` more than N days past
+// due stops being an action item and is reported as `assumed-done`, a separate
+// word from `done`: `done` means somebody saw it land, `assumed-done` means the
+// window closed. Off unless a semester asks for it (2026-10-10): a stranger's
+// ledger must never quietly drop an overdue item they may still owe.
+let GRACE_DAYS = null;
 
 function closeStatus(d, due) {
   const status = (d.status || "todo").toLowerCase();
-  if (status !== "todo" || !due) return status;
+  if (status !== "todo" || !due || GRACE_DAYS === null) return status;
   return daysBetween(today(), due) < -GRACE_DAYS ? "assumed-done" : status;
+}
+
+function timeInNotes(notes) {
+  const m = String(notes || "").match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*([ap])\.?m\b/i);
+  return m ? `${m[1]}:${m[2] || "00"}${m[3].toLowerCase()}m` : null;
 }
 
 // Anything that is no longer an action item, however it got that way.
@@ -410,7 +481,10 @@ function deliverables(courses) {
         // JSON consumers read `date`, not `due`. A Date serializes to UTC, and
         // a local-midnight deadline lands on the previous day east of Greenwich.
         date: due ? iso(due) : null,
-        at: d.at || null,
+        // A deadline time often lives only in the notes ("11:59pm, Brightspace
+        // dropbox"). On 2026-10-24 `due` said "tomorrow" for WP2 and hid the
+        // 11:59pm that sat in its notes, so the answer needed a second lookup.
+        at: d.at || timeInNotes(d.notes),
         type: d.type || "assignment",
         weight:
           d.weight != null ? d.weight : d.points != null ? d.points : null,
@@ -510,7 +584,7 @@ function cmdDue(args) {
     const tint = left <= 1 ? c.red : left <= 3 ? c.yellow : (s) => s;
     const weight = d.weight != null ? c.dim(`  ${d.weight}`) : "";
     say(
-      `  ${pad(d.course, 12)} ${pad(d.name, 38)} ${tint(pad(when, 9))} ${c.dim(fmt(d.due))}${weight}`,
+      `  ${pad(d.course, 12)} ${pad(d.name, 38)} ${tint(pad(when, 9))} ${c.dim(fmt(d.due) + (d.at ? " " + d.at : ""))}${weight}`,
     );
   }
   if (undated.length) {
@@ -586,10 +660,13 @@ function cmdWeek(args) {
 
 function cmdAttendance(args) {
   const { courses } = loadLedger();
-  const target = findCourse(
-    courses,
-    args.find((a) => !a.startsWith("-")),
-  );
+  const asked = args.find((a) => !a.startsWith("-"));
+  const target = findCourse(courses, asked);
+  // A course that isn't in the ledger used to print every course with rc 0,
+  // which reads as an answer about the wrong class (break-it, 2026-10-19).
+  if (asked && !target) {
+    throw Object.assign(new Error(`no course matches "${asked}". Courses: ${courses.map((c) => c.code).join(", ")}`), { ledger: true });
+  }
   const list = target ? [target] : courses;
   const rows = list.map((course) => {
     const a = course.absences || {};
@@ -623,10 +700,13 @@ function cmdAttendance(args) {
 
 function cmdGrade(args) {
   const { courses } = loadLedger();
-  const target = findCourse(
-    courses,
-    args.find((a) => !a.startsWith("-")),
-  );
+  const asked = args.find((a) => !a.startsWith("-"));
+  const target = findCourse(courses, asked);
+  // A course that isn't in the ledger used to print every course with rc 0,
+  // which reads as an answer about the wrong class (break-it, 2026-10-19).
+  if (asked && !target) {
+    throw Object.assign(new Error(`no course matches "${asked}". Courses: ${courses.map((c) => c.code).join(", ")}`), { ledger: true });
+  }
   const list = target ? [target] : courses;
   const want = numFlag(args, "--target", null);
   const rows = list.map((course) => project(course, want));
@@ -725,7 +805,11 @@ function cmdPolicy(args) {
     );
   }
   const key = positional[1];
-  const p = course.policies || {};
+  // AI use is the student's own call. Chewbacca never reads, shows or gates on
+  // a course AI policy (Caleb, 2026-10-11: "it is the user's decision what the
+  // user does, not chewb's"), so an `ai` key in an old ledger is dropped here.
+  const p = { ...(course.policies || {}) };
+  delete p.ai;
   if (args.includes("--json"))
     return say(JSON.stringify(key ? { [key]: p[key] } : p, null, 2));
   if (key) {
@@ -798,6 +882,30 @@ function cmdIcs(args) {
   );
 }
 
+// The facts a syllabus carries, parsed, for a program that needs the values
+// (lockin's syllabus compare) and would otherwise re-parse the YAML itself.
+function cmdShow(args) {
+  const { courses } = loadLedger();
+  const query = args.find((a) => !a.startsWith("--"));
+  const picked = query ? [findCourse(courses, query)].filter(Boolean) : courses;
+  if (query && !picked.length) fail(`no course matches "${query}"`);
+  const keep = ["code", "title", "meets", "instructor", "absences", "grading_model", "grading"];
+  const out = picked.map((c) => Object.fromEntries(keep.filter((k) => c[k] !== undefined).map((k) => [k, c[k]])));
+  if (args.includes("--json")) return say(JSON.stringify(out, null, 2));
+  for (const c of out) {
+    say(String(c.code));
+    // `days: Tue`, one bare word, is a string with no join(), and `show` died
+    // with a TypeError on a meeting `today` and `week` read fine (2026-10-31).
+    for (const m of normalizeMeets(c.meets))
+      say(`  meets   ${[].concat(m.days || []).join("/")} ${m.start || "?"}-${m.end || "?"} ${m.room || ""}`.trimEnd());
+    const inst = c.instructor && typeof c.instructor === "object" ? c.instructor : null;
+    if (inst && inst.office_hours) say(`  office hours  ${inst.office_hours}`);
+    if (c.absences) say(`  absences allowed  ${c.absences.allowed == null ? "unrecorded" : c.absences.allowed}`);
+    for (const g of Array.isArray(c.grading) ? c.grading : [])
+      say(`  grade   ${g.name}${g.weight != null ? ` ${g.weight}%` : ""}${g.points != null ? ` ${g.points} pts` : ""}`);
+  }
+}
+
 function cmdCheck() {
   const { courses, semester } = loadLedger();
   let problems = 0;
@@ -821,13 +929,13 @@ function cmdCheck() {
     const where = path.basename(course._file || "?");
     const name = course.code || course.title || where;
     if (!course.code) note(`${where}: no course code`);
+    // An item that parsed to a string or a number is dropped by `due`. Say so
+    // loudly rather than reporting a clean course with nothing in it.
+    const items = course.deliverables || course.assignments || [];
+    const lost = Array.isArray(items) ? items.filter((d) => !d || typeof d !== "object").length : 0;
+    if (lost) note(`${name}: ${lost} deliverable(s) did not parse as maps, so nothing shows them`);
     if (!normalizeMeets(course.meets).length)
       note(`${name}: no meeting times, so "today" and "week" will not show it`);
-    if (!course.policies || !course.policies.ai) {
-      note(
-        `${name}: no AI policy recorded. This is the one field that changes what help is allowed.`,
-      );
-    }
     // "None" and "not looked up yet" are different facts and used to warn
     // identically. BISC has no attendance grade at all, which is written in its
     // own policy text, and the check nagged about it forever because the only
@@ -905,7 +1013,11 @@ function numFlag(args, name, fallback) {
   const i = args.indexOf(name);
   if (i === -1 || i === args.length - 1) return fallback;
   const n = Number(args[i + 1]);
-  return Number.isFinite(n) ? n : fallback;
+  // `--days abc` silently became 14 (break-it, 2026-10-19).
+  if (!Number.isFinite(n)) {
+    throw Object.assign(new Error(`${name} needs a number, got "${args[i + 1]}"`), { ledger: true });
+  }
+  return n;
 }
 
 function flagValue(args, name) {
@@ -956,8 +1068,9 @@ const USAGE = `coursework: read your semester ledger
   coursework week [--days 7]        the days ahead, one block each
   coursework attendance [course]    absences used against the budget
   coursework grade [course] [--target 90]
-  coursework policy <course> [ai|late|attendance|exams|grading]
+  coursework policy <course> [late|attendance|exams|grading]
   coursework ics [--out file.ics]   deadlines as a calendar file
+  coursework show [course]          meetings, office hours, attendance, grading
   coursework check                  validate the ledger
 
 Add --json to any read command. Ledger: ${DIR} (set COURSEWORK_DIR to move it).
@@ -983,6 +1096,8 @@ function main() {
     case "ics":
     case "calendar":
       return cmdIcs(args);
+    case "show":
+      return cmdShow(args);
     case "check":
     case "doctor":
       return cmdCheck();
@@ -997,4 +1112,11 @@ function main() {
   }
 }
 
-main();
+// A ledger or usage error is a sentence for the person, not a stack trace.
+try {
+  main();
+} catch (e) {
+  if (!e || !e.ledger) throw e;
+  console.error(`coursework: ${e.message}`);
+  process.exit(1);
+}

@@ -14,7 +14,8 @@ page and character offset, and `show` prints one window around that offset.
 
 Every hit carries `p. N`, the page printed in the book. Cite that, not the
 PDF page: the course grades on chapters and a claim nobody can look up is a
-claim the user has to take on faith.
+claim the user has to take on faith. A web edition has no printed pages, so
+its hits carry the section instead, `§1.2`.
 """
 from __future__ import annotations
 
@@ -32,7 +33,11 @@ ROOT = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "tex
 # reply. Borrowed from `asa`, where 700 was measured against real transcripts.
 WINDOW = 700
 
-PAGE_MARK = re.compile(r"<!-- p\. (\d+) -->")
+# A PDF corpus marks printed pages, `<!-- p. 71 -->`. A web edition marks
+# sections, `<!-- s. 1.2 -->` or `<!-- s. 1 Key Terms -->` for end-of-chapter
+# material. Reading pages only, every hit in the OpenStax Introduction to
+# Sociology 3e corpus printed "p. ?" (2026-10-30).
+PLACE_MARK = re.compile(r"<!-- ([ps])\. ([^<>]+?) -->")
 
 
 def books() -> list[Path]:
@@ -55,6 +60,16 @@ def resolve(name: str | None) -> Path:
     return matches[0]
 
 
+def targets(name: str | None) -> list[Path]:
+    """Every book when none is named, so search and glossary keep answering once a
+    second book lands. With two corpora ingested (2026-10-30), resolve() turned a
+    bare `textbook search kula` into "more than one book" and nothing else."""
+    found = books()
+    if name is None and len(found) > 1:
+        return found
+    return [resolve(name)]
+
+
 def meta(book: Path) -> dict:
     return json.loads((book / "book.json").read_text())
 
@@ -69,12 +84,15 @@ def chapters(book: Path, only: str | None) -> list[Path]:
     return [p for p in paths if needle in p.stem.lower()]
 
 
-def page_at(text: str, offset: int) -> str:
-    """The last printed page number marked at or before this offset."""
+def place_at(text: str, offset: int) -> str:
+    """The last printed page or section marked at or before this offset."""
     last = None
-    for match in PAGE_MARK.finditer(text, 0, offset + 1):
-        last = match.group(1)
-    return f"p. {last}" if last else "p. ?"
+    for match in PLACE_MARK.finditer(text, 0, offset + 1):
+        last = match
+    if last is None:
+        return "p. ?"
+    kind, label = last.groups()
+    return f"p. {label}" if kind == "p" else f"§{label}"
 
 
 def title_of(text: str, fallback: str) -> str:
@@ -88,7 +106,8 @@ def cmd_books(args: argparse.Namespace) -> int:
         numbered = [c for c in info["chapters"] if c.get("number")]
         words = sum(c["words"] for c in info["chapters"])
         print(f"{path.name}\n  {info['title']}")
-        print(f"  {len(numbered)} chapters, {words:,} words, from {info['pages']}-page PDF")
+        source = f"{info['pages']}-page PDF" if info.get("pages") else info.get("source", "no source recorded")
+        print(f"  {len(numbered)} chapters, {words:,} words, from {source}")
     return 0
 
 
@@ -104,30 +123,32 @@ def cmd_toc(args: argparse.Namespace) -> int:
 
 
 def cmd_search(args: argparse.Namespace) -> int:
-    book = resolve(args.book)
+    shelf = targets(args.book)
     try:
         pattern = re.compile(args.query if args.regex else re.escape(args.query), re.I)
     except re.error as exc:
         sys.exit(f"bad pattern: {exc}")
 
-    paths = chapters(book, args.chapter)
+    paths = [(book, path) for book in shelf for path in chapters(book, args.chapter)]
     if not paths:
         sys.exit(f"no chapter matching {args.chapter!r}; try `textbook toc`")
 
     hits = 0
-    for path in paths:
+    for book, path in paths:
         text = path.read_text()
         title = title_of(text, path.stem)
+        # Named, so `show` can be pointed at the right book when several answered.
+        which = f"  --book {book.name}" if len(shelf) > 1 else ""
         for match in pattern.finditer(text):
             if hits >= args.limit:
-                print(f"\nstopped at {args.limit} hits; narrow with --chapter or raise --limit")
+                print(f"\nstopped at {args.limit} hits; narrow with --book, --chapter or raise --limit")
                 return 0
             hits += 1
             start = max(0, match.start() - WINDOW // 2)
-            passage = PAGE_MARK.sub("", text[start:match.start() + WINDOW // 2])
+            passage = PLACE_MARK.sub("", text[start:match.start() + WINDOW // 2])
             passage = " ".join(passage.split())
-            print(f"\n{title}  ({page_at(text, match.start())})")
-            print(f"  {path.stem}  --at {match.start()}")
+            print(f"\n{title}  ({place_at(text, match.start())})")
+            print(f"  {path.stem}  --at {match.start()}{which}")
             print(f"  ...{passage}...")
     print("\nno matches" if not hits else f"\n{hits} hits")
     return 0
@@ -141,30 +162,34 @@ def cmd_show(args: argparse.Namespace) -> int:
     path = paths[0]
     text = path.read_text()
     start = max(0, args.at - args.chars // 2)
-    print(f"{title_of(text, path.stem)}  ({page_at(text, start)})")
+    print(f"{title_of(text, path.stem)}  ({place_at(text, start)})")
     print(f"offset {start} to {min(len(text), start + args.chars)} of {len(text)}\n")
     print(text[start:start + args.chars])
     return 0
 
 
 def cmd_glossary(args: argparse.Namespace) -> int:
-    book = resolve(args.book)
-    path = book / "GLOSSARY.md"
-    if not path.exists():
-        sys.exit(f"no glossary in {book.name}")
-    lines = path.read_text().splitlines()
     if not args.term:
-        print("\n".join(lines))
+        book = resolve(args.book)
+        path = book / "GLOSSARY.md"
+        if not path.exists():
+            sys.exit(f"no glossary in {book.name}")
+        print(path.read_text())
         return 0
+    shelf = [b for b in targets(args.book) if (b / "GLOSSARY.md").exists()]
+    if not shelf:
+        sys.exit("no glossary in " + ", ".join(b.name for b in targets(args.book)))
     pattern = re.compile(re.escape(args.term), re.I)
-    chapter = ""
     hits = 0
-    for line in lines:
-        if line.startswith("## "):
-            chapter = line[3:]
-        elif line.startswith("- ") and pattern.search(line):
-            hits += 1
-            print(f"\n{chapter}\n  {line[2:]}")
+    for book in shelf:
+        prefix = f"{meta(book)['title']}, " if len(shelf) > 1 else ""
+        chapter = ""
+        for line in (book / "GLOSSARY.md").read_text().splitlines():
+            if line.startswith("## "):
+                chapter = line[3:]
+            elif line.startswith("- ") and pattern.search(line):
+                hits += 1
+                print(f"\n{prefix}{chapter}\n  {line[2:]}")
     print("\nno matches" if not hits else f"\n{hits} entries")
     return 0
 

@@ -1,0 +1,4 @@
+SEALED n=65 index=/private/tmp/claude-501/-Users-joelnewton-code-chewbacca/8c108252-cbee-4656-b68a-8f53645be062/scratchpad/idx
+  shipped            r@5  55.4% +/-12.1  MRR 0.357
+  bench/frozen/rerank_A.json  r@5  72.3% +/-10.9  MRR 0.652  p50 37.3s  p90 72.1s
+  run_at 2026-10-10T11:05:07-0700

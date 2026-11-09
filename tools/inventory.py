@@ -156,10 +156,11 @@ VENDORED = {
     "graph-engineering": "Knowledge graphs and agent task graphs, with teaching mode",
     "agent-setup": "Finishing the install steps that need a browser or a permission dialog",
     "setup": "Installing the kit by conversation instead of a terminal questionnaire",
-    "coursework": "Your syllabi as a ledger: deadlines, attendance math, per-course AI policy",
+    "coursework": "Your syllabi as a ledger: deadlines, attendance math, grade math",
     "study-system": "Retrieval practice over rereading, exam run-ups, and the four-cause postmortem",
     "life-ops": "The weekly review, life admin with real deadlines, and what to cut",
     "life-context": "Learning about someone without handing them a blank page",
+    "welcome": "The first conversation after install: five taps, then a personalized assistant",
     # Full Mac control, absorbed from calebnewtonusc/Nova. Seven layers, a
     # plan/execute/verify/log runtime, and the morning brief.
     "mac-control": "Routes a Mac task to the cheapest control layer that can do it",
@@ -179,7 +180,11 @@ VENDORED = {
 # so a pack collapses to a single row carrying its live count.
 PACKS = {
     "agent-scripts": {
-        "root": HOME / "Projects/agent-scripts",
+        # Moved to ~/code/refs in dd792c67, which hand-edited setup.sh's
+        # generated PACK_DIR and left this root behind, so the next generator
+        # run would have dropped all 49 skills from the catalog (caught by the
+        # shrink refusal, 2026-10-19). PACK_DIR is now rendered from this root.
+        "root": HOME / "code/refs/agent-scripts",
         "url": "https://github.com/steipete/agent-scripts",
         "description": "Peter Steinberger's shared agent skills: macOS, Swift, GitHub, release ops",
         # sync-skills, the pack's own installer, points ~/.claude/CLAUDE.md at the
@@ -338,7 +343,7 @@ CLI_TOOLS = {
     "macos-use": {
         "display": "mac-use",
         "url": "https://github.com/browser-use/macOS-use",
-        "install": "see docs/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
+        "install": "see docs/reference/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
         "probe": ("bin", "mac-use"),
         "description": "Natural-language agent that drives any Mac app through Accessibility",
         # No formula and no console script upstream, so the kit ships the CLI
@@ -446,7 +451,7 @@ CLI_TOOLS = {
     "mac-cli": {
         "display": "mac",
         "url": "https://github.com/31Carlton7/mac-cli",
-        "install": "see docs/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
+        "install": "see docs/reference/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
         "probe": ("bin", "mac"),
         "description": "Calendar, Reminders, Contacts, Mail, Messages, Notes, and Finder as JSON",
         # No Homebrew tap yet (it is on the upstream roadmap), and `make install`
@@ -484,7 +489,7 @@ CLI_TOOLS = {
     "youtube-transcripts": {
         "display": "yt-transcript",
         "url": "https://github.com/calebnewtonusc/claude-youtube-transcripts",
-        "install": "see docs/MACOS-TOOLS.md (its own installer, no formula)",
+        "install": "see docs/reference/MACOS-TOOLS.md (its own installer, no formula)",
         "probe": ("bin", "yt-transcript"),
         "description": "Transcript of any YouTube video, channel, or playlist, read without asking",
         # Cloning the skill alone shipped a skill that told Claude to run a
@@ -538,7 +543,7 @@ def house_style(value):
     """Normalise third-party text before it is published under this repo's name.
 
     Vendored skills are written to their authors' house rules, not this one, and
-    their descriptions land verbatim in README.md and docs/REFERENCE.md, which
+    their descriptions land verbatim in README.md and docs/reference/REFERENCE.md, which
     ship publicly. Cap's cap-demo description arrived carrying an em dash and
     put one straight into the generated table, where the kit's own writing rules
     ban it outright.
@@ -575,11 +580,11 @@ def read_frontmatter(path):
             # chomping indicator (- or +) and an explicit indentation digit.
             # Matching only the bare "|" and ">" let Cap's `description: >-`
             # through as a literal value, so the marker was published into
-            # docs/REFERENCE.md ahead of the text it was supposed to introduce.
+            # docs/reference/REFERENCE.md ahead of the text it was supposed to introduce.
             # A quoted scalar is still a scalar. YAML requires quotes around a
             # value containing ": ", so deslop's description had to be quoted to
             # parse at all, and the parser then published the opening quote into
-            # docs/REFERENCE.md as if it were part of the sentence.
+            # docs/reference/REFERENCE.md as if it were part of the sentence.
             if len(val) > 1 and val[0] == val[-1] and val[0] in "\"'":
                 if val[0] not in val[1:-1]:
                     val = val[1:-1]
@@ -689,7 +694,7 @@ def collect_skills():
         else:
             # VENDORED is an OVERRIDE, not a gate. It was acting as a gate,
             # so a skill added to skills/ without a hand-written entry here
-            # vanished from docs/REFERENCE.md entirely and was subtracted
+            # vanished from docs/reference/REFERENCE.md entirely and was subtracted
             # from its count.
             #
             # Measured 2026-09-20: 20 entries in the dict against 32 skills on
@@ -739,7 +744,7 @@ def collect_skills():
 # whichever process happened to run this. On 2026-09-21 a hook ran with
 # Homebrew on PATH but without ~/.local/bin, and five tools that live only
 # there (bd, cap, mac, mac-use, yt-transcript) were dropped from toolkit.json,
-# setup.sh and docs/REFERENCE.md in a single pass. yt-transcript is Caleb's own
+# setup.sh and docs/reference/REFERENCE.md in a single pass. yt-transcript is Caleb's own
 # tool and CLAUDE.md promises it is on PATH, so a fresh install would have
 # contradicted the instructions shipped beside it. This is the same disease
 # described at the top of KIT_MCP, where it was fixed for MCP servers and left
@@ -812,13 +817,14 @@ def collect_mcp():
 def md_table(upstream, vendored, packs, plugins, mcp):
     rows = []
     for v in vendored:
-        # ../ because this table is spliced into docs/REFERENCE.md and nowhere
-        # else. Emitting a repo-root-relative path put 57 dead links in that
-        # file on 2026-09-21: every link to a skill resolved to docs/skills/...
+        # ../../ because this table is spliced into docs/reference/REFERENCE.md and
+        # nowhere else (it sat one level up, in docs/, until 2026-10-09).
+        # Emitting a repo-root-relative path put 57 dead links in that file on
+        # 2026-09-21: every link to a skill resolved to docs/skills/...
         # and none of them existed. The prose reads fine and every link is
         # broken, which is why it survived a long time. Fixing the rendered
         # file does nothing; this generator writes it back on the next run.
-        rows.append((f"[skills/{v['name']}](../skills/{v['name']})", "Skill", v["description"]))
+        rows.append((f"[skills/{v['name']}](../../skills/{v['name']})", "Skill", v["description"]))
     for u in upstream:
         rows.append((f"[{u['name']}]({u['url']})", "Skill", u["description"]))
     for k in packs:
@@ -910,7 +916,7 @@ def cli_block(cli, packs):
     """
     lines = [
         "# Kit-owned helpers that sit in front of the installed tools.",
-        "#   peekaboo: forces local execution, see docs/MACOS-TOOLS.md",
+        "#   peekaboo: forces local execution, see docs/reference/MACOS-TOOLS.md",
         "#   chrome-js: reads and clicks a Chrome tab through JavaScript",
         'mkdir -p "$HOME/.local/bin"',
         "for HELPER in peekaboo chrome-js slop-check; do",
@@ -947,7 +953,7 @@ def cli_block(cli, packs):
         ]
     lines += [
         "else",
-        '  warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"',
+        '  warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"',
         "fi",
     ]
 
@@ -986,7 +992,7 @@ def cli_block(cli, packs):
         if k["note"]:
             lines += ["#"] + [f"# {n}" for n in k["note"]]
         lines += [
-            f'PACK_DIR="$HOME/Projects/{k["name"]}"',
+            f'PACK_DIR="$HOME/{PACKS.get(k["name"], {}).get("root", HOME / "Projects" / k["name"]).relative_to(HOME)}"',
             f'PACK_SKIP="{skip}"',
         ]
         if k.get("only"):
@@ -1065,7 +1071,7 @@ def badge_block(plugins):
         [
             f'  <a href=".claude/commands"><img src="{b}/slash_commands-{cmds}-indigo" alt="Commands"></a>',
             f'  <a href=".claude/rules"><img src="{b}/always_on_rules-{rules}-green" alt="Rules"></a>',
-            f'  <a href="docs/EXTENSIONS.md"><img src="{b}/plugins-{len(plugins)}-orange" alt="Plugins"></a>',
+            f'  <a href="docs/reference/EXTENSIONS.md"><img src="{b}/plugins-{len(plugins)}-orange" alt="Plugins"></a>',
         ]
     )
 
@@ -1138,7 +1144,7 @@ def setup_block(upstream, plugins, markets, mcp):
         '    } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"',
         '    log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"',
         "  else",
-        '    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."',
+        '    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/reference/EXTENSIONS.md to add it later."',
         "  fi",
         '  rm -rf "$TMP_SK"',
         "done <<'UPSTREAM_SKILLS'",
@@ -1201,7 +1207,7 @@ def setup_block(upstream, plugins, markets, mcp):
         keyed = [m for m in mcp if m["env"]]
         lines += [
             "",
-            "# MCP servers, curated from mcpmarket.com. See docs/EXTENSIONS.md.",
+            "# MCP servers, curated from mcpmarket.com. See docs/reference/EXTENSIONS.md.",
             "#",
             "# Two tiers on purpose. The keyless ones are installed outright. The ones",
             "# needing an account are installed only when their variables are already",
@@ -1298,9 +1304,62 @@ def splice(path, begin, end, body, pad=False):
     return True
 
 
+def write_refusal():
+    """Why this run must not write the repo, or None when it may.
+
+    Backlog 515, 2026-10-06 19:14: during group runs in a worktree, setup.sh
+    and toolkit.json were rewritten with this machine's inventory, packs zeroed
+    and a plugin list added. Nothing that was rerun reproduced it. REPO is the
+    checkout this file sits in, so any process that ran a worktree's copy wrote
+    that worktree. The only legitimate writer is sync-to-d1 on the main
+    checkout, so a linked worktree and a test-suite process are refused.
+    """
+    if os.environ.get("CHEWBACCA_SUITE"):
+        return "running inside tests/run.sh, which must never write generated files"
+    if os.environ.get("CHEWBACCA_INVENTORY_WORKTREE"):
+        return None
+    try:
+        git_dir, common = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "--git-dir", "--git-common-dir"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.split()[:2]
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if Path(REPO, git_dir).resolve() != Path(REPO, common).resolve():
+        return f"{REPO} is a linked worktree; set CHEWBACCA_INVENTORY_WORKTREE=1 to write it anyway"
+    return None
+
+
+def log_writer(changed):
+    """Record which process wrote, so the next unexplained rewrite has a name."""
+    try:
+        parent = subprocess.run(
+            ["ps", "-o", "command=", "-p", str(os.getppid())],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        log = Path(os.environ.get("CHEWBACCA_LOG_DIR") or HOME / ".chewbacca/logs")
+        log.mkdir(parents=True, exist_ok=True)
+        with (log / "inventory-writes.log").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+                "repo": str(REPO), "cwd": os.getcwd(), "parent": parent[:300],
+                "changed": changed,
+            }) + "\n")
+    except OSError:
+        pass
+
+
 def main():
     if not REPO.is_dir():
         print(f"repo not found: {REPO}", file=sys.stderr)
+        return 2
+    refusal = write_refusal()
+    if refusal:
+        print(f"inventory: refusing to write: {refusal}", file=sys.stderr)
+        # A refusal names its caller too. From 2026-10-09 to 10-19 the log
+        # held one write and no refusals, so a writer blocked by the guard
+        # stayed exactly as anonymous as the 10/06 one it was built to catch.
+        log_writer(f"refused: {refusal}")
         return 2
 
     upstream, vendored, packs = collect_skills()
@@ -1316,13 +1375,25 @@ def main():
     # real tools from the product and take setup.sh and REFERENCE.md with them.
     # Losing an entry is now a refusal that names what went missing.
     toolkit = REPO / "config/settings/toolkit.json"
-    prior = []
+    prior_doc = {}
     if toolkit.is_file():
         try:
-            prior = json.loads(toolkit.read_text(encoding="utf-8")).get("cli", [])
+            prior_doc = json.loads(toolkit.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            prior = []
+            prior_doc = {}
+    prior = prior_doc.get("cli", [])
     lost = {c["display"] for c in prior} - {c["display"] for c in cli}
+    # Skills, packs, plugins and marketplaces may not shrink either. Only CLIs
+    # were guarded, and on 2026-10-19 a break-it run from a home with one
+    # plugin and no skills cut 719 lines: all 8 upstream skills and a
+    # marketplace left setup.sh, toolkit.json and REFERENCE.md.
+    def names(items, key="name"):
+        return {i.get(key) if isinstance(i, dict) else i for i in (items or [])}
+    prior_skills = prior_doc.get("skills", {}) if isinstance(prior_doc.get("skills"), dict) else {}
+    lost |= {f"skill {n}" for n in names(prior_skills.get("upstream")) - {u["name"] for u in upstream}}
+    lost |= {f"pack {n}" for n in names(prior_doc.get("packs")) - {pk["name"] for pk in packs}}
+    lost |= {f"plugin {n}" for n in names(prior_doc.get("plugins"), "id") - names(plugins, "id") if n}
+    lost |= {f"marketplace {n}" for n in names(prior_doc.get("marketplaces")) - names(markets) if n}
     if lost and not os.environ.get("CHEWBACCA_ALLOW_CATALOG_SHRINK"):
         print(
             "refusing to write: these tools are in the published catalog and "
@@ -1366,7 +1437,7 @@ def main():
     # The inventory tables live in the reference doc, not on the front door.
     # A first-time reader does not need 40 rows of plugin names before the
     # install command, and the generator does not care which file it writes.
-    reference = REPO / "docs" / "REFERENCE.md"
+    reference = REPO / "docs" / "reference" / "REFERENCE.md"
     touched = splice(
         reference,
         "<!-- BEGIN GENERATED: extensions -->",
@@ -1441,11 +1512,17 @@ def main():
         except Exception as exc:
             print(f"checksums not regenerated: {exc}", file=sys.stderr)
 
+    log_writer(changed)
     print("\n".join(changed))
     return 0
 
 
 if __name__ == "__main__":
+    # Any argument used to be ignored and the run wrote anyway: `--help` on
+    # 2026-10-19 rewrote four generated files. It takes no arguments.
+    if len(sys.argv) > 1:
+        print(__doc__)
+        sys.exit(0 if sys.argv[1] in ("-h", "--help") else 2)
     try:
         sys.exit(main())
     except Exception as exc:  # a broken generator must never block a session

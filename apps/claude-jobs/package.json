@@ -1,0 +1,16 @@
+{
+  "name": "chewbacca-claude-jobs",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled Claude Code jobs on your own Claude plan, no API key. Runs on Railway so they keep going with the laptop shut.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.309"
+  }
+}

@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""What moves against scroll, and at what rate, for EVERY element.
+
+    ux-rate lenses/full                      whole page
+    ux-rate lenses/full --from 0 --to 900    one section
+    ux-rate lenses/full --drivers            only elements translating themselves
+
+WHY THIS EXISTS. ux-film reported uselemma.ai as having no parallax. I repeated
+that to Caleb and committed a replica with no depth at all. He pushed back in
+four words: "They use a lot of parallax???"
+
+He was right. 38.1% of 9,133 measurable elements move at a rate strictly
+between pinned and normal flow. ux-film missed all of it for two compounding
+reasons, and both are structural rather than a bad threshold:
+
+  1. It tracks 26 elements. Twenty-six out of nine thousand. Any conclusion
+     about "the page" from that sample is a coin flip dressed as a measurement.
+
+  2. It reads translateY out of each element's OWN computed transform. Lemma
+     animates a container and lets children inherit, so a parallaxing child
+     reports transform:none. The property that carries the effect is the one
+     property the tool did not read.
+
+The fix is to measure the observable instead of the implementation: an
+element's rect against the scroll offset. d(top)/d(scroll) is -1 for anything
+in normal flow, 0 for anything pinned, and a value in between IS parallax
+regardless of which ancestor produced it or which CSS property carried it.
+
+CAVEAT, and it matters when reading the numbers. ux-scan jumps the scroll
+position and settles 30ms. Under a smooth-scroll library (Lenis on the
+reference) the lerp has not converged in 30ms, so an instantaneous rate near a
+scroll jump carries the follower's transient, not the design curve. Saturation
+distances and r2 over a long run are trustworthy; a single-step rate is not.
+"""
+import argparse, collections, json, pathlib, sys
+
+
+def load(lens):
+    p = pathlib.Path(lens)
+    if p.is_dir():
+        p = p / "scan.json"
+    d = json.loads(p.read_text())
+    return d
+
+
+def reconstruct(d, lo, hi):
+    """Delta-encoded frames to per-element series, no sampling.
+
+    ux-scan stores only what changed per position, so every consumer has to do
+    this walk. Doing it in each caller is how two analyses of the same file
+    disagreed on element counts once already.
+    """
+    F = d["fields"]
+    i_top, i_tr, i_op = F.index("top"), F.index("transform"), F.index("opacity")
+    state, series = {}, collections.defaultdict(list)
+    for f in d["frames"]:
+        y = f["y"]
+        if "full" in f:
+            state = dict(f["full"])
+        else:
+            for k, v in f["d"].items():
+                state[k] = v
+            for k in f.get("gone", []):
+                state.pop(k, None)
+        if not (lo <= y <= hi):
+            continue
+        for k, v in state.items():
+            series[k].append((y, v[i_top], v[i_tr], v[i_op]))
+    return series
+
+
+def fit(xs, vs):
+    n = len(xs)
+    mx = sum(xs) / n
+    mv = sum(vs) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    svv = sum((v - mv) ** 2 for v in vs)
+    if not sxx:
+        return None, 0.0
+    sxv = sum((x - mx) * (v - mv) for x, v in zip(xs, vs))
+    return sxv / sxx, (sxv * sxv) / (sxx * svv) if svv else 0.0
+
+
+def mty(t):
+    """translateY out of a matrix string."""
+    if not isinstance(t, str) or not t.startswith("matrix"):
+        return None
+    try:
+        p = [float(x) for x in t[t.index("(") + 1:t.rindex(")")].split(",")]
+    except (ValueError, IndexError):
+        return None
+    return p[5] if len(p) == 6 else (p[13] if len(p) == 16 else None)
+
+
+# An element in normal flow moves -1px of viewport top per +1px of scroll.
+# These bands are named against that, not against zero.
+BANDS = [
+    ("moves DOWN as you scroll", -9e9, -0.06),
+    ("pinned / fixed", -0.06, 0.06),
+    ("PARALLAX, slower than scroll", 0.06, 0.94),
+    ("normal flow", 0.94, 1.06),
+    ("PARALLAX, faster than scroll", 1.06, 9e9),
+]
+
+
+def band(rate):
+    for name, lo, hi in BANDS:
+        if lo <= rate < hi:
+            return name
+    return "?"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("lens")
+    ap.add_argument("--from", dest="lo", type=int, default=0)
+    ap.add_argument("--to", dest="hi", type=int, default=10 ** 9)
+    ap.add_argument("--min-obs", type=int, default=12,
+                    help="an element seen fewer times than this cannot support "
+                         "a rate; reporting one anyway is how 26 elements "
+                         "became a claim about a whole page")
+    ap.add_argument("--r2", type=float, default=0.90,
+                    help="below this the motion is eased or re-rendered, not a "
+                         "constant rate, and a single slope misdescribes it")
+    ap.add_argument("--drivers", action="store_true",
+                    help="only elements translating THEMSELVES, which is where "
+                         "the mechanism lives")
+    ap.add_argument("--top", type=int, default=24)
+    a = ap.parse_args()
+
+    d = load(a.lens)
+    series = reconstruct(d, a.lo, a.hi)
+    print(f"\n{a.lens}  y {a.lo} to {min(a.hi, d['height'])} of {d['height']}px, "
+          f"step {d['step']}px")
+
+    if a.drivers:
+        rows = []
+        for k, pts in series.items():
+            ty = [(y, mty(t)) for y, _, t, _ in pts if mty(t) is not None]
+            if len(ty) < a.min_obs:
+                continue
+            travel = max(v for _, v in ty) - min(v for _, v in ty)
+            if travel < 8:
+                continue
+            sl, r2 = fit([y for y, _ in ty], [v for _, v in ty])
+            rows.append((travel, sl or 0, r2, len(ty), k))
+        rows.sort(key=lambda r: -r[0])
+        print(f"\n  {len(rows)} elements translate themselves >8px in this range")
+        print("  travel is the designed depth and is timing independent;")
+        print("  the slope is contaminated by the smooth-scroll lerp, see the docstring.\n")
+        for travel, sl, r2, n, k in rows[:a.top]:
+            print(f"    {travel:>7.0f}px  slope {sl:+.3f}  r2 {r2:.2f}  n={n:<4} {k[:66]}")
+        return 0
+
+    counts = collections.Counter()
+    rows = []
+    for k, pts in series.items():
+        if len(pts) < a.min_obs:
+            continue
+        sl, r2 = fit([p[0] for p in pts], [p[1] for p in pts])
+        if sl is None:
+            continue
+        rate = -sl
+        if r2 < a.r2:
+            counts["NONLINEAR (eased, pinned scene, or re-rendered)"] += 1
+            continue
+        counts[band(rate)] += 1
+        rows.append((rate, r2, len(pts), k))
+
+    tot = sum(counts.values()) or 1
+    print(f"\n  {tot} elements with >={a.min_obs} observations\n")
+    for name, n in counts.most_common():
+        print(f"    {n:>5}  {100 * n / tot:5.1f}%  {name}")
+
+    par = sorted((r for r in rows if 0.06 < r[0] < 0.94), key=lambda r: r[0])
+    if par:
+        print(f"\n  {len(par)} at a clean constant parallax rate. Slowest {a.top}:\n")
+        for rate, r2, n, k in par[:a.top]:
+            print(f"    rate {rate:+.3f}  r2 {r2:.2f}  n={n:<4} {k[:66]}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

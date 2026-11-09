@@ -1,0 +1,210 @@
+[
+  {
+    "message": "I think it should totally be free and we just charge a fee",
+    "take": true,
+    "route": null,
+    "done_with_tab": false
+  },
+  {
+    "message": "We gotta be strategic, wait on the bigger churches",
+    "take": true,
+    "route": null,
+    "done_with_tab": false
+  },
+  {
+    "message": "maybe we hold the big ones",
+    "take": true,
+    "done_with_tab": false
+  },
+  {
+    "message": "what's the best strat here",
+    "take": false,
+    "done_with_tab": false,
+    "process": "decision"
+  },
+  {
+    "message": "some churches we might wanna wait til we hv more credibility",
+    "take": true,
+    "route": null
+  },
+  {
+    "message": "Nobody's gonna pay monthly for this, one time fee is the move",
+    "take": true,
+    "renders": false
+  },
+  {
+    "message": "The blue header looks cheap, go darker",
+    "take": true,
+    "renders": true
+  },
+  {
+    "message": "Cold email is dead, its all LinkedIn now",
+    "take": true,
+    "route": null
+  },
+  {
+    "message": "Dad put 400 in my account btw",
+    "take": false,
+    "renders": false,
+    "done_with_tab": false
+  },
+  {
+    "message": "Fix the typo in the readme heading",
+    "take": false,
+    "route": null,
+    "process": "build"
+  },
+  {
+    "message": "ok",
+    "take": false,
+    "route": null,
+    "renders": false,
+    "done_with_tab": false,
+    "process": null
+  },
+  {
+    "message": "I think I left my charger at Parker's",
+    "take": false,
+    "renders": false
+  },
+  {
+    "message": "We should meet at 4 instead of 3, moved it on my calendar",
+    "take": false,
+    "renders": false
+  },
+  { "message": "My midterm is on Wednesday", "take": false, "route": null },
+  {
+    "message": "make the hero scroll animation smoother",
+    "renders": true,
+    "route": null,
+    "process": "creative",
+    "take": false
+  },
+  {
+    "message": "the ui on the settings page feels cramped",
+    "renders": true,
+    "process": "creative"
+  },
+  {
+    "message": "the buttons look off on my phone",
+    "renders": true,
+    "route": null
+  },
+  { "message": "make the deck look less like a template", "renders": true },
+  {
+    "message": "build a quick guide to the test suite",
+    "renders": false,
+    "process": "build",
+    "take": false
+  },
+  {
+    "message": "fix the failing test in the argument parser",
+    "renders": false,
+    "process": "debug",
+    "take": false
+  },
+  {
+    "message": "why is the deploy failing on railway",
+    "renders": false,
+    "process": "debug",
+    "take": false
+  },
+  {
+    "message": "go through every hook and sort which ones guess what I mean",
+    "renders": false,
+    "take": false,
+    "route": null
+  },
+  {
+    "message": "design a retry policy for the send queue",
+    "renders": false,
+    "process": "build"
+  },
+  {
+    "message": "site-stack-gate never registered, register it in setup",
+    "renders": false
+  },
+  {
+    "message": "write the page 3 essay intro",
+    "renders": false,
+    "take": false
+  },
+  {
+    "message": "help me get colin's portfolio done, slideroom is due the 1st",
+    "route": "colin-kit",
+    "renders": false
+  },
+  { "message": "colin's intro vid needs a rough cut", "route": "colin-kit" },
+  {
+    "message": "Colin said he can't make standup tmr",
+    "route": null,
+    "take": false
+  },
+  {
+    "message": "Firm Foundation needs a rough cut of the church intro video",
+    "route": null
+  },
+  {
+    "message": "apply to these three clubs, deadline Friday, need my resume",
+    "route": "apply-kit"
+  },
+  {
+    "message": "apply the fix from the last commit to the other hook",
+    "route": null
+  },
+  {
+    "message": "write a cover for this book about letters from a soldier",
+    "route": null
+  },
+  {
+    "message": "my professor is ignoring my accommodation letter, she wont give me the extra time",
+    "route": "accommodations-kit"
+  },
+  {
+    "message": "ava's essays for chapman need another pass",
+    "route": "ava-kit"
+  },
+  {
+    "message": "marcus needs his stanford roommate essay read",
+    "route": "marcus-kit"
+  },
+  { "message": "marcus is coming over at 7", "route": null, "take": false },
+  {
+    "message": "Can I archive this tab and the 3 other child tabs?",
+    "done_with_tab": true
+  },
+  { "message": "Ima archive", "done_with_tab": true },
+  { "message": "peace", "done_with_tab": true },
+  { "message": "Close this tab", "done_with_tab": true },
+  { "message": "thats all for this one thx", "done_with_tab": true },
+  { "message": "archive that email from jonah", "done_with_tab": false },
+  {
+    "message": "I just want peace of mind that the send hold is on",
+    "done_with_tab": false
+  },
+  {
+    "message": "close the tab in chrome that's playing music",
+    "done_with_tab": false
+  },
+  { "message": "is the new tab page broken?", "done_with_tab": false },
+  {
+    "message": "benchmark jev vs haiku on these 50 prompts",
+    "process": "experiment",
+    "take": false
+  },
+  {
+    "message": "who else has built a church text line, find what's out there",
+    "process": "research",
+    "take": false
+  },
+  {
+    "message": "should I take the Cotis job or stay on FF",
+    "process": "decision",
+    "take": false
+  },
+  { "message": "nothing works after the last update", "process": "debug" },
+  {
+    "message": "wrong order on the outbound list, sort by city",
+    "process": "build"
+  }
+]

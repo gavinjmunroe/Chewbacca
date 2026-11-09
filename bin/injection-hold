@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""injection-hold: outbound actions wait for Caleb after a flagged read. bin/lib/injection_hold.py has the rules."""
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import injection_hold  # noqa: E402
+
+sys.exit(injection_hold.main(sys.argv))

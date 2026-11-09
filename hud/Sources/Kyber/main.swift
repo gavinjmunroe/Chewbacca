@@ -12,10 +12,21 @@ import os
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = OverlayModel()
     var overlay: OverlayWindow?
+    /// The day on the desktop, under every window. See `HomeWindow`.
+    private var home: HomeWindow?
+    private static let homeKey = "hud.home"
+    /// On unless turned off from the menu: it replaced the battery and clock
+    /// widgets on 2026-10-11, so a first launch puts it where they were.
+    private static var homeOn: Bool {
+        UserDefaults.standard.object(forKey: homeKey) as? Bool ?? true
+    }
+    private var homeItem: NSMenuItem?
     private var server: SocketServer?
     private var statusItem: NSStatusItem?
     private var voiceMenu: NSMenu?
     private var pushKeyMenu: NSMenu?
+    /// Runtime, account and model, from the menu bar. See `AccountsMenu`.
+    private let accountsMenu = AccountsMenu()
     private var commandBar: CommandBarWindow?
     /// The conversation, as a window. See `ChatWindow`.
     private var chat: ChatWindow?
@@ -86,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.rim = RimWindow(content: RimView(model: model))
         self.overlay = overlay
         overlay.show()
+        setUpHome()
 
         setUpCommandBar()
         setUpChat()
@@ -95,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHands()
         setUpMenuBar()
         setUpKeys()
+        observeKeyboardLoss()
         observeScreenChanges()
         observeFrontApp()
 
@@ -142,6 +155,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentFatal(error)
         }
 
+        // Realm's own interface loads now, in no window, so opening it is
+        // putting a page that is already painted on the glass (AppPane.swift
+        // has the measurements). Nothing is drawn until a surface asks.
+        RealmAppWarmup.start(draw: { [weak self] lines in
+            guard let self else { return }
+            for line in lines {
+                if let op = try? LineParser.parse(line) { self.model.apply(op) }
+            }
+            self.updateInteractive()
+        })
+
         // Start the listener at launch rather than on the first keypress.
         //
         // `prime()` inside it opens the model session and has the prompt read
@@ -158,6 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A text to yourself starting with "Kyber" is answered as a text.
         TextTrigger.shared.start()
+        // A meeting records itself: start when a call starts, stop when it ends.
+        MeetingAutopilot.shared.start()
         // And kept up after that, so a bridge that dies is back before the
         // next sentence rather than because of it. See `ListenerWatchdog`.
         listenerCheck = Timer.scheduledTimer(
@@ -165,6 +191,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkListener() }
         }
+        // Out of the way during a screen share or over a denied app.
+        shareCheck = Timer.scheduledTimer(
+            withTimeInterval: ScreenShare.interval, repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkSuppression() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkSuppression() }
+        }
+    }
+
+    private var shareCheck: Timer?
+    private var denyList = DenyList("")
+    private var denyListRead: Date?
+
+    /// Hide the glass while the screen is shared or a denied app is in
+    /// front, and bring it back as it was after (bd_2026-Code-5wa).
+    private func checkSuppression() {
+        guard let overlay else { return }
+        let modified = (try? FileManager.default.attributesOfItem(atPath: DenyList.path.path))?[.modificationDate] as? Date
+        if modified != denyListRead {
+            denyList = DenyList.load()
+            denyListRead = modified
+        }
+        let windows = ScreenShare.onScreen()
+        var reason = ScreenShare.sharing(windows, session: ScreenShare.session()).map { "\($0) is sharing the screen" }
+        if reason == nil, let app = NSWorkspace.shared.frontmostApplication,
+           app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            let screen = OverlayWindow.active?.frame.size ?? .zero
+            let filling = windows.contains {
+                $0.pid == app.processIdentifier && $0.layer == 0
+                    && $0.bounds.width >= screen.width && $0.bounds.height >= screen.height
+            }
+            if denyList.denies(name: app.localizedName, bundle: app.bundleIdentifier, filling: filling) {
+                reason = "\(app.localizedName ?? "the app in front") is on the deny list"
+            }
+        }
+        if reason != overlay.suppressed {
+            Self.keys.notice("glass.suppress reason=\(reason ?? "none", privacy: .public)")
+            overlay.suppress(reason)
+        }
+        home?.suppress(reason != nil)
+    }
+
+    private func setUpHome() {
+        let home = HomeWindow(model: HomeModel(), onClose: { [weak self] in self?.setHome(false) }) {
+            [weak self] section, row in
+            self?.openHomeRow(section, row)
+        }
+        self.home = home
+        // Before it is ever shown: a relaunch mid screen share (install.sh
+        // does one) would otherwise put names and texts on the share for the
+        // two seconds until the first timed check.
+        checkSuppression()
+        if Self.homeOn { home.show() }
+    }
+
+    /// A project opens a Terminal window in its folder. Anything else is a
+    /// graph node, and kyber-surfaces opens its walk on the glass (a person,
+    /// conversations, tasks or today) from the same `ks-pivot` line a
+    /// kyber-genui row sends.
+    private func openHomeRow(_ section: HomeSection, _ row: HomeRow) {
+        guard section == .projects else {
+            model.onEvent?(.rowAction(name: "ks-pivot", row: row.id, surface: "home"))
+            return
+        }
+        guard !row.path.isEmpty else {
+            model.fail("\(row.title) has no folder. Name one in ~/.chewbacca/home-panel.json.", hold: 4)
+            return
+        }
+        var isFolder: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: row.path, isDirectory: &isFolder), isFolder.boolValue,
+              let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+        else {
+            model.fail("\(row.title) is not at \(row.path) any more.", hold: 4)
+            return
+        }
+        // Through Launch Services, never `open -a Terminal -n` from a shell:
+        // that carried this process's environment into the new window
+        // (FORCE_COLOR and CLAUDE_CODE_*) and broke every `claude` run in it.
+        NSWorkspace.shared.open(
+            [URL(fileURLWithPath: row.path, isDirectory: true)], withApplicationAt: terminal,
+            configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func checkListener() {
@@ -178,10 +290,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
+        MeetingAutopilot.shared.stop()
         voice.setMode(.off)
         handTracker.stop()
         let monitors = [
-            hotKeyMonitor, escMonitor, localEscMonitor, mouseMonitor,
+            hotKeyMonitor, escMonitor, localEscMonitor, mouseMonitor, keyboardMonitor, localKeyboardMonitor,
             localMouseMonitor, clickMonitor, localClickMonitor, flagsMonitor,
             localFlagsMonitor, barMonitor,
             reticleDown, reticleDrag, reticleUp,
@@ -212,7 +325,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .line(let line):
             do {
                 if let op = try LineParser.parse(line) {
+                    if case .surface = op, let front = Self.frontWindow() {
+                        model.describe(frontWindow: front)
+                    }
                     model.apply(op)
+                    if case .surface(let id, _, _, _, _, _, _, _) = op {
+                        model.attribute(id, owner: event.owner)
+                    }
                     updateInteractive()
                 }
             } catch {
@@ -245,6 +364,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// system-wide needs Accessibility permission, and a panel you can summon is
     /// not worth a permission prompt on first launch.
     private func setUpKeys() {
+        // Option-Command-Return: the glass by keyboard (bd_2026-Code-yw6).
+        // The global monitor sees it from any app; the local one sees it,
+        // and every key after it, once the glass holds the keyboard.
+        keyboardMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard KeyboardFocus.isEntry(keyCode: event.keyCode, flags: event.modifierFlags) else { return }
+            Task { @MainActor in self?.toggleKeyboard() }
+        }
+        localKeyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            if KeyboardFocus.isEntry(keyCode: event.keyCode, flags: event.modifierFlags) {
+                self.toggleKeyboard()
+                return nil
+            }
+            // Only keys aimed at the glass. The conversation panel and the
+            // command bar are this app's windows too, and a Space typed into
+            // either must not press whatever the ring was last on.
+            guard self.model.keyboardFocus != nil, event.window === self.overlay,
+                  let command = KeyboardFocus.command(
+                    keyCode: event.keyCode, flags: event.modifierFlags,
+                    editing: self.model.editingField)
+            else { return event }
+            switch command {
+            case .next: self.model.moveFocus(by: 1)
+            case .previous: self.model.moveFocus(by: -1)
+            case .activate: self.model.activateFocus()
+            case .close: self.model.closeFocused()
+            case .leave: self.model.escapeKeyboard()
+            }
+            if self.model.keyboardFocus == nil { self.giveKeyboardBack() }
+            return nil
+        }
+
         hotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) {
             [weak self] event in
             guard event.modifierFlags.contains([.option, .command]),
@@ -322,13 +473,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Hand the click to the guides, in the glass's own points.
+    /// Hand the click to the guides, in the glass's own points. A click off
+    /// the folder on the glass also takes it down (`clickedAway`).
     private func strike() {
-        guard model.markers.contains(where: \.isGuide) else { return }
         let mouse = NSEvent.mouseLocation
         guard let screen = OverlayWindow.active, screen.frame.contains(mouse) else { return }
         let frame = screen.frame
-        model.hit(at: CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y))
+        let point = CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y)
+        model.clickedAway(at: point)
+        guard model.markers.contains(where: \.isGuide) else { return }
+        model.hit(at: point)
     }
 
     /// Which app the person is in, written where the tools can read it.
@@ -352,6 +506,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.noteFront(app)
         }
     }
+
+    /// The front app's front window, in the glass's points, for keeping
+    /// panels off it (bd_2026-Code-0l9). Nil when Kyber itself is in front,
+    /// so its own conversation panel never counts; `.some(nil)` when the
+    /// front app has no window on screen. Bounds only, from the window
+    /// server, so no permission is involved.
+    static func frontWindow() -> CGRect?? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return nil }
+        let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let glass = OverlayWindow.active?.frame ?? .zero
+        for info in list {
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == app.processIdentifier,
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds),
+                  rect.width >= minimumWindow, rect.height >= minimumWindow
+            else { continue }
+            // Window-server bounds are top-left from the main display's
+            // corner, the glass's own space when it is on the main display
+            // (`OverlayWindow.active`); a window on another display misses it.
+            let local = rect.offsetBy(dx: -glass.minX, dy: 0)
+            return .some(local.intersects(CGRect(origin: .zero, size: glass.size)) ? local : nil)
+        }
+        return .some(nil)
+    }
+
+    /// Smaller than this is a palette or a tooltip, not a window anyone is
+    /// working in. Guessed, never measured.
+    static let minimumWindow: CGFloat = 80
 
     nonisolated private static func noteFront(_ app: NSRunningApplication) {
         guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
@@ -419,11 +605,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onDismiss: { [weak self] in
                 Task { @MainActor in self?.model.closeChat() }
             })
+        // Marks follow the element under them (bd_2026-Code-j3m).
+        model.resolveAnchor = { AXMarkAnchor.resolve($0) }
         model.onChatOpen = { [weak self] in
             guard let self else { return }
             self.previousApp = NSWorkspace.shared.frontmostApplication
             self.overlay?.show()
             self.chat?.present()
+        }
+        // A card's `ask=`, double-clicked: the same path as Return in the panel.
+        model.onAsk = { [weak self] text in
+            Task { @MainActor in self?.dispatch(text, typed: true) }
         }
         model.onChatClose = { [weak self] in
             guard let self, let chat = self.chat else { return }
@@ -525,6 +717,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Summoning the bar activates this app, which is the honest cost of a
     /// window you can type in. Not handing focus back afterwards would be the
     /// dishonest part: the person was in the middle of something.
+    /// Into keyboard mode, or out of it. Into it takes key on the glass,
+    /// which a non-activating panel does without bringing this app forward,
+    /// so the app the person was in stays the active one.
+    private func toggleKeyboard() {
+        guard let overlay else { return }
+        if model.keyboardFocus != nil {
+            model.leaveKeyboard()
+            giveKeyboardBack()
+            return
+        }
+        guard overlay.isVisible, model.enterKeyboard() else { return }
+        keyboardReturn = NSWorkspace.shared.frontmostApplication
+        overlay.makeKey()
+    }
+
+    /// Hand the keys back to the app that had them.
+    private func giveKeyboardBack() {
+        if let app = keyboardReturn, app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            app.activate()
+        }
+        keyboardReturn = nil
+    }
+
+    /// A click into another app takes key from the glass; keyboard mode
+    /// ends with it, so no ring is left on a glass that no longer has keys.
+    private func observeKeyboardLoss() {
+        guard let overlay else { return }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: overlay, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.model.keyboardFocus != nil else { return }
+                self.model.leaveKeyboard()
+                self.keyboardReturn = nil
+            }
+        }
+    }
+
+    private var keyboardMonitor: Any?
+    private var localKeyboardMonitor: Any?
+    private var keyboardReturn: NSRunningApplication?
+
     private func restoreFocus() {
         previousApp?.activate()
         previousApp = nil
@@ -1027,7 +1261,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.overlay?.fitToScreen() }
+            Task { @MainActor in
+                self?.overlay?.fitToScreen()
+                self?.home?.refit()
+            }
         }
     }
 
@@ -1102,10 +1339,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionsItem.target = self
         menu.addItem(sessionsItem)
 
-        let filesItem = NSMenuItem(
-            title: "Files", action: #selector(filesFromMenu), keyEquivalent: "")
-        filesItem.target = self
-        menu.addItem(filesItem)
+        let homeItem = NSMenuItem(
+            title: "Home on the desktop", action: #selector(homeFromMenu), keyEquivalent: "")
+        homeItem.target = self
+        homeItem.state = Self.homeOn ? .on : .off
+        self.homeItem = homeItem
+        menu.addItem(homeItem)
+
+        // Which runtime, account and model answer, and the switch, without
+        // speaking. The same pick "which account" draws on the glass.
+        let accountsItem = NSMenuItem(title: "Model and account", action: nil, keyEquivalent: "")
+        accountsItem.submenu = accountsMenu.menu
+        accountsMenu.onShowOnGlass = { [weak self] in self?.dispatch("which account", typed: true) }
+        menu.addItem(accountsItem)
 
         let rimItem = NSMenuItem(
             title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")
@@ -1228,18 +1474,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func askFromMenu() { showCommandBar() }
     @objc private func chatFromMenu() { model.openChat() }
 
-    /// Start `kyber-sessions serve`, which draws the sessions surface and
-    /// answers its presses. It holds its own lock, so a second start while
-    /// one is running exits at once instead of drawing twice.
-    /// The two-pane file manager. See `FilesPanel`.
-    @objc private func filesFromMenu() {
-        FilesPanel.shared.open()
-    }
-
     @objc private func rimFromMenu() {
         RimEditor.shared.open(showing: model.presence)
     }
 
+    /// Start `kyber-sessions serve`, which draws the sessions surface and
+    /// answers its presses. It holds its own lock, so a second start while
+    /// one is running exits at once instead of drawing twice.
     @objc private func sessionsFromMenu() {
         let candidates = [
             FileManager.default.homeDirectoryForCurrentUser
@@ -1263,6 +1504,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? p.run()
     }
     @objc private func toggleFromMenu() { toggle() }
+
+    @objc private func homeFromMenu() { setHome(!Self.homeOn) }
+
+    /// The menu item and the panel's own X both land here, so the item's
+    /// tick always says whether the panel is wanted.
+    private func setHome(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.homeKey)
+        homeItem?.state = on ? .on : .off
+        if on { home?.show() } else { home?.hide() }
+    }
     @objc private func clearFromMenu() { dismissAll() }
 
     private func presentFatal(_ error: Error) {

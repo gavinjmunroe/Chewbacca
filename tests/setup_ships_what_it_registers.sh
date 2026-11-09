@@ -26,11 +26,13 @@ done < <(grep -oE 'hooks_dir \+ "/[a-z0-9._-]+"' "$ROOT/setup.sh" \
          | sed 's|.*"/||; s|"||' | sort -u)
 
 # 2. Anything in the kit that refuses things must be registered, or it is a
-#    file nobody runs.
+#    file nobody runs. The runtime install (tools/agent_runtime.py) registers
+#    its own: brake-guard.sh is its brake, since setup.sh writes the same
+#    refusals as settings.json deny rules (2026-10-13).
 for f in "$ROOT"/.claude/hooks/*guard*.sh; do
   b=$(basename "$f")
-  grep -q "$b" "$ROOT/setup.sh" || {
-    echo "  FAIL  the kit ships $b but setup.sh never registers it"
+  grep -q "$b" "$ROOT/setup.sh" "$ROOT/tools/agent_runtime.py" || {
+    echo "  FAIL  the kit ships $b but neither setup.sh nor the runtime install registers it"
     fail=$((fail + 1))
   }
 done

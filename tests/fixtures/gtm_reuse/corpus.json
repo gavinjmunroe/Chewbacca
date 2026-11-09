@@ -1,0 +1,27 @@
+[
+  {
+    "file": "medrano_score_2026_10_27.py",
+    "expect": "deny",
+    "why": "the hand-rolled Medrano scorer that started the gate (10/27)"
+  },
+  {
+    "file": "ff_lead_card_2026_10_27.py",
+    "expect": "deny",
+    "why": "FF's live lead card, written the same night with its own tiers and no gtme_score"
+  },
+  {
+    "file": "ff_to_gtme.py",
+    "expect": "allow",
+    "why": "FF list export into the gtme ledger, built on the kit"
+  },
+  {
+    "file": "kit_gtme_jev.py",
+    "expect": "allow",
+    "why": "the kit's own Jev judgment path for GTM"
+  },
+  {
+    "file": "medrano_church_whynow.py",
+    "expect": "allow",
+    "why": "a short fetch script that scores nothing itself"
+  }
+]

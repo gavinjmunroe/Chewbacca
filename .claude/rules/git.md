@@ -59,21 +59,50 @@ the index holds files far older than the newest one. Enable it with
 `git config core.hooksPath .githooks`. It is a backstop: it cannot catch a
 file a build step regenerated seconds ago.
 
+## A shared file commits whole, other tabs' lines included
+
+`git commit -- <path>` keeps other files out, but it commits the whole of that
+path as it sits on disk. In a file several tabs append to (`team/memory/MEMORY.md`,
+an index, a changelog), that means another tab's uncommitted lines ride along.
+On 2026-10-17 a one-line index add carried two other tabs' lines for files that
+weren't committed, and pre-push refused the land ("index names a missing file").
+For a shared file, use `chewbacca land --paths <note> --add-line <file> "<line>" -m "<msg>"`:
+it appends to main's copy and never reads the disk's. In a repo without land, build it from
+`git show "${REV}:<path>"`, quoted with braces, because zsh reads `$REV:t...` as a modifier
+(2026-11-05: that replaced a 536 line index with 1, and pre-push caught it).
+The team memory index format is
+`- <slug>: <hook>`, where the slug is the file name.
+
 ## One task, one worktree
 
 **Never edit a checkout another session might be using.** Start each task in
-its own worktree on a short branch cut from the latest main:
+its own worktree, detached at the latest main, and land with `chewbacca land`:
 
 ```bash
-git fetch upstream main
-git worktree add -b fix/slug ../wt-slug upstream/main   # or EnterWorktree in Claude Code
+git fetch origin main
+git worktree add --detach ../wt-slug origin/main
 ```
+
+**Chewbacca has one branch: main.** Caleb, 2026-10-19: "Chewbacca should only
+ever have 1 branch: main". That day there were 28 local and 12 GitHub branches,
+every one already landed. Never push a branch to origin, and delete any local
+branch (EnterWorktree's `claude/*` included) the moment its commits land.
+
+To move to a newer main, add a fresh worktree. A `git checkout` inside your own worktree gets refused by destructive-guard, which reads the session's checkout, and on 2026-11-06 it refused one in wt-recipes as if it were the shared checkout. Don't reach for its override.
 
 On 2026-10-05 the shared `~/Chewbacca` checkout sat 18 commits behind main
 holding another session's edits, eleven stray worktrees had piled up, and a
 fork's main diverged from upstream because sessions pushed whatever their
 checkout held. A worktree costs one command and makes every one of those
 impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
+
+Commit from a worktree as `cd <worktree> && git commit ...`, with `&&`. The
+commit-deletes guard reads only that shape to find the repo, and any other falls
+back to the session's checkout. On 2026-11-06 `cd <worktree>; git commit` was
+judged against the shared checkout, whose HEAD had moved, and refused over 3 files
+the commit never touched. When main moves under a task, replay with `git checkout
+--detach origin/main` and `git cherry-pick`. A merge staged 200+ of other tabs'
+files that same day, and pre-commit's skill lint refused one of theirs.
 
 ## Pulling and pushing
 
@@ -86,5 +115,40 @@ impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
   `.githooks/pre-push` run. It checks what the push touches (syntax, counts,
   checksums, undefined Python names, doc links, hook registration) in a few
   seconds. Run `bash tests/run.sh` as well for anything large.
+- In Chewbacca, push with `chewbacca land --paths <files> -m "<msg>"` (or
+  `chewbacca land <sha>...`). It builds on a fresh worktree of origin/main so
+  other tabs' files never ride along, regenerates SHA256SUMS, lets pre-push
+  run, and retries a lost race under a lock. Never push from the shared
+  checkout by hand: ten tabs did on 2026-10-09/10 and broke it a new way each time.
+- A graded event freezes shipping, and `live-event-guard` can't see all of it. It reads the command's words, so `chewbacca land` and a push inside a script file pass it. On 2026-11-06 this kit landed at 11:4x inside the freeze that ended at 12:00 with no refusal. Before a land, run `coursework today`, and if an event is within its window (30 minutes before, 2 hours after) land nothing that touches a tool he's using in it.
 - Main stays green. A red check on main is fixed or quarantined the day it
   appears, because a main that is always a little red hides the next failure.
+
+## Merging one repo into another
+
+Check both repos' visibility first: `gh api repos/<owner>/<repo> --jq .private`.
+A private repo pushed into a public one stays in public history even after a
+revert. On 2026-10-28 Caleb asked to merge calebnewtonusc/anchored-os (private:
+call notes, other teams' members by name, strategy) into anchored (public). The
+mismatch only showed up because collaborators got checked. The merge waited on
+a local branch until he answered "Yes, go private".
+
+Bring the history with `git subtree add --prefix=<dir> <repo> main`, compare
+every file byte for byte (`git show HEAD:<f> | cmp - <dir>/<f>`), and archive
+the old repo only after that. Never rebase a branch that holds a subtree add:
+the same day a rebase started replaying the imported commits at the repo root.
+Merge main into it instead.
+
+## Removing a local repo: ask the remote, not origin/\*
+
+Before trashing, deleting or "cleaning up" any local checkout, run
+`bin/repo-safe-to-remove <dir>...` and remove only the ones it prints SAFE.
+It asks the remote with `git ls-remote`, then checks the tree, stash and every
+branch tip against what the remote has right now. On 2026-11-04 a storage
+cleanup trashed echo, grader and visualide as fully pushed: stale origin/\*
+refs outlived the deleted GitHub repos, `git fetch -q` failed silently, the
+Trash got emptied, and those were the only copies.
+
+## Cleanup never follows a commit on a `;`
+
+In zsh, `git add $F` with several paths in `$F` passes one long path and fails. If the commit is joined with `&&` and cleanup comes after a `;`, the cleanup still runs. On 2026-11-05 that shape queued `git worktree remove --force` on a worktree holding the only copy of a finished fix, and it was caught by chance while the job waited on a deploy. Write paths out, and chain cleanup with `&&` so it only runs after the push worked.

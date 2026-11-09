@@ -1,0 +1,707 @@
+#!/usr/bin/env python3
+"""
+chewbacca usc food: USC mobile order and the dining halls, read-only, for any
+USC student on any Mac.
+
+  chewbacca usc food                      what's open now: halls and mobile order spots
+  chewbacca usc food spots [--near X]     every mobile order spot, open or not, wait,
+                                          orders in the queue, hours, walk minutes
+  chewbacca usc food menu <spot>          one spot's menu with prices, diet tags and
+                                          what you can pay with there
+  chewbacca usc food hall <evk|parkside|village> [--meal lunch] [--avoid gluten,dairy] [--diet vegan]
+                                          today's stations and items, allergens and tags
+  chewbacca usc food lunch [--near X] [--diet vegan] [--avoid dairy]
+                                          what's good for lunch near you, ranked from
+                                          today's real menus and live waits
+  chewbacca usc food cart <spot> "<item>" [--pay dining-dollars|swipe|discretionary|card]
+                                          a ready cart and one plain line, saved; nothing ordered
+  chewbacca usc food place <cart-id>      refuses without the owner's own press, and even
+                                          with one hands the cart to their phone; nothing here
+                                          submits an order
+  chewbacca usc food balance              Dining Dollars and swipes from USCard, if Chrome
+                                          holds a live USC sign-in
+  --near X   a building or place on the USC map ("Leavey", "SGM", "THH"), remembered
+  --json     the same, as data
+
+Where it comes from (2026-10-13):
+- USC mobile order is Transact Mobile Ordering ("USC Campus Dining", campus 155),
+  per hospitality.usc.edu/mobile-ordering. Its web build, weborder.transactcampus.com,
+  reads every spot's live state and menu without a sign-in through two calls,
+  loginforweb and getmenu. Requests are signed the way that web build signs them:
+  an HMAC over the endpoint and ids with a key the page ships to every visitor.
+- Hall menus: hospitality.usc.edu's own JSON route (library/api-sites/usc-dining.md).
+  Hall hours: hospitality.usc.edu/hours-of-operation.
+- Coordinates: the campus map through `chewbacca api call usc-maps searchPlaces`.
+
+Spending is a press. This file posts to exactly two Transact endpoints, both
+reads (READ_ENDPOINTS). The order endpoints are refused at the one function
+that talks to Transact, so no flag, cart or press makes this file place an
+order. `place` checks for the owner's own press through tools/send_approval.py
+with always_press, so the mode file that lets agents send texts does not let
+them spend.
+"""
+import argparse
+import concurrent.futures as cf
+import datetime as dt
+import hashlib
+import hmac
+import html
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+import uuid
+from pathlib import Path
+
+ROOT = Path(os.environ.get("CHEWBACCA_ROOT") or Path(__file__).resolve().parent.parent)
+HOME = Path(os.environ.get("CHEWBACCA_USC_FOOD_HOME") or Path.home() / ".chewbacca" / "usc-food")
+CONFIG = Path(os.environ.get("CHEWBACCA_USC_CONFIG", Path.home() / ".chewbacca" / "usc.json"))
+
+TRANSACT = "https://mobileorderprodapi.transactcampus.com/api_weborder/"
+# USC Campus Dining's id in Transact. Found 2026-10-13 by asking loginforweb for
+# each id as a guest: 155 answered "USC Campus Dining", Los Angeles, 32 locations.
+USC_CAMPUS = "155"
+# The web build's request signing key, from its public bundle
+# (weborder.transactcampus.com/assets/index-CQS9mzKA.js, Constants.loginHashKey).
+# Every visitor's browser holds it; it signs, it doesn't authenticate.
+# secret-scan: allow
+SIGN_KEY = b"8k39bwPF8aqs3QY9PgWQYFFDspd6Fs"
+# Reads only. calculatecart needs a signed-in user and still changes nothing,
+# but it isn't here because a guest can't call it (2026-10-13).
+READ_ENDPOINTS = frozenset(("loginforweb", "getmenu"))
+# Named so a test can prove each one is refused before any network.
+ORDER_ENDPOINTS = frozenset(("processorderstaged", "processorderstatuscheck", "cancelpendingorder",
+                             "checkinorder", "addcreditcardgeturl", "changedefaultpaymentmethod"))
+WEB_ORDER = "https://weborder.transactcampus.com/"
+
+DINING = "https://hospitality.usc.edu"
+HALLS = {"evk": ("Everybody's Kitchen", "everybodys-kitchen"),
+         "parkside": ("Parkside Residential Dining Hall", "parkside-restaurant-grill"),
+         "village": ("USC Village Dining Hall", "usc-village-dining-hall")}
+HALL_VENUE = {"evk": "evk", "parkside": "parkside", "village": "university-village"}
+# The campus map's own names for the halls (searchPlaces, 2026-10-13).
+HALL_MAP_NAME = {"evk": "Everybody's Kitchen", "parkside": "Parkside Dining Hall",
+                 "village": "USC Village Dining Hall"}
+# Stations that are sides and self-serve bars, not a meal on their own. From
+# 2026-10-13's menus: Village breakfast's "Sweets and Treats" and "Salad Bar"
+# were bagels, butter balls, oatmeal and muffins.
+SIDE_STATIONS = re.compile(r"sweet|treat|salad bar|condiment|beverage|drink|dessert|bakery|cereal|fruit", re.I)
+# Toppings and condiments listed as items at a main station. From 2026-10-13's
+# Village lunch Grill: pico de gallo, salsas, lime wedges, sour cream, cotija.
+CONDIMENTS = re.compile(r"salsa|pico|wedge|sour cream|cotija|cilantro|jalape|dressing|mayo|lettuce|"
+                        r"sliced (cheese|tomato|onion)|\bsauce\b|butter balls|croutons|chopped", re.I)
+MEAL_PRICE = (7, 25)
+# A brisk campus walk. Guessed, never measured: 80 m a minute is the usual
+# planning figure for walking, and a student late to lunch walks faster.
+WALK_M_PER_MIN = 80
+PT = None
+try:
+    from zoneinfo import ZoneInfo
+    PT = ZoneInfo("America/Los_Angeles")
+except Exception:
+    pass
+
+
+class Refused(Exception):
+    pass
+
+
+def now_pt():
+    return dt.datetime.now(PT) if PT else dt.datetime.now()
+
+
+
+_session = {"uuid": str(uuid.uuid4()), "sid": str(int(time.time() * 1000))}
+
+
+def transport(url, body, headers):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+def transact(endpoint, body, locationid="0"):
+    """The only function that talks to Transact. Reads only."""
+    if endpoint not in READ_ENDPOINTS:
+        raise Refused(f"{endpoint} is not a read; this tool never calls it")
+    ids = endpoint + _session["uuid"] + USC_CAMPUS + str(locationid) + "0"
+    headers = {"Content-Type": "application/json", "sessionid": _session["sid"], "login_token_web": "",
+               "userid": "0", "campusid": USC_CAMPUS, "locationid": str(locationid), "uuid": _session["uuid"],
+               "hash": hmac.new(SIGN_KEY, ids.encode(), hashlib.sha256).hexdigest(), "rememberme": "OFF",
+               "Origin": WEB_ORDER.rstrip("/"), "Referer": WEB_ORDER,
+               "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/154 Safari/537.36"}
+    data = transport(TRANSACT + endpoint, body, headers)
+    if not isinstance(data, dict) or data.get("status") != "OK":
+        raise RuntimeError(f"Transact {endpoint}: {(data or {}).get('message') or 'no answer'}")
+    return data
+
+
+def spots(raw=None):
+    """Every mobile order spot a student can see, with its live state."""
+    raw = raw or transact("loginforweb", {"campusid": USC_CAMPUS})
+    cafes = {c.get("cafeteriaid"): c for c in raw.get("cafeterias") or []}
+    out = []
+    for loc in raw.get("locations") or []:
+        if loc.get("is_hidden") or loc.get("is_deleted"):
+            continue
+        cafe = cafes.get(loc.get("cafeteriaid")) or {}
+        out.append({
+            "id": loc["locationid"], "name": loc.get("name", "").strip(),
+            "area": cafe.get("group_display_name") or "",
+            "open": bool(loc.get("is_currently_takeout_open")) and not loc.get("is_ordering_disabled"),
+            "wait_min": loc.get("estimated_wait_time") or 0,
+            "queue": loc.get("order_queue_count") or 0,
+            "busy": bool(loc.get("is_currently_busy_period")),
+            "hours_today": hours_today(loc),
+            "dining_dollars_or_swipes": bool(loc.get("mealplan_payments_allowed")),
+            "card": bool(loc.get("creditcard_payments_allowed")),
+            "lat": cafe.get("latitude") or None, "lng": cafe.get("longitude") or None,
+        })
+    return out
+
+
+def hours_today(loc, today=None):
+    today = today or now_pt()
+    # Transact numbers days 1 (Monday) to 7, the same as isoweekday (hours_list
+    # labels on 2026-10-13: day_of_week 1 was "Monday").
+    for h in loc.get("hours_list") or []:
+        if h.get("day_of_week") == today.isoweekday() and not h.get("holiday_date"):
+            if h.get("takeout_hours_type") == 1:
+                return "closed"
+            return f"{hhmm(h.get('takeout_open_time'))} to {hhmm(h.get('takeout_close_time'))}"
+    return f"{hhmm(loc.get('takeout_open_time'))} to {hhmm(loc.get('takeout_close_time'))}"
+
+
+def hhmm(t):
+    try:
+        h, m = (int(x) for x in str(t).split(":")[:2])
+    except ValueError:
+        return str(t)
+    return dt.time(h, m).strftime("%-I:%M%p").lower()
+
+
+def find_spot(query, all_spots):
+    q = str(query).lower().strip()
+    if q.isdigit():
+        hit = [s for s in all_spots if str(s["id"]) == q]
+    else:
+        words = q.split()
+        hit = [s for s in all_spots if s["name"].lower() == q] or \
+              [s for s in all_spots if all(w in s["name"].lower() for w in words)]
+    if len(hit) != 1:
+        names = ", ".join(s["name"] for s in (hit or all_spots))
+        raise SystemExit(f"{'More than one' if hit else 'No'} mobile order spot matches \"{query}\". Spots: {names}")
+    return hit[0]
+
+
+def menu(spot_id, raw=None):
+    raw = raw or transact("getmenu", {"campusid": USC_CAMPUS, "locationid": str(spot_id), "retrieval_type": "0",
+                                      "payment_method": "1", "ct_id": "0", "target_date": "", "target_time": ""},
+                          locationid=spot_id)
+    m = raw.get("menu") or {}
+    sections = []
+    for key in ("sections_1", "sections_2", "sections_3"):
+        for s in m.get(key) or []:
+            if s.get("is_hidden") or s.get("is_deleted") or not s.get("currently_available"):
+                continue
+            items = [{"id": i["itemid"], "name": i.get("name", "").strip(), "price": (i.get("price_display") or 0) / 100,
+                      "tags": [d.get("label") for d in i.get("dietary_restrictions") or [] if d.get("label")],
+                      "description": (i.get("description") or "").strip(),
+                      "has_choices": any(not o.get("is_hidden") and not o.get("is_deleted") for o in i.get("options") or []),
+                      "required_choice": any(not o.get("is_hidden") and not o.get("is_deleted") and (o.get("minimum") or 0) > 0
+                                             for o in i.get("options") or [])}
+                     for i in s.get("items") or []
+                     if not i.get("is_hidden") and not i.get("is_deleted") and not i.get("pos_outofstock")
+                     and i.get("mobile_stock_available", 1)]
+            if items:
+                sections.append({"section": s.get("name", "").strip(), "items": items})
+    tenders = [{"id": t["ct_id"], "name": t.get("name", ""), "swipe": bool(t.get("swipe"))}
+               for t in m.get("tenders") or [] if not t.get("is_hidden") and t.get("currently_available")]
+    slots = [s["start_time"] for s in raw.get("menu_time_slots") or [] if s.get("is_available")]
+    return {"spot": spot_id, "sections": sections, "tenders": tenders,
+            "asap": [raw.get("asap_min"), raw.get("asap_max")], "pickup_slots": slots,
+            "note": (raw.get("location") or {}).get("header_text") or ""}
+
+
+
+def fetch_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) Chrome/154", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+def fetch_text(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh) Chrome/154"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def hall_menu(hall, day, raw=None):
+    raw = raw or fetch_json(f"{DINING}/wp-json/hsp-api/v1/get-res-dining-menus/{HALL_VENUE[hall]}"
+                            f"?y={day.year}&m={day.month}&d={day.day}")
+    meals = {}
+    for meal in raw.get("meals") or []:
+        stations = [{"station": s.get("station", "").strip(),
+                     "items": [{"name": i.get("item", "").strip(), "allergens": i.get("allergens") or [],
+                                "tags": i.get("preferences") or []} for i in s.get("menu") or []]}
+                    for s in meal.get("stations") or []]
+        if stations:
+            meals[meal.get("name", "")] = stations
+    return meals
+
+
+def hall_hours(page=None):
+    """Each hall's hours by weekday, from the hours page's own table."""
+    page = page if page is not None else fetch_text(f"{DINING}/hours-of-operation/")
+    text = html.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S)))
+    text = re.sub(r"\s+", " ", text).replace("\u2019", "'")
+    out = {}
+    for key, (name, _) in HALLS.items():
+        i = text.find(f"hours for {name}")
+        if i < 0:
+            continue
+        block = text[i:i + 400]
+        days = {}
+        for d, val in re.findall(r"\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Closed|\d{1,2}:\d{2}[AP]M \S \d{1,2}:\d{2}[AP]M)", block):
+            days.setdefault(d, val.replace(" \u2013 ", " to ").replace("AM", "am").replace("PM", "pm"))
+        out[key] = days
+    return out
+
+
+def is_open(hours_str, when):
+    m = re.match(r"(\d{1,2}:\d{2}[ap]m) (?:to|\S) (\d{1,2}:\d{2}[ap]m)", hours_str or "", re.I)
+    if not m:
+        return False
+    a, b = (dt.datetime.strptime(x.upper(), "%I:%M%p").time() for x in m.groups())
+    return a <= when.time() < b
+
+
+def meal_now(when):
+    # Weekends serve Brunch then Dinner, weekdays Breakfast, Lunch, Dinner
+    # (usc-dining.md, 2026-10-09). Same cutoffs as `chewbacca usc`.
+    if when.weekday() >= 5:
+        return "Brunch" if when.hour < 15 else "Dinner"
+    return "Breakfast" if when.hour < 10 else "Lunch" if when.hour < 15 else "Dinner"
+
+
+def keep_item(item, diet, avoid):
+    tags = {t.lower().replace("-", " ") for t in item.get("tags") or []}
+    allergens = {a.lower() for a in item.get("allergens") or []}
+    for d in diet:
+        if not any(d in t for t in tags):
+            return False
+    return not any(a in allergens for a in avoid)
+
+
+
+_places_lock = threading.Lock()
+
+
+def place(name):
+    """lat, lng for a place on the USC map, cached. None when the map has no
+    answer or no api engine is installed."""
+    cache_file = HOME / "places.json"
+    try:
+        cache = json.loads(cache_file.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    key = name.lower().strip()
+    if key in cache:
+        return cache[key]
+    try:
+        out = subprocess.run(["bash", str(ROOT / "bin" / "chewbacca-api"), "call", "usc-maps", "searchPlaces", f"q={name}"],
+                             capture_output=True, text=True, timeout=60).stdout
+        res = json.loads(out.strip().splitlines()[-1])
+        rows = res.get("data") or [] if res.get("ok") else []
+    except (subprocess.TimeoutExpired, ValueError, IndexError, OSError):
+        return None
+    hit = next(({"lat": r["lat"], "lng": r["lng"], "name": r.get("name")} for r in rows if r.get("lat")), None)
+    if hit:
+        # Lookups run side by side in lunch: reread under the lock so one
+        # thread's write never drops another's.
+        with _places_lock:
+            try:
+                cache = json.loads(cache_file.read_text())
+            except (OSError, ValueError):
+                cache = {}
+            cache[key] = hit
+            HOME.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps(cache, indent=1))
+    return hit
+
+
+def walk_min(a, b):
+    if not a or not b or not a.get("lat") or not b.get("lat"):
+        return None
+    dlat = math.radians(b["lat"] - a["lat"])
+    dlng = math.radians(b["lng"] - a["lng"]) * math.cos(math.radians(a["lat"]))
+    return round(6371000 * math.hypot(dlat, dlng) / WALK_M_PER_MIN)
+
+
+def spot_place(s):
+    # Spots grouped as "University Park Campus" carry that campus's center, not
+    # their own building, so look them up by name and say unknown when the map
+    # has nothing rather than measure from the middle of campus.
+    if s["area"] and s["area"] not in ("University Park Campus", "Upstairs") and s.get("lat"):
+        return {"lat": s["lat"], "lng": s["lng"]}
+    return place(re.sub(r"\s*/\s*", " ", s["name"]))
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_config(cfg):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(cfg, indent=2))
+
+
+def resolve_near(near):
+    cfg = load_config()
+    if near:
+        cfg["near"] = near
+        save_config(cfg)
+    near = cfg.get("near")
+    return near, (place(near) if near else None)
+
+
+
+PAY = {"dining-dollars": "dining dollars", "swipe": None, "discretionary": "discretionary - student", "card": "card"}
+
+
+def build_cart(spot, item_query, pay, m, when=None):
+    items = [dict(i, section=s["section"]) for s in m["sections"] for i in s["items"]]
+    q = item_query.lower().split()
+    hit = [i for i in items if i["name"].lower() == item_query.lower()] or \
+          [i for i in items if all(w in i["name"].lower() for w in q)]
+    if len(hit) != 1:
+        names = "; ".join(f"{i['name']} ${i['price']:.2f}" for i in (hit or items))
+        raise SystemExit(f"{'More than one' if hit else 'No'} item at {spot['name']} matches \"{item_query}\". Menu: {names}")
+    item = hit[0]
+    if pay == "card":
+        if not spot["card"]:
+            raise SystemExit(f"{spot['name']} doesn't take a card in mobile order.")
+        tender = {"id": 0, "name": "credit card", "swipe": False}
+    else:
+        want = PAY[pay]
+        tender = next((t for t in m["tenders"] if (t["swipe"] if want is None else t["name"].lower() == want)), None)
+        if not tender:
+            took = ", ".join(t["name"] for t in m["tenders"]) or "card only"
+            raise SystemExit(f"{spot['name']} doesn't take {pay.replace('-', ' ')} in mobile order. It takes: {took}.")
+    when = when or now_pt()
+    pickup = m["pickup_slots"][0] if m["pickup_slots"] else None
+    paid = ("1 Campus Center Meal Swipe (USC sets what a swipe covers)" if tender["swipe"]
+            else f"${item['price']:.2f} from {tender['name'].replace('Discretionary - Student', 'USCard Discretionary')}")
+    ready = f"pickup {hhmm(pickup)}" if pickup else "pickup ASAP"
+    asap = m.get("asap") or [None, None]
+    if asap[0] is not None and asap[1]:
+        ready += f" (ASAP is {asap[0]} to {asap[1]} min)"
+    choice = " You'll still pick its required options in the app." if item["required_choice"] else ""
+    summary = f"{item['name']} from {spot['name']}, {paid}, {ready}.{choice}"
+    cart = {"id": hashlib.sha256(f"{spot['id']}:{item['id']}:{tender['id']}:{when.isoformat()}".encode()).hexdigest()[:10],
+            "spot": {"id": spot["id"], "name": spot["name"]}, "item": item, "tender": tender,
+            "pickup": pickup, "summary": summary, "status": "ready, waiting on the owner's press",
+            "made_at": when.isoformat(), "web_order": f"{WEB_ORDER}{USC_CAMPUS}/{spot['id']}"}
+    return cart
+
+
+def save_cart(cart):
+    d = HOME / "carts"
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o700)
+    (d / f"{cart['id']}.json").write_text(json.dumps(cart, indent=2))
+    return d / f"{cart['id']}.json"
+
+
+def press_for(cart):
+    """The owner's own press for this exact cart, or Refused. Never a confirm
+    an agent can draw: the press rules are tools/send_approval.py's, with the
+    mode file ignored, because spending is always a press."""
+    if os.environ.get("CHEWBACCA_NO_SEND"):
+        raise Refused("CHEWBACCA_NO_SEND is set, so nothing is ordered.")
+    sys.path.insert(0, str(ROOT / "tools"))
+    import send_approval
+    try:
+        return send_approval.take("usc-order", cart["spot"]["name"], cart["summary"], always_press=True)
+    except send_approval.NoApproval as e:
+        raise Refused(str(e))
+
+
+def place_order(cart):
+    """With the owner's press, hand the cart to their own phone. Without it,
+    refuse. Either way nothing here submits an order: Transact places an order
+    only for a signed-in user, and the order endpoints are refused in
+    transact()."""
+    press = press_for(cart)
+    return {"pressed": press, "summary": cart["summary"],
+            "next": "Open the USC Campus Dining app (Transact Mobile Ordering) and tap Pay on this cart; "
+                    f"on the web it's {cart['web_order']} where the spot takes web orders."}
+
+
+
+def balance():
+    script = ROOT / "bin" / "lib" / "usc_card.mjs"
+    jar = None
+    try:
+        out = subprocess.run([sys.executable, str(ROOT / "bin" / "lib" / "usc_card_jar.py")], capture_output=True, text=True, timeout=60)
+        if out.returncode != 0:
+            return {"ok": False, "why": out.stderr.strip().splitlines()[-1] if out.stderr.strip() else "no USC session in Chrome"}
+        jar = out.stdout.strip()
+        res = subprocess.run(["node", str(script), jar], capture_output=True, text=True, timeout=120)
+        return json.loads(res.stdout.strip().splitlines()[-1])
+    except FileNotFoundError:
+        return {"ok": False, "why": "node isn't installed, and the balance read needs a headless browser"}
+    except (subprocess.TimeoutExpired, ValueError, IndexError, OSError) as e:
+        return {"ok": False, "why": f"no answer ({e.__class__.__name__})"}
+    finally:
+        # The .mjs deletes the jar as soon as it reads it. When node is
+        # missing or dies first, the decrypted cookies must not stay behind.
+        if jar and Path(jar).name == "jar.json" and Path(jar).parent.name.startswith("usc-card-"):
+            import shutil
+            shutil.rmtree(Path(jar).parent, ignore_errors=True)
+
+
+
+def cmd_now(a):
+    when = now_pt()
+    hours = hall_hours()
+    day = when.strftime("%a")
+    halls = [{"hall": k, "name": HALLS[k][0], "hours_today": hours.get(k, {}).get(day, "unknown"),
+              "open": is_open(hours.get(k, {}).get(day), when)} for k in HALLS]
+    sp = spots()
+    return {"at": when.strftime("%-I:%M%p").lower(), "meal": meal_now(when), "halls": halls,
+            "mobile_order_open": sorted([s for s in sp if s["open"]], key=lambda s: s["wait_min"]),
+            "mobile_order_closed": [s["name"] for s in sp if not s["open"]]}
+
+
+def cmd_spots(a):
+    near, here = resolve_near(a.near)
+    out = spots()
+    for s in out:
+        s["walk_min"] = walk_min(here, spot_place(s)) if here else None
+    # A spot the map can't place goes after the ones it can, never ahead as a 0 min walk.
+    out.sort(key=lambda s: (not s["open"], here is not None and s["walk_min"] is None,
+                            (s["walk_min"] or 0) + s["wait_min"], s["name"]))
+    return {"near": near, "spots": out}
+
+
+def cmd_menu(a):
+    s = find_spot(a.target, spots())
+    return {"spot": s, "menu": menu(s["id"])}
+
+
+def cmd_hall(a):
+    hall = norm_hall(a.target)
+    when = now_pt()
+    meals = hall_menu(hall, when.date())
+    meal = (a.meal or meal_now(when)).capitalize()
+    diet, avoid = split(a.diet), split(a.avoid)
+    stations = [{"station": st["station"], "items": [i for i in st["items"] if keep_item(i, diet, avoid)]}
+                for st in meals.get(meal, [])]
+    hours = hall_hours().get(hall, {})
+    return {"hall": hall, "name": HALLS[hall][0], "date": str(when.date()), "meal": meal,
+            "meals_today": list(meals), "hours_today": hours.get(when.strftime("%a"), "unknown"),
+            "open_now": is_open(hours.get(when.strftime("%a")), when),
+            "stations": [s for s in stations if s["items"]], "busy": None}
+
+
+def norm_hall(x):
+    x = (x or "").lower().replace("usc ", "").replace("university-", "")
+    for k in HALLS:
+        if x.startswith(k[:3]):
+            return k
+    raise SystemExit(f"Pick a hall: {', '.join(HALLS)}")
+
+
+def split(x):
+    return [w.strip().lower().replace("-", " ") for w in (x or "").split(",") if w.strip()]
+
+
+def rank_lunch(when, here, halls, sp, menus, diet, avoid, hall_hours_today, places):
+    """Rank today's real options. Score is minutes until food in hand: walk
+    plus the spot's own wait, with a closed place dropped. Halls have no wait
+    figure from any source, so they count walk only and say so."""
+    meal = meal_now(when)
+    rows = []
+    for hall, meals in halls.items():
+        if not is_open(hall_hours_today.get(hall), when):
+            continue
+        picks = [dict(i, station=st["station"]) for st in meals.get(meal, [])
+                 if not SIDE_STATIONS.search(st["station"]) for i in st["items"]
+                 if keep_item(i, diet, avoid) and not CONDIMENTS.search(i["name"])]
+        if picks:
+            w = walk_min(here, places.get(hall))
+            rows.append({"where": HALLS[hall][0], "kind": "hall", "pay": "meal swipe or Dining Dollars",
+                         "walk_min": w, "wait_min": None, "minutes": w if w is not None else 99,
+                         "picks": [f"{p['name']} ({p['station']})" for p in picks[:3]]})
+    for s in sp:
+        if not s["open"] or s["id"] not in menus:
+            continue
+        # A meal, priced like one. On 2026-10-13 under $7 was drinks and
+        # lattes (fountain $3.49, CBTL lattes $6.65) and over $25 was catering
+        # (Cafe Annenberg's "Coffee To Go" box, $37.99).
+        items = [i for sec in menus[s["id"]]["sections"] for i in sec["items"]
+                 if MEAL_PRICE[0] <= i["price"] <= MEAL_PRICE[1]
+                 and keep_item({"tags": i["tags"], "allergens": []}, diet, [])]
+        items.sort(key=lambda i: -i["price"])
+        if not items:
+            continue
+        w = walk_min(here, places.get(s["id"]))
+        rows.append({"where": s["name"], "kind": "mobile order", "pay": "Dining Dollars, swipe or card",
+                     "walk_min": w, "wait_min": s["wait_min"],
+                     "minutes": (w if w is not None else 99) + s["wait_min"],
+                     "picks": [f"{i['name']} ${i['price']:.2f}" for i in items[:3]],
+                     "allergens_unlisted": True})
+    rows.sort(key=lambda r: (r["minutes"], r["where"]))
+    return {"meal": meal, "rows": rows}
+
+
+def cmd_lunch(a):
+    when = now_pt()
+    near, here = resolve_near(a.near)
+    diet, avoid = split(a.diet), split(a.avoid)
+    hours = {k: v.get(when.strftime("%a")) for k, v in hall_hours().items()}
+    sp = spots()
+    open_spots = [x for x in sp if x["open"]]
+
+    def quiet(fn, label, *args):
+        try:
+            return fn(*args)
+        except Exception as e:
+            print(f"{label}: no answer ({e.__class__.__name__})", file=sys.stderr)
+            return None
+
+    # Three hall menus, every open spot's menu and every map lookup are
+    # independent reads, so they run side by side.
+    with cf.ThreadPoolExecutor(max_workers=8) as pool:
+        hall_jobs = {h: pool.submit(quiet, hall_menu, HALLS[h][0], h, when.date()) for h in HALLS}
+        menu_jobs = {x["id"]: pool.submit(quiet, menu, x["name"], x["id"]) for x in open_spots}
+        place_jobs = {}
+        if here:
+            place_jobs.update({h: pool.submit(place, HALL_MAP_NAME[h]) for h in HALLS})
+            place_jobs.update({x["id"]: pool.submit(spot_place, x) for x in open_spots})
+    halls = {h: j.result() for h, j in hall_jobs.items() if j.result() is not None}
+    menus = {k: j.result() for k, j in menu_jobs.items() if j.result() is not None}
+    places = {k: j.result() for k, j in place_jobs.items()}
+    out = rank_lunch(when, here, halls, sp, menus, diet, avoid, hours, places)
+    out["near"] = near
+    return out
+
+
+def cmd_cart(a):
+    s = find_spot(a.target, spots())
+    if not s["open"]:
+        raise SystemExit(f"{s['name']} isn't taking orders right now ({s['hours_today']}).")
+    cart = build_cart(s, a.item, a.pay, menu(s["id"]))
+    path = save_cart(cart)
+    return dict(cart, saved=str(path))
+
+
+def cmd_place(a):
+    path = HOME / "carts" / f"{a.target}.json"
+    try:
+        cart = json.loads(path.read_text())
+    except (OSError, ValueError):
+        raise SystemExit(f"No saved cart {a.target}. Make one with `chewbacca usc food cart <spot> \"<item>\"`.")
+    try:
+        return place_order(cart)
+    except Refused as e:
+        print(f"Not ordered: {e}", file=sys.stderr)
+        sys.exit(3)
+
+
+def show(cmd, out):
+    if cmd == "now":
+        print(f"{out['meal']} time, {out['at']}")
+        for h in out["halls"]:
+            print(f"- {h['name']}: {'open' if h['open'] else 'closed'} ({h['hours_today']})")
+        for s in out["mobile_order_open"]:
+            print(f"- {s['name']}: open, ~{s['wait_min']} min, {s['queue']} in line{', busy' if s['busy'] else ''}")
+        if out["mobile_order_closed"]:
+            print("Not taking orders: " + ", ".join(out["mobile_order_closed"]))
+    elif cmd == "spots":
+        for s in out["spots"]:
+            walk = f", {s['walk_min']} min walk" if s.get("walk_min") is not None else ""
+            state = f"open, ~{s['wait_min']} min, {s['queue']} in line" if s["open"] else "not taking orders"
+            print(f"- {s['name']} ({s['area'] or 'USC'}): {state}{walk}. Today {s['hours_today']}")
+    elif cmd == "menu":
+        m = out["menu"]
+        print(f"{out['spot']['name']}: pays with " + (", ".join(t["name"] for t in m["tenders"]) or "card") +
+              (", card" if out["spot"]["card"] else ""))
+        if m["note"]:
+            print(m["note"])
+        for sec in m["sections"]:
+            print(sec["section"])
+            for i in sec["items"]:
+                tags = f" [{', '.join(i['tags'])}]" if i["tags"] else ""
+                print(f"- {i['name']} ${i['price']:.2f}{tags}")
+    elif cmd == "hall":
+        print(f"{out['name']} {out['meal']} {out['date']}: {'open now' if out['open_now'] else 'closed now'} "
+              f"({out['hours_today']}). No source gives how busy it is.")
+        for st in out["stations"]:
+            print(st["station"])
+            for i in st["items"]:
+                extra = ", ".join(i["tags"] + [f"has {x}" for x in i["allergens"]])
+                print(f"- {i['name']}" + (f" ({extra})" if extra else ""))
+        if not out["stations"]:
+            print(f"Nothing listed for {out['meal']}. Today it serves: {', '.join(out['meals_today']) or 'nothing posted'}")
+    elif cmd == "lunch":
+        print(f"{out['meal']} near {out['near'] or 'campus (set one with --near)'}, fastest food in hand first:")
+        for r in out["rows"][:6]:
+            walk = f"{r['walk_min']} min walk" if r["walk_min"] is not None else "walk unknown"
+            wait = f" + ~{r['wait_min']} min wait" if r["wait_min"] is not None else ""
+            print(f"- {r['where']} ({r['kind']}, {walk}{wait}): " + "; ".join(r["picks"]))
+        if not out["rows"]:
+            print("Nothing open matches right now.")
+    elif cmd == "cart":
+        print(out["summary"])
+        print(f"Saved as cart {out['id']}. Nothing is ordered until you press it yourself.")
+    elif cmd == "place":
+        print(out["summary"])
+        print(out["next"])
+    elif cmd == "balance":
+        if out.get("ok"):
+            for line in out.get("balances") or []:
+                print(f"- {line}")
+        else:
+            print(f"BLOCKED: {out.get('why')}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca usc food")
+    ap.add_argument("cmd", nargs="?", default="now",
+                    choices=["now", "spots", "menu", "hall", "lunch", "cart", "place", "balance"])
+    ap.add_argument("target", nargs="?")
+    ap.add_argument("item", nargs="?")
+    ap.add_argument("--near")
+    ap.add_argument("--meal")
+    ap.add_argument("--diet")
+    ap.add_argument("--avoid")
+    ap.add_argument("--pay", default="dining-dollars", choices=list(PAY))
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    if a.cmd in ("menu", "hall", "cart", "place") and not a.target:
+        ap.error(f"{a.cmd} needs a {'cart id' if a.cmd == 'place' else 'hall' if a.cmd == 'hall' else 'spot'}")
+    if a.cmd == "cart" and not a.item:
+        ap.error("cart needs an item: chewbacca usc food cart <spot> \"<item>\"")
+    out = {"now": cmd_now, "spots": cmd_spots, "menu": cmd_menu, "hall": cmd_hall, "lunch": cmd_lunch,
+           "cart": cmd_cart, "place": cmd_place, "balance": lambda _a: balance()}[a.cmd](a)
+    if a.json:
+        print(json.dumps(out, indent=1, default=str))
+    else:
+        show(a.cmd, out)
+    if a.cmd == "balance" and not out.get("ok"):
+        return 4
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

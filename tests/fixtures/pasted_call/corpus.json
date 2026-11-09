@@ -1,0 +1,65 @@
+{
+ "about": "Prompts labeled by whether pasted-call-gate should treat them as a pasted call transcript. Shapes are from real pastes with names and words replaced.",
+ "items": [
+  {
+   "id": "granola-2026-10-29-shape",
+   "label": true,
+   "source": "shape of the 10/29 Roy Granola paste, names and words replaced",
+   "prompt": "Meeting Title: Partner check-in\nDate: Oct 29\nMeeting participants: Alex Rivera\n\nTranscript:\nThem: line 0 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 1 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 2 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 3 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 4 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 5 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 6 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 7 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 8 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 9 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 10 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 11 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 12 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 13 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 14 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 15 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 16 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 17 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 18 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 19 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 20 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 21 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 22 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 23 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 24 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 25 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 26 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 27 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 28 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 29 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 30 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 31 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 32 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 33 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 34 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 35 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 36 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 37 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 38 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 39 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 40 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 41 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 42 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 43 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 44 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 45 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 46 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 47 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 48 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 49 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 50 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 51 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 52 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 53 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 54 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 55 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 56 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 57 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 58 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 59 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 60 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 61 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 62 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 63 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 64 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 65 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 66 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 67 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 68 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 69 about the agency and the churches\nMe: yeah and the weekly call on Monday"
+  },
+  {
+   "id": "granola-short-header",
+   "label": true,
+   "source": "a short Granola paste, 3 exchanges",
+   "prompt": "Meeting Title: Partner check-in\nDate: Oct 29\nMeeting participants: Alex Rivera\n\nTranscript:\nThem: line 0 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 1 about the agency and the churches\nMe: yeah and the weekly call on Monday\nThem: line 2 about the agency and the churches\nMe: yeah and the weekly call on Monday"
+  },
+  {
+   "id": "otter-timestamps",
+   "label": true,
+   "source": "Otter export shape",
+   "prompt": "Jordan Lee 1:01: we should ship it\nSam Park 1:11: agreed, Friday\nJordan Lee 2:02: we should ship it\nSam Park 2:12: agreed, Friday\nJordan Lee 3:03: we should ship it\nSam Park 3:13: agreed, Friday\nJordan Lee 4:04: we should ship it\nSam Park 4:14: agreed, Friday\nJordan Lee 5:05: we should ship it\nSam Park 5:15: agreed, Friday\nJordan Lee 6:06: we should ship it\nSam Park 6:16: agreed, Friday"
+  },
+  {
+   "id": "zoom-speaker-n",
+   "label": true,
+   "source": "Zoom auto-transcript shape",
+   "prompt": "Speaker 1: point 0\nSpeaker 2: point 1\nSpeaker 1: point 2\nSpeaker 2: point 3\nSpeaker 1: point 4\nSpeaker 2: point 5\nSpeaker 1: point 6\nSpeaker 2: point 7\nSpeaker 1: point 8\nSpeaker 2: point 9\nSpeaker 1: point 10\nSpeaker 2: point 11"
+  },
+  {
+   "id": "follow-up-after-call",
+   "label": false,
+   "source": "Caleb 2026-10-29, the message after the paste",
+   "prompt": "Great call lets goooo"
+  },
+  {
+   "id": "skim-complaint",
+   "label": false,
+   "source": "Caleb 2026-10-29",
+   "prompt": "READ EVERY WORD BRUH DONT SKIM\n\nFix chewbs I should never have to say this Im tired of saying this"
+  },
+  {
+   "id": "text-exchange",
+   "label": false,
+   "source": "a pasted two-message text thread",
+   "prompt": "Them: u free tmr?\nMe: yeah after 3"
+  },
+  {
+   "id": "email-headers",
+   "label": false,
+   "source": "a pasted email with headers",
+   "prompt": "From: Pat Lee <pat@example.com>\nTo: Caleb\nSubject: Re: Monday\nDate: Oct 29\n\nHey, does 9:30 still work?"
+  },
+  {
+   "id": "memory-note",
+   "label": false,
+   "source": "a memory file with Why/How lines",
+   "prompt": "Fix this note\n\nRule: send texts plain.\nWhy: he asked.\nHow to apply: every text.\nSource: 10/9.\nStatus: done."
+  },
+  {
+   "id": "brief-with-numbers",
+   "label": false,
+   "source": "a tab handoff brief",
+   "prompt": "From the Medrano call prep tab: 1) A subagent is enriching 145 leads 2) Step 2: score them 3) Note: Jev drops wrong-org signals"
+  }
+ ]
+}

@@ -14,6 +14,7 @@ const { db, nowISO, syncState, DIR } = require("./db");
 const { findPerson, nameTokens, normHandle } = require("./lookup");
 const { recomputeScores } = require("./scoring");
 const { cmdIdentities } = require("./identities");
+const { APPS: ALL_APPS, BRIDGED } = require("./apps");
 
 // ------------------------------------------------------------------- messages
 
@@ -73,6 +74,8 @@ function textPartner(d, needle) {
 }
 
 function textsReader(file = "texts.py") {
+  if (file === "texts.py" && process.env.PEOPLE_TEXTS_READER)
+    return process.env.PEOPLE_TEXTS_READER;
   const here = path.dirname(fs.realpathSync(process.argv[1]));
   for (const cand of [
     path.join(here, "..", "mac", "lib", file),
@@ -117,7 +120,37 @@ const CHANNELS = [
     // sucks"). The reader fetches and caches itself; human mail only.
     refresh: [],
   },
+  {
+    // Signal, Telegram, Discord, Instagram, Messenger, X, Google Messages,
+    // Google Chat, Google Voice, LinkedIn and Bluesky, through the bridges
+    // `chewbacca chat up` runs. One reader, many apps: each row carries its
+    // own network as `source`. Prints [] when the homeserver isn't set up.
+    source: "matrix",
+    reader: "matrix.py",
+    label: "bridged chats",
+    multi: true,
+    refresh: [],
+  },
 ];
+
+// A Google Messages row that repeats an iMessage row is the same SMS seen
+// twice: an Android contact's text relayed to the Mac through the iPhone and
+// through the gmessages bridge. Same number, same words, within two minutes
+// (guessed, never measured: relay lag on this Mac is seconds) is one message.
+function smsTwin(d, r) {
+  const digits = String(r.handle || "").replace(/\D/g, "").slice(-10);
+  if (digits.length < 10) return false;
+  const at = String(r.at).replace("T", " ");
+  return Boolean(
+    d
+      .prepare(
+        `SELECT 1 FROM messages WHERE source = 'imessage' AND body = ?
+           AND sent_at BETWEEN datetime(?, '-120 seconds') AND datetime(?, '+120 seconds')
+           AND replace(replace(replace(coalesce(handle,''),'+',''),'-',''),' ','') LIKE ? LIMIT 1`,
+      )
+      .get(String(r.text || "").trim(), at, at, "%" + digits),
+  );
+}
 
 function refreshChannel(ch) {
   for (const [cmd, args] of ch.refresh || []) {
@@ -188,6 +221,21 @@ function syncChannel(d, ch, flags) {
         ),
       );
     return 0;
+  }
+  if (ch.multi) {
+    // Group by the network each row names; a row naming anything else is
+    // dropped rather than filed under an app send can't reach.
+    const by = new Map();
+    for (const r of rows) {
+      if (!BRIDGED.includes(r.source)) continue;
+      if (r.source === "gmessages" && smsTwin(d, r)) continue;
+      if (!by.has(r.source)) by.set(r.source, []);
+      by.get(r.source).push(r);
+    }
+    let total = 0;
+    for (const [src, list] of by) total += ingestRows(d, list, src, 0).added;
+    syncState(key, nowISO());
+    return total;
   }
   const { added } = ingestRows(d, rows, ch.source, 0);
   syncState(key, nowISO());
@@ -359,6 +407,55 @@ function ingestRows(d, rows, source, seen) {
   return { added, maxId, unlinked };
 }
 
+// A group nobody named has only an id like chat2150, so show who's in it.
+function roomLabel(d, room) {
+  if (!/^chat\d+$/.test(room || "")) return room;
+  const names = d
+    .prepare(
+      "SELECT DISTINCT who FROM messages WHERE room = ? AND from_me = 0 AND who <> room LIMIT 4",
+    )
+    .all(room)
+    .map((r) => r.who);
+  return names.length ? `group w ${names.join(", ")}` : room;
+}
+
+// Pull only new iMessages into the store, when chat.db has any. Costs one
+// ROWID read when there is nothing new, so every read can afford it.
+// On 2026-11-05 the sync cooldown answered "nothing to do" for ten minutes
+// while 15 new texts with Caleb's dad sat in chat.db, and a read told him his
+// dad had not replied. He wrote "bro fix chewbs theres a bunch of new texts?"
+// Other apps stay on the cooldown: they are the slow part it was added for.
+function catchUpIMessage(d) {
+  try {
+    const seen = Number(syncState("messages_max_id") || 0);
+    const py = textsReader();
+    if (!seen || !py) return 0;
+    const newest = Number(
+      execFileSync("python3", [py, "--max-id"], {
+        encoding: "utf8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    );
+    if (!(newest > seen) || !syncLock()) return 0;
+    const raw = execFileSync(
+      "python3",
+      [py, "--json", "--days", "1", "--limit", "0"],
+      {
+        encoding: "utf8",
+        timeout: 20000,
+        maxBuffer: 1024 * 1024 * 256,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+    const got = ingestRows(d, JSON.parse(raw), "imessage", seen);
+    syncState("messages_max_id", got.maxId);
+    return got.added;
+  } catch {
+    return 0; // a stale read beats no read; the next full sync catches up
+  }
+}
+
 function cmdTexts(argv) {
   // `people texts help` read "help" as a person and printed "nothing in the
   // last 3 days with help" (2026-10-09), so the one call meant to explain the
@@ -411,6 +508,11 @@ function cmdTexts(argv) {
       ? (Date.now() - Date.parse(last.replace(" ", "T") + "Z")) / 60000
       : Infinity;
     if (!flags.force && flags.days === undefined && ageMin < 10) {
+      const caught = catchUpIMessage(d);
+      if (caught) {
+        say(`${c.grn("synced")} ${caught} new iMessages`);
+        return;
+      }
       say(
         c.dim(
           `  synced ${Math.max(0, Math.round(ageMin))} min ago, nothing to do (--force to run anyway)`,
@@ -508,6 +610,14 @@ function cmdTexts(argv) {
       const n = syncChannel(d, ch, flags);
       if (n) channelAdded[ch.source] = n;
       added += n;
+    }
+    // Calls ride the same sync: phone and FaceTime from the Mac's call
+    // history, filed as interactions on whoever owns the number. Read-only.
+    try {
+      const calls = require("./calls").syncCalls(Number(flags.days ?? 30));
+      if (calls.added && !flags.quiet) say(c.dim(`  ${calls.added} calls filed on person cards`));
+    } catch (e) {
+      if (!flags.quiet) say(c.dim(`  calls skipped: ${String((e && e.message) || e).split("\n")[0]}`));
     }
     // Link the backlog too. Insert-time linking alone means any message that
     // arrived before its contact existed stays orphaned forever, which is the
@@ -686,14 +796,16 @@ function cmdTexts(argv) {
   // email handles are almost all campaigns, pharmacies and 2FA, so they are
   // counted on one line instead of printed; --all prints them too.
   if (sub === "owed") {
+    catchUpIMessage(d);
     const days = Number(flags.days || 7);
     const ctx = Number(flags.context || 4);
     // One indexed range read of the window, then grouping in JS. The first
     // version joined on coalesce(room, who) with a correlated subquery per
     // thread, which no index covers: 94s wall on the real 640k-row store.
-    // Every app people send can reply through. LinkedIn is a one-time export
-    // with no sender, so it can never be owed anything.
-    const APPS = ["imessage", "whatsapp", "slack", "email"];
+    // Every app people send can reply through. The LinkedIn export (msg_id
+    // under 6e12) has no sender, so it can never be owed anything; LinkedIn
+    // rows from the bridge (6e12 and up, mac/lib/matrix.py) can.
+    const APPS = ALL_APPS;
     const via = flags.via ? String(flags.via).toLowerCase() : null;
     if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
     const apps = via ? [via] : APPS;
@@ -701,6 +813,7 @@ function cmdTexts(argv) {
       .prepare(
         `SELECT who, handle, room, from_me, person_id, body, sent_at, source FROM messages
           WHERE sent_at >= datetime('now', ?) AND source IN (${apps.map(() => "?").join(",")})
+            AND NOT (source = 'linkedin' AND msg_id < 6000000000000)
           ORDER BY sent_at DESC`,
       )
       .all(`-${days} days`, ...apps);
@@ -807,7 +920,7 @@ function cmdTexts(argv) {
     say("");
     for (const r of shown) {
       say(
-        `${c.cyn(printable(r.thread))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`,
+        `${c.cyn(printable(roomLabel(d, r.thread)))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`,
       );
       for (const m of r.msgs.slice().reverse()) {
         const name =
@@ -836,22 +949,68 @@ function cmdTexts(argv) {
   // sent until a person names one by number, which is the approval.
   if (sub === "drafts") {
     const file = path.join(DIR, "drafts.json");
-    const load = () => {
-      try {
-        return JSON.parse(fs.readFileSync(file, "utf8"));
-      } catch {
-        return [];
+    const counterFile = file.replace(/\.json$/, ".next");
+    // The queue lives in the shared state file (bin/lib/statedb.js), and every
+    // change reads it inside one transaction. It was a JSON file each tab read,
+    // changed and wrote back whole: on 2026-10-12, 10 tabs adding 50 drafts at
+    // once lost 19 to 22 of them. drafts.json stays as a mirror for readers.
+    fs.mkdirSync(DIR, { recursive: true });
+    const statedb = require("../statedb");
+    const sdb = statedb.connect(statedb.pathFor(DIR, "people"));
+    const LIST = "people.drafts";
+    const NEXT = "people.drafts.next";
+    const open = () => {
+      let list = statedb.getDoc(sdb, LIST);
+      let next = statedb.getDoc(sdb, NEXT);
+      // Drafts lived in JSON files before 344b32ba; a store without the doc
+      // has not migrated yet, so it starts from that file instead of empty.
+      if (list === undefined) {
+        try {
+          list = JSON.parse(fs.readFileSync(file, "utf8"));
+        } catch {}
+        if (!Array.isArray(list)) list = [];
       }
+      if (next === undefined) {
+        try {
+          next = Number(fs.readFileSync(counterFile, "utf8")) || 0;
+        } catch {
+          next = 0;
+        }
+      }
+      // A draft keeps the number it was given. They used to be positions, so
+      // a drop in one tab renumbered every later draft under another tab: on
+      // 2026-10-09 a tab dropped "#42", its own stale Mac mini draft, and
+      // deleted a Maggie reply a second tab had added two seconds earlier.
+      // Pin them the first time they are seen, so the list he reads is the
+      // list every later drop and send resolves against.
+      const numbered = list.filter((x) => Number.isInteger(x.n));
+      let top = numbered.length ? Math.max(...numbered.map((x) => x.n)) : 0;
+      list.forEach((x, i) => {
+        if (!Number.isInteger(x.n)) x.n = numbered.length ? ++top : i + 1;
+      });
+      top = Math.max(top, list.length ? Math.max(...list.map((x) => x.n)) : 0);
+      // The highest number ever handed out, so a dropped last draft's number
+      // is never reused for a new one a stale tab could then hit. An empty
+      // queue starts again at 1, so numbers stay short.
+      if (list.length) top = Math.max(top, next);
+      return { list, top, next };
     };
-    const save = (list) => {
-      fs.writeFileSync(file + ".tmp", JSON.stringify(list, null, 2));
-      fs.renameSync(file + ".tmp", file);
-    };
-    const list = load();
-    const pick = (n) => {
-      const i = Number(n) - 1;
-      if (!Number.isInteger(i) || !list[i])
-        die(`no draft ${n}; run: people texts drafts`);
+    // Read, change and write back in one transaction. fn may change st.list
+    // and st.next; everything it returns comes back out.
+    const mutate = (fn) =>
+      statedb.write(sdb, () => {
+        const st = open();
+        const out = fn(st);
+        statedb.putDoc(sdb, LIST, st.list);
+        statedb.putDoc(sdb, NEXT, st.next);
+        statedb.mirror(file, JSON.stringify(st.list, null, 2));
+        return out;
+      });
+    // Opening also pins numbers and moves the JSON files in, so it writes.
+    const snapshot = mutate((st) => st);
+    const pick = (n, from = snapshot.list) => {
+      const i = from.findIndex((x) => x.n === Number(n));
+      if (i < 0) die(`no draft ${n}; run: people texts drafts`);
       return i;
     };
     const verb = rest[0];
@@ -894,27 +1053,28 @@ function cmdTexts(argv) {
         if (!to)
           die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
       }
-      list.push({
-        who,
-        text,
-        why: flags.why || "",
-        group: Boolean(flags.group),
-        to,
-        via: flags.via ? String(flags.via) : "",
-        at: nowISO(),
+      const n = mutate((st) => {
+        st.list.push({
+          who,
+          text,
+          why: flags.why || "",
+          group: Boolean(flags.group),
+          to,
+          via: flags.via ? String(flags.via) : "",
+          at: nowISO(),
+          n: st.top + 1,
+        });
+        st.next = st.top + 1;
+        return st.next;
       });
-      save(list);
-      return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
+      return say(`${c.grn("drafted")} #${n} to ${c.b(who)}`);
     }
     if (verb === "drop") {
-      const i = pick(rest[1]);
-      const [gone] = list.splice(i, 1);
-      save(list);
-      return say(`${c.dim("dropped")} #${i + 1} to ${gone.who}`);
+      const gone = mutate((st) => st.list.splice(pick(rest[1], st.list), 1)[0]);
+      return say(`${c.dim("dropped")} #${gone.n} to ${gone.who}`);
     }
     if (verb === "send") {
-      const i = pick(rest[1]);
-      const dr = list[i];
+      const dr = snapshot.list[pick(rest[1])];
       const { cmdSend } = require("./send");
       const argv = [dr.who, dr.text];
       if (dr.group) argv.push("--room");
@@ -924,26 +1084,27 @@ function cmdTexts(argv) {
       if (dr.via) argv.push("--via", dr.via);
       if (flags["dry-run"]) argv.push("--dry-run");
       cmdSend(argv);
+      // Take it off the queue only if it's still there. findIndex's -1 used
+      // to reach splice(-1, 1), which dropped the LAST draft, someone else's,
+      // when another tab had already dropped this one.
       if (!flags["dry-run"]) {
-        const now = load();
-        now.splice(
-          now.findIndex((x) => x.at === dr.at && x.who === dr.who),
-          1,
-        );
-        save(now);
+        mutate((st) => {
+          const i = st.list.findIndex((x) => x.n === dr.n && x.at === dr.at && x.who === dr.who);
+          if (i >= 0) st.list.splice(i, 1);
+        });
       }
       return;
     }
-    if (!list.length)
+    if (!snapshot.list.length)
       return say(
         c.dim(
           '  no drafts waiting. Add one: people texts drafts add <who> "text"',
         ),
       );
     say("");
-    list.forEach((dr, i) => {
+    snapshot.list.forEach((dr) => {
       say(
-        `  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
+        `  ${c.b(`#${dr.n}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
       );
       if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
       say(`     ${printable(dr.text)}`);
@@ -951,7 +1112,7 @@ function cmdTexts(argv) {
     // Say it before he picks numbers, not after the first send fails.
     if (
       !process.env.CHEWBACCA_NO_SEND &&
-      list.some((dr) => !dr.via || dr.via === "imessage")
+      snapshot.list.some((dr) => !dr.via || dr.via === "imessage")
     ) {
       const blocked = require("./send").messagesBlocked();
       if (blocked)
@@ -970,6 +1131,7 @@ function cmdTexts(argv) {
   }
 
   if (sub === "search") {
+    catchUpIMessage(d);
     const q = rest.join(" ");
     if (!q) die('Try: people texts search "the trip"');
     const rows = d
@@ -1001,20 +1163,29 @@ function cmdTexts(argv) {
   //   1,400-character proposal, so the reader fell back to raw chat.db.
   // One person now means their messages only, newest kept, printed whole, and
   // with no --days the window is their whole history rather than three days.
+  catchUpIMessage(d);
   const who = flags.who || rest.join(" ") || null;
   const person = who ? textPartner(d, who) : null;
   const days = Number(flags.days || (person ? 36500 : 3));
   const limit = Number(flags.limit || 300);
   const full = Boolean(flags.full || person);
-  let sql = `SELECT who, from_me, body, sent_at, source FROM messages
+  let sql = `SELECT who, handle, room, from_me, body, sent_at, source FROM messages
               WHERE julianday('now') - julianday(sent_at) <= ?`;
   const args = [days];
   if (person) {
-    sql += " AND person_id = ?";
-    args.push(person.id);
+    // His side of an unnamed group has no person on it, so pull it in by room,
+    // or the thread reads as if he never answered (2026-11-05, John Knox).
+    sql += ` AND (person_id = ? OR (from_me = 1 AND room GLOB 'chat[0-9]*' AND room IN
+              (SELECT room FROM messages WHERE person_id = ? AND room GLOB 'chat[0-9]*')))`;
+    args.push(person.id, person.id);
   } else if (who) {
-    sql += " AND lower(who) LIKE ?";
-    args.push("%" + who.toLowerCase() + "%");
+    // A group thread is a room, and only his own rows carry the room's name
+    // in `who`; everyone else's carry their own name. Matching `who` alone
+    // printed "people texts Peridot" as his side only, so on 2026-11-02 a
+    // session fell back to raw chat.db, saw bare numbers, and credited Sam
+    // Cheng's points to Mia Lin on a graded team deck.
+    sql += " AND (lower(who) LIKE ? OR lower(coalesce(room,'')) LIKE ?)";
+    args.push("%" + who.toLowerCase() + "%", "%" + who.toLowerCase() + "%");
   }
   sql += " ORDER BY sent_at DESC LIMIT ?";
   args.push(limit);
@@ -1037,25 +1208,32 @@ function cmdTexts(argv) {
     say(c.dim(`  showing the newest ${limit}; --limit N for more`));
   let last = null;
   for (const r of rows) {
-    if (r.who !== last) {
-      say(`\n${c.cyn(printable(r.who))}`);
-      last = r.who;
+    const thread = r.room || r.who;
+    if (thread !== last) {
+      say(`\n${c.cyn(printable(roomLabel(d, thread)))}`);
+      last = thread;
     }
+    // In a room, every line names its sender, resolved from Contacts at
+    // sync time, so nobody has to map a phone number to a person by guess.
+    const sender =
+      r.room && !r.from_me ? c.b(printable(r.who === r.room ? r.handle || r.who : r.who)) + ": " : "";
     const body = full
       ? printable(r.body).replace(/\n/g, "\n                 ")
       : printable(r.body).replace(/\s+/g, " ").slice(0, 100);
     say(
-      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${body}`,
+      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${sender}${body}`,
     );
   }
   say("");
 }
 
 module.exports = {
+  syncChannel,
   cmdTexts,
   textPartner,
   textsReader,
   resolvePerson,
   printable,
   CHANNELS,
+  smsTwin,
 };

@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Derive a deny list for THIS project. Do not borrow one.
+
+WHY THIS REPLACES THE OLD WORKFLOW.
+
+`ux-pick` selects one of 74 extracted systems and the instruction was "read
+that DESIGN.md and follow it." That is the stored-examples model of expertise,
+and research/12 contains the argument against it in Kellman's own words:
+
+    "a common misconception about expertise... that the transition from novice
+     to expert has to do with committing to memory a great number of examples"
+
+What transfers is attuned selectivity, not instances. And research/13 makes it
+worse: prototypicality is preferred by novices and NOT by experts (Smith &
+Melara). Copy a system faithfully and you produce the maximally prototypical
+artifact, which is the novice-preferred end of the exact split that defines
+the generated look. Copying to escape the median lands you on a different
+median.
+
+What the research actually supports is constraint as a GENERATOR. Oulipo's
+word is "potential": a lipogram produces forms that would not otherwise exist.
+Dogme 95 is nine prohibitions and one aesthetic nobody specified. And every
+counter-example that worked had a constraint that was EXTERNAL AND STATEABLE,
+arising from the real project: Low-tech Magazine's solar power budget,
+GOV.UK's legibility mandate, Bloomberg's editorial position.
+
+So this asks the questions that produce a deny list, shows how real systems
+answered them, and makes you commit. The 74 stay in the repo as worked
+examples of what a coherent refusal set looks like. They are not costumes.
+
+    ux-constrain --init           write a DENY.md scaffold for this project
+    ux-constrain                  the questions
+    ux-constrain --examples       how real systems answered each one
+    ux-constrain --check FILE     does this deny list hold together
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# Each question forces one decision that a generator would otherwise default
+# on. The wording matters: every one asks what the project forbids, never what
+# it prefers, because a preference is not a constraint.
+QUESTIONS = [
+    ("the real constraint",
+     "What is true about this project that is not true about most projects? "
+     "A budget, a device, a deadline, a regulation, a reader, a room it will "
+     "be seen in. If the honest answer is 'nothing', say so and expect a "
+     "generic result, because the constraint is what does the work.",
+     "Low-tech Magazine ran on a solar-powered server that goes offline in bad "
+     "weather. Dithered images, four greys, one tenth the bytes, displayed "
+     "LARGER than before. They chose dithering specifically because it is "
+     "visibly different: 'you could build a website that's just as energy "
+     "efficient, but it would look like any other website.'"),
+
+    ("the one mechanism",
+     "Name the single thing this interface does that nothing else does, and "
+     "commit to it. Not three things. One.",
+     "The award corpus does not say 3D wins, it says ONE COMMITTED MECHANISM "
+     "wins. Dropbox Brand took Website of the Year, Best UX and a Webby with "
+     "no WebGL at all, by making the brand guidelines into toys. Don't Board "
+     "Me won Site of the Year on copywriting and a funny 404."),
+
+    ("colour: what is forbidden",
+     "Name what this will NOT use. No accent at all? One accent and nothing "
+     "else? No gradient? Semantic colour only for state and never for "
+     "decoration?",
+     "Bugatti: no accent colour anywhere. Its warning gold and success green "
+     "exist only because every system must render an error. GOV.UK ships TEN "
+     "functional colours total and its focus yellow may ONLY indicate focus."),
+
+    ("shape: what is forbidden",
+     "Radius: pick two values and forbid everything between them. Shadow: "
+     "allowed at all, or never?",
+     "Bugatti's radius scale is 0px and 9999px with nothing in between. "
+     "Polaris bans hex, named colours, and all 25 length units in stylelint. "
+     "Atlassian bans raw <button> and the placeholder attribute outright."),
+
+    ("type: what is forbidden",
+     "Maximum weight. Number of families. Is uppercase allowed, and where? "
+     "Inter, Geist, Manrope and Space Grotesk are all tells now, so naming a "
+     "face is a decision you have to defend.",
+     "Bugatti never exceeds weight 400. Apple's HIG bans Ultralight, Thin and "
+     "Light outright and says 'minimize the number of typefaces you use, even "
+     "in a highly customized interface.'"),
+
+    ("motion: what is forbidden",
+     "Which interactions get no animation at all? Anything a user sees 100+ "
+     "times a day should get none.",
+     "Raycast ships NO open/close animation, which is correct for something "
+     "opened hundreds of times a day. Apple: 'generally avoid adding motion "
+     "to UI interactions that occur frequently.'"),
+
+    ("the substitute for each refusal",
+     "For every prohibition above, name what takes its place. A deny list "
+     "with no replacement produces paralysis, not style.",
+     "Stokes' paired-constraint model: every constraint precludes something "
+     "AND specifies its substitute, and the process is iterative because one "
+     "substitution forces the next. Dogme wrote the substitute into the rule "
+     "itself: if you need the prop, move the shoot; if there is not enough "
+     "light, cut the scene."),
+
+    ("the cost you will accept",
+     "Name what this deny list makes worse. Every real constraint costs "
+     "something, and one that costs nothing was not a constraint.",
+     "Dogme's certified films broke their own rules constantly: Festen "
+     "covered a window, The Idiots used Saint-Saens, and the founders took "
+     "credit in violation of rule 10. The constraint was productive anyway, "
+     "because it changed the default and the violations were deliberate and "
+     "few rather than ambient."),
+]
+
+
+def show(examples):
+    print("\nDerive the deny list. Do not borrow one.\n")
+    print("  Copying a system produces the maximally prototypical artifact,")
+    print("  which novices prefer and experts reject. That is the generated")
+    print("  look arriving by a different road. See research/12 and /13.\n")
+    for i, (name, q, ex) in enumerate(QUESTIONS, 1):
+        print(f"{i}. {name.upper()}")
+        for line in _wrap(q, 72):
+            print(f"   {line}")
+        if examples:
+            print()
+            for line in _wrap(ex, 68):
+                print(f"       {line}")
+        print()
+    print("Write the answers into the repo as DENY.md before generating anything.")
+    print("Then: ux-preset <thing> for behaviour, ux-lint to check the result.\n")
+    print("The 74 systems in systems/ are worked examples of what a coherent")
+    print("refusal set looks like. Read one to see the SHAPE of an answer.")
+    print("Do not adopt its answers. Browse with: ux-pick --examples\n")
+
+
+def _wrap(s, w):
+    out, line = [], ""
+    for word in s.split():
+        if len(line) + len(word) + 1 > w:
+            out.append(line)
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    if line:
+        out.append(line)
+    return out
+
+
+def check(path):
+    """A deny list holds together when it forbids, substitutes, and costs."""
+    raw = pathlib.Path(path).read_text()
+    text = raw.lower()
+    problems = []
+    # Reject the unfilled scaffold. Caught by running --check on a fresh
+    # --init and watching it pass, which it should never do.
+    if "no ...  instead: ..." in text or text.count("<!--") > 3:
+        problems.append("this is still the scaffold. The placeholders and the "
+                        "guidance comments are both untouched")
+    forbids = sum(text.count(w) for w in ("no ", "never", "forbidden", "not ", "only "))
+    if forbids < 5:
+        problems.append("fewer than 5 prohibitions: this reads as a preference list")
+    if "instead" not in text and "substitute" not in text and "->" not in text:
+        problems.append("no substitutes named. A deny list with no replacement "
+                        "produces paralysis, not style (Stokes)")
+    if not any(w in text for w in ("cost", "worse", "sacrific", "give up", "lose")):
+        problems.append("no stated cost. A constraint that costs nothing was "
+                        "not a constraint")
+    if not any(w in text for w in ("because", "since", "so that", "budget",
+                                   "device", "reader", "deadline", "regulat")):
+        problems.append("no external reason given. The constraints that worked "
+                        "were external and stateable, not chosen for taste")
+    if problems:
+        print(f"{path} does not hold together yet:\n", file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        return 1
+    print(f"ok  {path} forbids, substitutes, and names its cost")
+    return 0
+
+
+SCAFFOLD = """# DENY.md
+
+**What this project refuses.** Written here rather than borrowed, because a
+constraint that came from somewhere else is a costume.
+
+This file is the only thing `ux-lint` treats as enforceable beyond the rules
+that cite an outside standard. The reason is the one cause underneath every
+dead tool in this category: a tool that invents the standard it enforces
+cannot survive a designer who disagrees. axe-core survived by enforcing WCAG,
+which Deque did not write.
+
+**A convention you declared is, from the tool's point of view, an external
+standard.** So what you write here has standing that this repo's own opinions
+do not.
+
+---
+
+## The real constraint
+
+<!-- What is true about this project that is not true about most projects?
+     A budget, a device, a deadline, a regulation, a reader, a room.
+     If the honest answer is "nothing", write that, and expect generic output. -->
+
+## The one mechanism
+
+<!-- The single thing this interface does that nothing else does. One. -->
+
+## Forbidden
+
+<!-- Each line: what is refused, then what takes its place. A deny list with
+     no substitute produces paralysis, not style (Stokes). Write the
+     workaround into the rule the way Dogme's parentheticals do. -->
+
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+
+## What this costs
+
+<!-- Name what these refusals make worse. A constraint that costs nothing was
+     not a constraint. -->
+
+## Suppressions
+
+<!-- Rules from ux-lint that are wrong FOR THIS PROJECT, with the reason.
+     61 to 68 percent of real-world lint suppressions are "unactionable",
+     meaning the rule was right in general and wrong here. That is legitimate
+     and it should be written down rather than worked around silently. -->
+
+- `rule-id` — why it does not apply here
+"""
+
+
+def init():
+    f = pathlib.Path("DENY.md")
+    if f.exists():
+        print(f"{f} already exists. Edit it, or run --check on it.", file=sys.stderr)
+        return 1
+    f.write_text(SCAFFOLD)
+    print(f"wrote {f.resolve()}")
+    print("\nFill it in before generating. Then: ux-constrain --check DENY.md")
+    print("Anything you declare here is enforceable. Anything ux-lint says on")
+    print("its own authority is advisory.")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument("--examples", action="store_true",
+                    help="show how real systems answered each question")
+    ap.add_argument("--check", metavar="FILE", help="check a DENY.md")
+    ap.add_argument("--init", action="store_true",
+                    help="write a DENY.md scaffold in the current directory")
+    a = ap.parse_args()
+    if a.init:
+        return init()
+    if a.check:
+        return check(a.check)
+    show(a.examples)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

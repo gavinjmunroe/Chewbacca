@@ -66,7 +66,7 @@ class Peer:
         out, self.buf = self.buf[:n], self.buf[n:]
         return out
 
-    def handshake(self, accept_override=None):
+    def handshake(self, accept_override=None, protocol=None):
         while b"\r\n\r\n" not in self.buf:
             self.buf += self.sock.recv(4096)
         head, _, self.buf = self.buf.partition(b"\r\n\r\n")
@@ -77,8 +77,9 @@ class Peer:
         self.request_headers = headers
         accept = accept_override or base64.b64encode(
             hashlib.sha1((headers["sec-websocket-key"] + GUID).encode()).digest()).decode()
+        chosen = f"Sec-WebSocket-Protocol: {protocol}\r\n" if protocol else ""
         self.sock.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
-                           f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+                           f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n{chosen}\r\n").encode())
 
     def read_frame(self):
         b0, b1 = self.take(2)
@@ -227,9 +228,17 @@ def test_basic_call():
         mid = "y" * 300
         got = conn.call("documents.read", {"documentsId": "d", "path": mid})
         check("16-bit length frames", got["params"]["path"] == mid)
+    with unproven(fake.port) as conn:
+        conn.max_message = 1000
+        e = raises(lambda: conn.call("documents.read", {"documentsId": "d", "path": "z" * 2000}),
+                   rc.RealmProtocolError)
+        check("a connection's own max_message refuses a bigger answer", isinstance(e, rc.RealmProtocolError)
+              and "over 1000 bytes" in str(e), e)
     time.sleep(0.05)
     peer = fake.peers[0]
     check("every client frame is masked", peer.client_frames_masked)
+    with unproven(fake.port) as conn:
+        check("the default ceiling is MAX_MESSAGE", conn.max_message == rc.MAX_MESSAGE)
     check("handshake sends version 13", peer.request_headers.get("sec-websocket-version") == "13")
     check("Host is loopback", peer.request_headers.get("host", "").startswith("127.0.0.1:"))
     fake.close()
@@ -653,6 +662,61 @@ def test_engine_file():
             pr.wait()
     rc.port_owner = real_owner
 
+def test_daemon_token():
+    """Realm main since 59afd9e4 refuses a socket without `realm.<token>` as
+    its subprotocol (401 on every call after the 2026-10-10 rebuild)."""
+    def echoing(peer):
+        peer.handshake(protocol=peer_protocol(peer))
+        while True:
+            req = peer.read_request()
+            peer.reply(req, {"ok": True})
+
+    def peer_protocol(peer):
+        # Read the offer before answering, as realm's handleProtocols does.
+        while b"\r\n\r\n" not in peer.buf:
+            peer.buf += peer.sock.recv(4096)
+        for line in peer.buf.split(b"\r\n\r\n")[0].decode().split("\r\n"):
+            if line.lower().startswith("sec-websocket-protocol:"):
+                return line.split(":", 1)[1].strip()
+        return None
+
+    fake = Fake(echoing)
+    with rc.Connection(fake.port, 3.0, _token=rc._PROVEN, secret="s3cret-tok") as conn:
+        conn.call("system.info", timeout=3.0)
+    check("the token is offered as the realm.<token> subprotocol",
+          fake.peers[0].request_headers.get("sec-websocket-protocol") == "realm.s3cret-tok",
+          fake.peers[0].request_headers)
+    fake.close()
+    silent = Fake(lambda peer: peer.handshake())
+    try:
+        rc.Connection(silent.port, 3.0, _token=rc._PROVEN, secret="s3cret-tok").close()
+        e = None
+    except rc.RealmError as err:
+        e = err
+    check("a server that doesn't take the offered subprotocol is refused",
+          isinstance(e, rc.RealmProtocolError) and "s3cret" not in str(e), e)
+    silent.close()
+
+    with tempfile.TemporaryDirectory() as d:
+        home = Path(d)
+        eng = {"pid": 4242, "port": 5151}
+        check("no daemon.json, no token", rc.daemon_token(home, eng) is None)
+        f = home / "daemon.json"
+        f.write_text(json.dumps({"pid": 4242, "port": 5151, "token": "s3cret-tok"}))
+        os.chmod(f, 0o600)
+        check("a 0600 daemon.json naming engine.json's pid and port gives its token",
+              rc.daemon_token(home, eng) == "s3cret-tok")
+        check("one naming another pid gives none", rc.daemon_token(home, {"pid": 1, "port": 5151}) is None)
+        os.chmod(f, 0o644)
+        try:
+            rc.daemon_token(home, eng)
+            e = None
+        except rc.RealmUnavailable as err:
+            e = err
+        check("a daemon.json others can read is refused, without quoting the token",
+              e is not None and "s3cret" not in str(e), e)
+
+
 def test_read_methods_are_reads():
     verbs = {"send", "write", "create", "delete", "ship", "stage", "unstage", "respondPermission",
              "update", "set", "fork", "interrupt", "openPath", "run", "start", "kill", "rename"}
@@ -683,8 +747,13 @@ def test_security_review_fixes():
     # 2 and 3. The engine builds only a pinned commit and starts behind the
     #    Origin guard.
     src = (ROOT / "bin" / "realm-engine").read_text()
-    pin = re.search(r'"CHEWBACCA_REALM_REF", "([0-9a-f]+)"', src)
-    check("the engine pins a full upstream commit", bool(pin) and len(pin.group(1)) == 40, pin)
+    # Caleb, 2026-10-10: always Carlton's latest ("YES ALWAYS dont ask"). The
+    # invariant that stays is one named commit, never the working tree.
+    pin = re.search(r'"CHEWBACCA_REALM_REF", "([^"]+)"', src)
+    check("the engine follows Carlton's latest main unless a sha is pinned",
+          bool(pin) and pin.group(1) == "latest" and 'rev-parse", "origin/main"' in src, pin)
+    check("and still builds only the one commit it resolved, never the working tree",
+          "if source_stamp(git) != ref:" in src and "refusing to run its build" in src)
     check("the build refuses a checkout that is not at the pin", "refusing to run its build" in src)
     check("the server starts with the origin guard loaded", '"--import", ORIGIN_GUARD.as_uri()' in src)
     guard = (ROOT / "config" / "data" / "realm" / "origin-guard.mjs").read_text()
@@ -834,7 +903,172 @@ def test_engine_cli():
         code, out, _ = cli("plist", extra={"CHEWBACCA_PYTHON": "/usr/bin/python3"})
         args = plistlib.loads(out.encode()).get("ProgramArguments", []) if code == 0 else []
         check("CHEWBACCA_PYTHON overrides the plist's python", args[:2] == ["/usr/bin/env", "/usr/bin/python3"], args)
+
+        # install: a new person never runs a terminal, so the engine has to
+        # come back at every login on its own. Scratch HOME, scratch
+        # LaunchAgents, and a launchctl that only writes down what it was asked.
+        user = d / "user"
+        (user / ".local" / "bin").mkdir(parents=True)
+        (user / ".local" / "bin" / "realm-engine").symlink_to(engine)
+        agents, calls = d / "LaunchAgents", d / "launchctl.log"
+        fake_lc = d / "launchctl"
+        fake_lc.write_text(f"#!/bin/sh\necho \"$*\" >> {calls}\n")
+        fake_lc.chmod(0o755)
+        lenv = {"HOME": str(user), "CHEWBACCA_LAUNCH_AGENTS_DIR": str(agents), "CHEWBACCA_LAUNCHCTL": str(fake_lc)}
+        code, out, err = cli("install", extra=dict(lenv, CHEWBACCA_REALM_DIR=str(d / "not-built")))
+        check("install before a build is refused and loads nothing",
+              code == 1 and "build" in err and not calls.exists(), (code, err))
+        code, out, err = cli("install", extra=lenv)
+        written = agents / "com.chewbacca.realm.plist"
+        pl = plistlib.loads(written.read_bytes()) if written.exists() else {}
+        log = calls.read_text().splitlines() if calls.exists() else []
+        check("install writes the login agent and loads it with bootstrap",
+              code == 0 and pl.get("Label") == "com.chewbacca.realm"
+              and log == [f"bootout gui/{os.getuid()}/com.chewbacca.realm",
+                          f"bootstrap gui/{os.getuid()} {written}"], (code, err, log))
+        check("the login agent runs the ~/.local/bin link, never a kit snapshot path the next update prunes",
+              pl.get("ProgramArguments", [])[2:3] == [str(user / ".local" / "bin" / "realm-engine")],
+              pl.get("ProgramArguments"))
+        check("the login agent file is not writable by others", written.stat().st_mode & 0o022 == 0)
+        code, out, err = cli("uninstall", extra=lenv)
+        check("uninstall unloads and removes it", code == 0 and not written.exists()
+              and calls.read_text().splitlines()[-1] == f"bootout gui/{os.getuid()}/com.chewbacca.realm", (code, err))
+
+        # pnpm: a new Mac with brew's node has corepack and no pnpm.
+        bare = d / "bare"
+        bare.mkdir()
+        corepack = d / "corepack"
+        corepack.write_text("#!/bin/sh\nexit 0\n")
+        corepack.chmod(0o755)
+        probe = ("import importlib.machinery as m, json, sys; "
+                 f"mod = m.SourceFileLoader('re', {engine!r}).load_module(); print(json.dumps(mod.pnpm_argv()))")
+        got = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, timeout=30,
+                             env={"PATH": str(bare), "HOME": str(user), "CHEWBACCA_COREPACK": str(corepack)})
+        check("no pnpm on PATH: the build runs pnpm through corepack",
+              got.returncode == 0 and json.loads(got.stdout) == [str(corepack), "pnpm"], (got.stdout, got.stderr))
     fake.close()
+
+
+def test_engine_hands_over_on_kit_move():
+    """2026-10-11: kyber-surfaces kept running a pruned kit snapshot until it
+    died (9528874d). realm-engine run lives from login to logout the same way,
+    so it hands over too: once `current` moves and the engine itself says no
+    turn is running, it stops its server and execs the new snapshot's run,
+    keeping the pid launchd watches."""
+    import importlib.machinery
+    import shutil
+    mod = importlib.machinery.SourceFileLoader("realm_engine_mod", str(ROOT / "bin" / "realm-engine")).load_module()
+    check("an unmoved kit never hands over", not mod.handover_due(False, False))
+    check("a moved kit waits while a turn runs", not mod.handover_due(True, True))
+    check("a moved kit waits while the engine can't say", not mod.handover_due(True, None))
+    check("a moved kit with every session idle hands over", mod.handover_due(True, False))
+    real = mod.realm_client.call
+    try:
+        for listed, want in (([{"status": "idle"}, {"status": "ended"}], False),
+                             ([{"status": "idle"}, {"status": "running"}], True),
+                             ([{"status": "waiting_permission"}], True), ({}, None)):
+            mod.realm_client.call = lambda *a, _l=listed, **k: _l
+            check(f"turns_running reads {listed!r} as {want}", mod.turns_running(Path("/tmp")) is want)
+
+        def down(*a, **k):
+            raise mod.realm_client.RealmUnavailable("no engine")
+        mod.realm_client.call = down
+        check("an engine that doesn't answer is not idle", mod.turns_running(Path("/tmp")) is None)
+    finally:
+        mod.realm_client.call = real
+    check("outside a kit snapshot there is nothing to hand over to", mod.successor() is None)
+
+    # End to end: two snapshots, the engine on A, `current` moved to B. The
+    # fake node serves realm's wire itself (so it owns its port) and answers
+    # sessions.listAll from a file the test flips.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        base, home, realm_dir = d / "kit", d / "home", d / "realm"
+        for sha in ("aaaa", "bbbb"):
+            snap = base / "snapshots" / sha
+            (snap / "bin" / "lib").mkdir(parents=True)
+            shutil.copy(ROOT / "bin" / "realm-engine", snap / "bin" / "realm-engine")
+            for lib in ("realm_client.py", "kit_snapshot.py", "procargs.py"):
+                shutil.copy(ROOT / "bin" / "lib" / lib, snap / "bin" / "lib" / lib)
+            (snap / "config" / "data" / "realm").mkdir(parents=True)
+            shutil.copy(ROOT / "config" / "data" / "realm" / "origin-guard.mjs", snap / "config" / "data" / "realm")
+        (base / "current").symlink_to(base / "snapshots" / "aaaa")
+        main_js = realm_dir / "apps" / "server" / "dist" / "main.js"
+        main_js.parent.mkdir(parents=True)
+        main_js.write_text("// fake\n")
+        sessions = d / "sessions.json"
+        sessions.write_text(json.dumps([{"status": "running"}]))
+        node = d / "node"
+        node.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, signal, sys, time\n"
+            f"sys.path.insert(0, {str(ROOT / 'tests')!r})\n"
+            "sys.dont_write_bytecode = True\n"
+            "from test_realm_client import Fake\n"
+            "signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n"
+            "def script(peer):\n"
+            "    peer.handshake()\n"
+            "    while True:\n"
+            "        req = peer.read_request()\n"
+            "        if req['method'] == 'system.info':\n"
+            "            peer.reply(req, {'realmHome': os.environ['REALM_HOME'], 'version': 'test'})\n"
+            "        else:\n"
+            f"            peer.reply(req, json.load(open({str(sessions)!r})))\n"
+            "f = Fake(script)\n"
+            "print(json.dumps({'type': 'ready', 'port': f.port}), flush=True)\n"
+            "time.sleep(120)\n")
+        node.chmod(0o755)
+        env = dict(os.environ, CHEWBACCA_REALM_DIR=str(realm_dir), CHEWBACCA_REALM_HOME=str(home),
+                   CHEWBACCA_NODE=str(node), PYTHONDONTWRITEBYTECODE="1", CHEWBACCA_REALM_HANDOVER_S="0.5")
+        log = d / "run.log"
+        with open(log, "w") as out:
+            run = subprocess.Popen([sys.executable, str(base / "current" / "bin" / "realm-engine"), "run"],
+                                   env=env, stdout=out, stderr=out)
+        try:
+            ef = home / "engine.json"
+
+            def engine_pid(wait=10.0):
+                end = time.monotonic() + wait
+                while time.monotonic() < end:
+                    try:
+                        return json.loads(ef.read_text())["pid"]
+                    except (OSError, ValueError, KeyError):
+                        time.sleep(0.1)
+                return None
+            first = engine_pid()
+            check("run starts a server from snapshot A", first is not None, log.read_text())
+            (base / "current").unlink()
+            (base / "current").symlink_to(base / "snapshots" / "bbbb")
+            time.sleep(2.5)
+            check("a turn in flight holds the handover off",
+                  run.poll() is None and engine_pid(1) == first and "handing over" not in log.read_text(),
+                  log.read_text())
+            sessions.write_text(json.dumps([{"status": "idle"}, {"status": "ended"}]))
+            end = time.monotonic() + 15
+            second = None
+            while time.monotonic() < end:
+                p = engine_pid(0.2)
+                if p and p != first:
+                    second = p
+                    break
+                time.sleep(0.2)
+            text = log.read_text()
+            check("once idle, it hands over and B starts a new server",
+                  second is not None and "handing over to " + str((base / "snapshots" / "bbbb" / "bin" / "realm-engine").resolve()) in text, text)
+            check("the old server was stopped", first and not rc.pid_alive(first), first)
+            check("the pid launchd watches is still alive, now running B", run.poll() is None)
+            ps = subprocess.run(["ps", "-o", "command=", "-p", str(run.pid)], capture_output=True, text=True).stdout
+            check("and it re-entered through `current`, which pins B at its start",
+                  "kit/current/bin/realm-engine run" in ps and (base / "current").resolve().name == "bbbb", ps)
+        finally:
+            run.terminate()
+            try:
+                run.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                run.kill()
+            p = engine_pid(0.2) if (home / "engine.json").exists() else None
+            if p and rc.pid_alive(p):
+                os.kill(p, 9)
 
 
 def main():
@@ -848,7 +1082,9 @@ def main():
     test_protocol_failures()
     test_engine_file()
     test_read_methods_are_reads()
+    test_daemon_token()
     test_engine_cli()
+    test_engine_hands_over_on_kit_move()
     test_security_review_fixes()
     print(f"\n{'FAILED ' + str(failed) if failed else 'all passed'}")
     return 1 if failed else 0

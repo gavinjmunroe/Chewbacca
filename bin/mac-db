@@ -1,0 +1,952 @@
+#!/usr/bin/env python3
+"""Read and write any database macOS keeps about you, directly.
+
+  mac-db stores                          every store: found, readable, rows, newest entry
+  mac-db <store> [--days N] [--ahead N] [--search TEXT] [--limit N] [--json]
+  mac-db note <id>                       one Apple Note's full text
+  mac-db schema <store>                  tables and columns, to write your own query
+  mac-db sql <store> "select ..."        any query; a write backs the file up first
+  mac-db backups / restore <dir>         list snapshots, put one back
+  mac-db notes add|append|edit|delete    writes through the app so iCloud syncs it
+  mac-db reminders add|complete|edit|delete, calendar add|edit|delete, contacts add, messages send
+  mac-db biome                           list Biome streams; mac-db biome <Stream.Name> reads one
+
+Stores: messages, calls, contacts, mail, notes, calendar, reminders, safari,
+chrome, photos, voicememos, podcasts, downloads, interactions, screentime,
+knowledge, biome. --days 0 means all time.
+
+Built 2026-10-09 after Caleb asked whether Chewbacca could pull from any
+database the Mac has, "like screen time". It read five of them directly
+(chat.db, knowledgeC, AddressBook, Reminders, TCC); Calendar, Notes and Mail
+went through AppleScript, and call history, browser history, Photos, Voice
+Memos, Podcasts, downloads, interactionC and Biome were not read at all. Every
+path and column below was checked against this Mac (macOS 15.6) that night.
+
+Reads open mode=ro; Chrome holds an exclusive lock on History, so reads use a
+temp copy. Writes come two ways. App verbs (notes, reminders, calendar,
+contacts, messages) go through the `mac` CLI, so the change goes through the
+app and syncs to iCloud like a tap would; a raw row edit in a synced store is
+overwritten by the next sync. `sql` runs any statement, and anything that
+writes snapshots the database and its WAL into ~/.chewbacca/mac-db/backups
+first, so `mac-db restore` undoes it. Caleb, 2026-10-10, on the first
+read-only version: "NOTHING on chewb should ever be read only that is
+stupid". MAC_DB_HOME points every path at a fake home for tests.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import glob
+import gzip
+import json
+import os
+import re
+import shutil
+import sqlite3
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+HOME = Path(os.environ.get("MAC_DB_HOME") or Path.home())
+SYSROOT = Path(os.environ.get("MAC_DB_SYSROOT") or "/")
+CD = 978307200  # Core Data / Cocoa dates count seconds from 2001-01-01 UTC
+L = HOME / "Library"
+GC = L / "Group Containers"
+
+
+def first(*patterns: str) -> list[Path]:
+    """Every existing file matching any pattern, in order, no duplicates."""
+    seen: list[Path] = []
+    for p in patterns:
+        for hit in sorted(glob.glob(p)):
+            path = Path(hit)
+            if path.is_file() and path not in seen:
+                seen.append(path)
+    return seen
+
+
+# Each store: where it lives, an inner query whose rows carry `ts` (unix
+# seconds) and `hay` (text to --search), the default window, and which column
+# holds a phone or email worth resolving to a contact name.
+STORES: dict[str, dict] = {
+    "messages": {
+        "paths": lambda: first(f"{L}/Messages/chat.db"),
+        "sql": """select m.date/1000000000.0 + 978307200 ts,
+                    case m.is_from_me when 1 then 'me' else 'them' end who,
+                    h.id handle, c.display_name chat, m.text text, m.attributedBody body_blob,
+                    coalesce(m.text,'') || ' ' || coalesce(h.id,'') || ' ' || coalesce(c.display_name,'') hay
+                  from message m left join handle h on h.ROWID = m.handle_id
+                  left join chat_message_join j on j.message_id = m.ROWID
+                  left join chat c on c.ROWID = j.chat_id""",
+        "who": "handle",
+    },
+    "calls": {
+        "paths": lambda: first(f"{L}/Application Support/CallHistoryDB/CallHistory.storedata"),
+        "sql": """select ZDATE + 978307200 ts, ZADDRESS address, ZNAME name,
+                    case ZORIGINATED when 1 then 'out' else 'in' end direction,
+                    case when ZANSWERED = 1 or ZORIGINATED = 1 then 'yes' else 'missed' end answered,
+                    cast(round(ZDURATION) as int) seconds,
+                    case ZCALLTYPE when 1 then 'phone' when 8 then 'facetime video'
+                      when 16 then 'facetime audio' else ZCALLTYPE end kind,
+                    coalesce(ZADDRESS,'') || ' ' || coalesce(ZNAME,'') hay
+                  from ZCALLRECORD""",
+        "who": "address",
+    },
+    "contacts": {
+        "paths": lambda: first(f"{L}/Application Support/AddressBook/AddressBook-v22.abcddb",
+                               f"{L}/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb"),
+        "sql": """select coalesce(r.ZMODIFICATIONDATE, r.ZCREATIONDATE) + 978307200 ts,
+                    trim(coalesce(r.ZFIRSTNAME,'') || ' ' || coalesce(r.ZLASTNAME,'')) name,
+                    r.ZORGANIZATION org, r.ZNICKNAME nickname,
+                    (select group_concat(p.ZFULLNUMBER, ', ') from ZABCDPHONENUMBER p where p.ZOWNER = r.Z_PK) phones,
+                    (select group_concat(e.ZADDRESS, ', ') from ZABCDEMAILADDRESS e where e.ZOWNER = r.Z_PK) emails,
+                    coalesce(r.ZFIRSTNAME,'') || ' ' || coalesce(r.ZLASTNAME,'') || ' ' || coalesce(r.ZORGANIZATION,'')
+                      || ' ' || coalesce(r.ZNICKNAME,'') hay
+                  from ZABCDRECORD r where r.ZFIRSTNAME is not null or r.ZLASTNAME is not null or r.ZORGANIZATION is not null""",
+        "days": 0,
+    },
+    "mail": {
+        "paths": lambda: first(f"{L}/Mail/V*/MailData/Envelope Index"),
+        "sql": """select m.date_received ts, a.comment sender_name, a.address sender, s.subject subject,
+                    replace(mb.url, rtrim(mb.url, replace(mb.url, '/', '')), '') mailbox,
+                    case m.read when 1 then 'read' else 'unread' end state,
+                    coalesce(s.subject,'') || ' ' || coalesce(a.address,'') || ' ' || coalesce(a.comment,'') hay
+                  from messages m left join subjects s on s.ROWID = m.subject
+                  left join addresses a on a.ROWID = m.sender
+                  left join mailboxes mb on mb.ROWID = m.mailbox where m.deleted = 0""",
+    },
+    "notes": {
+        "paths": lambda: first(f"{GC}/group.com.apple.notes/NoteStore.sqlite"),
+        "sql": """select n.ZMODIFICATIONDATE1 + 978307200 ts, n.Z_PK id, n.ZTITLE1 title,
+                    f.ZTITLE2 folder, n.ZSNIPPET snippet,
+                    coalesce(n.ZTITLE1,'') || ' ' || coalesce(n.ZSNIPPET,'') hay
+                  from ZICCLOUDSYNCINGOBJECT n left join ZICCLOUDSYNCINGOBJECT f on f.Z_PK = n.ZFOLDER
+                  where n.ZTITLE1 is not null and coalesce(n.ZMARKEDFORDELETION, 0) = 0
+                    and coalesce(f.ZTITLE2,'') != 'Recently Deleted'""",
+        "days": 30,
+    },
+    "calendar": {
+        # OccurrenceCache would expand repeating events, but on this Mac it
+        # stopped at 2026-05-11, five months stale, so it cannot be trusted.
+        "paths": lambda: first(f"{GC}/group.com.apple.calendar/Calendar.sqlitedb",
+                               f"{L}/Calendars/Calendar.sqlitedb"),
+        "sql": """select i.start_date + 978307200 ts, i.end_date + 978307200 ends, i.summary title,
+                    c.title calendar, l.title location, i.all_day all_day,
+                    case when i.has_recurrences = 1 then 'repeats' else '' end repeats,
+                    coalesce(i.summary,'') || ' ' || coalesce(l.title,'') || ' ' || coalesce(c.title,'') hay
+                  from CalendarItem i left join Calendar c on c.ROWID = i.calendar_id
+                  left join Location l on l.ROWID = i.location_id where coalesce(i.hidden, 0) = 0""",
+        "ahead": 14,
+    },
+    "reminders": {
+        "paths": lambda: first(f"{GC}/group.com.apple.reminders/Container_v1/Stores/Data-*.sqlite"),
+        "sql": """select coalesce(r.ZDUEDATE, r.ZCREATIONDATE) + 978307200 ts, r.ZTITLE title, l.ZNAME list,
+                    case r.ZCOMPLETED when 1 then 'done' else 'open' end state,
+                    r.ZDUEDATE + 978307200 due, r.ZNOTES notes,
+                    coalesce(r.ZTITLE,'') || ' ' || coalesce(r.ZNOTES,'') || ' ' || coalesce(l.ZNAME,'') hay
+                  from ZREMCDREMINDER r left join ZREMCDBASELIST l on l.Z_PK = r.ZLIST
+                  where coalesce(r.ZMARKEDFORDELETION, 0) = 0""",
+        "days": 0,
+    },
+    "safari": {
+        "paths": lambda: first(f"{L}/Safari/History.db"),
+        "sql": """select v.visit_time + 978307200 ts, v.title title, i.url url,
+                    i.url || ' ' || coalesce(v.title,'') hay
+                  from history_visits v join history_items i on i.id = v.history_item""",
+    },
+    "chrome": {
+        "paths": lambda: first(f"{L}/Application Support/Google/Chrome/*/History"),
+        "copy": True,  # Chrome holds an exclusive lock while it runs
+        # Chrome stores microseconds since 1601-01-01.
+        "sql": """select v.visit_time / 1000000.0 - 11644473600 ts, u.title title, u.url url,
+                    cast(round(v.visit_duration / 1000000.0) as int) seconds,
+                    u.url || ' ' || coalesce(u.title,'') hay
+                  from visits v join urls u on u.id = v.url""",
+    },
+    "photos": {
+        "paths": lambda: first(f"{HOME}/Pictures/*.photoslibrary/database/Photos.sqlite"),
+        "sql": """select ZDATECREATED + 978307200 ts, ZFILENAME file,
+                    case ZKIND when 0 then 'photo' when 1 then 'video' else ZKIND end kind,
+                    case when ZLATITUDE between -90 and 90 and ZLATITUDE != 0 then round(ZLATITUDE, 5) end lat,
+                    case when ZLATITUDE between -90 and 90 and ZLATITUDE != 0 then round(ZLONGITUDE, 5) end lon,
+                    case ZFAVORITE when 1 then 'fav' else '' end favorite,
+                    coalesce(ZDIRECTORY,'') || '/' || coalesce(ZFILENAME,'') path, ZFILENAME hay
+                  from ZASSET where coalesce(ZTRASHEDSTATE, 0) = 0""",
+        "days": 30,
+    },
+    "voicememos": {
+        "paths": lambda: first(f"{GC}/group.com.apple.VoiceMemos.shared/Recordings/CloudRecordings.db",
+                               f"{L}/Application Support/com.apple.voicememos/Recordings/CloudRecordings.db"),
+        "sql": """select ZDATE + 978307200 ts, ZCUSTOMLABEL title, cast(round(ZDURATION) as int) seconds,
+                    ZPATH file, coalesce(ZCUSTOMLABEL,'') hay from ZCLOUDRECORDING""",
+        "days": 0,
+    },
+    "podcasts": {
+        "paths": lambda: first(f"{GC}/*.groups.com.apple.podcasts/Documents/MTLibrary.sqlite"),
+        "sql": """select e.ZLASTDATEPLAYED + 978307200 ts, p.ZTITLE show, e.ZTITLE episode,
+                    e.ZPLAYCOUNT plays, cast(round(e.ZPLAYHEAD) as int) position_s,
+                    coalesce(p.ZTITLE,'') || ' ' || coalesce(e.ZTITLE,'') hay
+                  from ZMTEPISODE e left join ZMTPODCAST p on p.Z_PK = e.ZPODCAST
+                  where e.ZLASTDATEPLAYED is not null""",
+        "days": 30,
+    },
+    "downloads": {
+        "paths": lambda: first(f"{L}/Preferences/com.apple.LaunchServices.QuarantineEventsV2"),
+        "sql": """select LSQuarantineTimeStamp + 978307200 ts, LSQuarantineAgentName app,
+                    LSQuarantineDataURLString url, LSQuarantineOriginURLString origin,
+                    coalesce(LSQuarantineDataURLString,'') || ' ' || coalesce(LSQuarantineOriginURLString,'')
+                      || ' ' || coalesce(LSQuarantineAgentName,'') hay
+                  from LSQuarantineEvent""",
+        "days": 30,
+    },
+    "interactions": {
+        # CoreDuet's log of who you messaged, mailed or picked in autocomplete.
+        # Direction is Apple's raw code; on this Mac 0 and 1 split Messages
+        # traffic roughly evenly, so it is passed through, never relabelled.
+        "paths": lambda: first(f"{SYSROOT}/private/var/db/CoreDuet/People/interactionC.db"),
+        "sql": """select i.ZSTARTDATE + 978307200 ts, i.ZBUNDLEID app, i.ZDIRECTION direction,
+                    c.ZDISPLAYNAME contact_name, c.ZIDENTIFIER contact, i.ZRECIPIENTCOUNT recipients,
+                    i.ZGROUPNAME group_name,
+                    coalesce(c.ZDISPLAYNAME,'') || ' ' || coalesce(c.ZIDENTIFIER,'') || ' ' || coalesce(i.ZGROUPNAME,'')
+                      || ' ' || coalesce(i.ZBUNDLEID,'') hay
+                  from ZINTERACTIONS i left join ZCONTACTS c on c.Z_PK = i.ZSENDER""",
+        "who": "contact",
+    },
+    "screentime": {
+        "paths": lambda: first(f"{L}/Application Support/Knowledge/knowledgeC.db"),
+        "sql": """select ZSTARTDATE + 978307200 ts, ZVALUESTRING app,
+                    cast(round(ZENDDATE - ZSTARTDATE) as int) seconds, ZVALUESTRING hay
+                  from ZOBJECT where ZSTREAMNAME = '/app/usage'""",
+    },
+    "knowledge": {
+        "paths": lambda: first(f"{L}/Application Support/Knowledge/knowledgeC.db"),
+        "sql": """select ZSTARTDATE + 978307200 ts, ZSTREAMNAME stream, ZVALUESTRING value,
+                    cast(round(ZENDDATE - ZSTARTDATE) as int) seconds,
+                    coalesce(ZSTREAMNAME,'') || ' ' || coalesce(ZVALUESTRING,'') hay
+                  from ZOBJECT""",
+    },
+}
+BIOME_ROOTS = ("Biome/streams/restricted", "Biome/streams/public")
+FDA_PANE = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
+
+
+class Unreadable(Exception):
+    pass
+
+
+def connect(path: Path, copy: bool = False) -> tuple[sqlite3.Connection, str | None]:
+    tmp = None
+    if copy:
+        tmp = tempfile.mkdtemp(prefix="mac-db-")
+        for suffix in ("", "-wal", "-journal"):
+            src = Path(str(path) + suffix)
+            if src.exists():
+                shutil.copy2(src, Path(tmp) / (path.name + suffix))
+        path = Path(tmp) / path.name
+    try:
+        # A private copy may need its WAL replayed, which mode=ro refuses
+        # ("attempt to write a readonly database" on a Chrome profile,
+        # 2026-10-09), so the copy opens normally with query_only set.
+        con = sqlite3.connect(path) if tmp else sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        con.execute("pragma query_only = 1")
+        con.execute("select count(*) from sqlite_master").fetchone()
+    except sqlite3.DatabaseError as exc:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise Unreadable(f"{path}: {exc}") from exc
+    con.row_factory = sqlite3.Row
+    return con, tmp
+
+
+def query_store(name: str, since: float | None, until: float | None,
+                search: str | None, limit: int) -> list[dict]:
+    spec = STORES[name]
+    paths = spec["paths"]()
+    if not paths:
+        raise Unreadable(f"no {name} database found on this Mac")
+    clauses, params = [], []
+    if since is not None:
+        clauses.append("ts >= ?"); params.append(since)
+    if until is not None:
+        clauses.append("ts <= ?"); params.append(until)
+    if search:
+        clauses.append("hay like ?"); params.append(f"%{search}%")
+    where = (" where " + " and ".join(clauses)) if clauses else ""
+    sql = f"select * from ({spec['sql']}){where} order by ts desc limit ?"
+    rows: list[dict] = []
+    errors = []
+    for path in paths:
+        try:
+            con, tmp = connect(path, spec.get("copy", False))
+        except Unreadable as exc:
+            errors.append(str(exc)); continue
+        try:
+            for r in con.execute(sql, (*params, limit)):
+                d = dict(r)
+                d.pop("hay", None)
+                if len(paths) > 1:
+                    d["source"] = path.parent.name if name == "chrome" else path.name
+                rows.append(d)
+        except sqlite3.DatabaseError as exc:
+            errors.append(f"{path}: {exc}")
+        finally:
+            con.close()
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+    if errors and not rows and len(errors) == len(paths):
+        raise Unreadable("; ".join(errors))
+    rows.sort(key=lambda d: d.get("ts") or 0, reverse=True)
+    rows = rows[:limit]
+    if name == "messages":
+        for d in rows:
+            blob = d.pop("body_blob", None)
+            if not d.get("text") and blob:
+                d["text"] = decode_attributed_body(blob)
+    if spec.get("who"):
+        book = contact_book()
+        for d in rows:
+            d["who_name"] = book.get(contact_key(d.get(spec["who"]) or ""), "")
+    return rows
+
+
+def decode_attributed_body(blob: bytes) -> str:
+    """Text out of a Messages attributedBody typedstream, for rows whose text column is empty.
+
+    Since Ventura most sent and received texts keep text NULL and put the string
+    in this blob: 386 of 675 messages from the last day on 2026-10-09.
+    """
+    try:
+        part = blob.split(b"NSString", 1)[1][5:]
+        n = part[0]
+        if n == 0x81:
+            n, start = struct.unpack("<H", part[1:3])[0], 3
+        elif n == 0x82:
+            n, start = struct.unpack("<I", part[1:5])[0], 5
+        else:
+            start = 1
+        return part[start:start + n].decode("utf-8", "replace")
+    except (IndexError, struct.error):
+        return ""
+
+
+def contact_key(value: str) -> str:
+    value = (value or "").strip().lower()
+    if "@" in value:
+        return value
+    digits = re.sub(r"\D", "", value)
+    return digits[-10:] if len(digits) >= 7 else ""
+
+
+_BOOK: dict[str, str] | None = None
+
+
+def contact_book() -> dict[str, str]:
+    global _BOOK
+    if _BOOK is None:
+        _BOOK = {}
+        try:
+            people = query_store_raw("contacts")
+        except Unreadable:
+            people = []
+        for p in people:
+            label = p.get("name") or p.get("org") or ""
+            for field in ("phones", "emails"):
+                for v in (p.get(field) or "").split(", "):
+                    k = contact_key(v)
+                    if k and label:
+                        _BOOK.setdefault(k, label)
+    return _BOOK
+
+
+def query_store_raw(name: str) -> list[dict]:
+    spec = STORES[name]
+    out = []
+    for path in spec["paths"]():
+        try:
+            con, tmp = connect(path, spec.get("copy", False))
+        except Unreadable:
+            continue
+        try:
+            out += [dict(r) for r in con.execute(spec["sql"])]
+        except sqlite3.DatabaseError:
+            pass
+        finally:
+            con.close()
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+    return out
+
+
+# ---- Apple Notes bodies ------------------------------------------------------
+
+def _varint(b: bytes, i: int) -> tuple[int, int]:
+    shift = val = 0
+    while True:
+        byte = b[i]; i += 1
+        val |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            return val, i
+        shift += 7
+        if shift > 63:
+            raise ValueError("varint too long")
+
+
+def proto_fields(b: bytes):
+    """Yield (field, wire, value) from a protobuf message, stopping at the first bad tag."""
+    i = 0
+    while i < len(b):
+        try:
+            tag, i = _varint(b, i)
+        except (IndexError, ValueError):
+            return
+        field, wire = tag >> 3, tag & 7
+        if field == 0:
+            return
+        if wire == 0:
+            try:
+                v, i = _varint(b, i)
+            except (IndexError, ValueError):
+                return
+        elif wire == 1:
+            if i + 8 > len(b):
+                return
+            v = b[i:i + 8]; i += 8
+        elif wire == 2:
+            try:
+                n, i = _varint(b, i)
+            except (IndexError, ValueError):
+                return
+            if i + n > len(b):
+                return
+            v = b[i:i + n]; i += n
+        elif wire == 5:
+            if i + 4 > len(b):
+                return
+            v = b[i:i + 4]; i += 4
+        else:
+            return
+        yield field, wire, v
+
+
+def note_text(data: bytes) -> str:
+    """Apple Notes ZDATA is gzip around protobuf: document(2) > note(3) > text(2)."""
+    try:
+        raw = gzip.decompress(data)
+    except OSError:
+        raw = data
+    for f, w, doc in proto_fields(raw):
+        if f == 2 and w == 2:
+            for f2, w2, note in proto_fields(doc):
+                if f2 == 3 and w2 == 2:
+                    for f3, w3, text in proto_fields(note):
+                        if f3 == 2 and w3 == 2:
+                            return text.decode("utf-8", "replace")
+    return ""
+
+
+def read_note(note_id: int) -> dict:
+    path = STORES["notes"]["paths"]()
+    if not path:
+        raise Unreadable("no Notes database found")
+    con, _ = connect(path[0])
+    try:
+        row = con.execute(
+            "select n.ZTITLE1 title, n.ZMODIFICATIONDATE1 + 978307200 ts, d.ZDATA data,"
+            " d.ZCRYPTOTAG locked from ZICCLOUDSYNCINGOBJECT n"
+            " left join ZICNOTEDATA d on d.ZNOTE = n.Z_PK where n.Z_PK = ?", (note_id,)).fetchone()
+    finally:
+        con.close()
+    if not row:
+        raise Unreadable(f"no note with id {note_id}")
+    if row["locked"]:
+        return {"id": note_id, "title": row["title"], "ts": row["ts"], "text": "", "locked": True}
+    return {"id": note_id, "title": row["title"], "ts": row["ts"],
+            "text": note_text(row["data"]) if row["data"] else ""}
+
+
+# ---- Biome (SEGB) ------------------------------------------------------------
+
+def biome_streams() -> list[dict]:
+    out = []
+    for root in BIOME_ROOTS:
+        base = L / root
+        if not base.is_dir():
+            continue
+        for stream in sorted(base.iterdir()):
+            local = stream / "local"
+            files = [f for f in local.iterdir() if f.is_file()] if local.is_dir() else []
+            if not files:
+                continue
+            newest = max(f.stat().st_mtime for f in files)
+            out.append({"stream": stream.name, "files": len(files),
+                        "bytes": sum(f.stat().st_size for f in files), "ts": newest,
+                        "scope": root.rsplit("/", 1)[-1]})
+    out.sort(key=lambda d: d["ts"], reverse=True)
+    return out
+
+
+def segb_records(data: bytes) -> list[tuple[float, bytes]]:
+    """(unix ts, payload) for each written record in a SEGB v2 file.
+
+    Layout read off App.InFocus on 2026-10-09: a 32-byte header ("SEGB", u32
+    record count, f64 created), then records of crc32 + u32 + payload, padded
+    to 4 bytes. The index sits at the end of the file, newest-last reading
+    backwards: 16 bytes each of (u32 end offset from byte 32, u32 state,
+    f64 timestamp in Cocoa seconds). State 1 is written; 3 is deleted.
+    """
+    if data[:4] != b"SEGB":
+        return []
+    count = struct.unpack("<I", data[4:8])[0]
+    out, start = [], 0
+    for k in range(count):
+        at = len(data) - 16 * (k + 1)
+        if at < 32:
+            break
+        end, state, ts = struct.unpack("<IId", data[at:at + 16])
+        if end <= start or 32 + end > at:
+            break
+        if state == 1:
+            out.append((ts + CD, data[32 + start + 8:32 + end]))
+        start = (end + 3) & ~3
+    return out
+
+
+def printable_strings(payload: bytes, depth: int = 0) -> list[str]:
+    found = []
+    for _f, wire, v in proto_fields(payload):
+        if wire != 2 or not v:
+            continue
+        try:
+            s = v.decode("utf-8")
+            if s.isprintable() and not s.isspace():
+                found.append(s)
+                continue
+        except UnicodeDecodeError:
+            pass
+        if depth < 4:
+            found += printable_strings(v, depth + 1)
+    return found
+
+
+def read_biome(stream: str, since: float | None, search: str | None, limit: int) -> list[dict]:
+    files = []
+    for root in BIOME_ROOTS:
+        local = L / root / stream / "local"
+        if local.is_dir():
+            files += [f for f in local.iterdir() if f.is_file()]
+    if not files:
+        raise Unreadable(f"no Biome stream called {stream}; `mac-db biome` lists them")
+    rows = []
+    for f in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True):
+        if since and f.stat().st_mtime < since:
+            continue
+        try:
+            data = f.read_bytes()
+        except OSError as exc:
+            raise Unreadable(f"{f}: {exc}") from exc
+        for ts, payload in segb_records(data):
+            if since and ts < since:
+                continue
+            text = " | ".join(printable_strings(payload))
+            if search and search.lower() not in text.lower():
+                continue
+            rows.append({"ts": ts, "values": text})
+    rows.sort(key=lambda d: d["ts"], reverse=True)
+    return rows[:limit]
+
+
+# ---- writes ------------------------------------------------------------------
+
+BACKUPS = Path(os.environ.get("MAC_DB_BACKUPS") or HOME / ".chewbacca/mac-db/backups")
+# Five per store: chat.db alone was 1.1 GB on 2026-10-10, a night the disk
+# filled to 238 MB free three times, so snapshots cannot pile up unbounded.
+KEEP_BACKUPS = 5
+# store -> (mac CLI app, verbs that write through the app)
+APP_VERBS = {
+    "notes": ("notes", {"add", "append", "edit", "delete"}),
+    "reminders": ("reminders", {"add", "complete", "edit", "delete"}),
+    "calendar": ("calendar", {"add", "edit", "delete"}),
+    "contacts": ("contacts", {"add"}),
+    "messages": ("messages", {"send"}),
+}
+
+
+def backup_files(store: str, files: list[Path]) -> Path:
+    size = sum(f.stat().st_size for f in files if f.exists())
+    # Snapshots are copies of TCC-protected stores (chat.db, Notes, Biome), so
+    # they get owner-only modes or any process could read what macOS gates.
+    BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(BACKUPS, 0o700)
+    free = shutil.disk_usage(BACKUPS).free
+    if free < size * 2 + 2 * 1024 ** 3:
+        raise Unreadable(f"not enough free disk to snapshot {store} first ({size // 2**20} MB needed, "
+                         f"{free // 2**20} MB free), so nothing was written")
+    dest = BACKUPS / f"{store}-{time.strftime('%Y%m%d-%H%M%S')}"
+    n = 1
+    while dest.exists():
+        n += 1
+        dest = BACKUPS / f"{store}-{time.strftime('%Y%m%d-%H%M%S')}-{n}"
+    dest.mkdir(mode=0o700, parents=True)
+    os.chmod(dest, 0o700)
+    manifest = []
+    for i, f in enumerate(files):
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            src = Path(str(f) + suffix)
+            if src.exists():
+                name = f"{i}-{src.name}"
+                shutil.copy2(src, dest / name)
+                os.chmod(dest / name, 0o600)
+                manifest.append({"from": str(src), "file": name})
+    fd = os.open(dest / "manifest.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as out:
+        out.write(json.dumps({"store": store, "files": manifest}, indent=2))
+    old = sorted(BACKUPS.glob(f"{store}-*"), key=lambda p: p.stat().st_mtime)
+    for stale in old[:-KEEP_BACKUPS]:
+        shutil.rmtree(stale, ignore_errors=True)
+    return dest
+
+
+def allowed_targets() -> set[Path]:
+    """Every file a backup may be restored over: the live store files and their sidecars."""
+    out: set[Path] = set()
+    for spec in STORES.values():
+        for path in spec["paths"]():
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                out.add(Path(str(path) + suffix).resolve())
+    return out
+
+
+def restore_backup(dest: Path) -> list[str]:
+    manifest = json.loads((dest / "manifest.json").read_text())
+    allowed = allowed_targets()
+    biome = [(L / root).resolve() for root in BIOME_ROOTS]
+    # A manifest is a file on disk, so anything could have edited it; restore
+    # only over a store file this tool knows, or inside Biome, and only from a
+    # plain name inside the backup folder (security review, 2026-10-10).
+    for item in manifest["files"]:
+        target = Path(item["from"]).resolve()
+        inside_biome = any(target.is_relative_to(b) for b in biome)
+        if (target not in allowed and not inside_biome) or "/" in item["file"] or item["file"].startswith(".."):
+            raise Unreadable(f"backup manifest points at {item['from']}, which is not a Mac store file; refused")
+    put = []
+    for item in manifest["files"]:
+        shutil.copy2(dest / item["file"], item["from"])
+        put.append(item["from"])
+    originals = {i["from"] for i in manifest["files"]}
+    # A WAL or shm written after the snapshot would replay changes the restore
+    # just undid, so drop sidecars the snapshot did not have.
+    for item in manifest["files"]:
+        base = item["from"]
+        for suffix in ("-wal", "-shm"):
+            if not base.endswith(suffix) and base + suffix not in originals and Path(base + suffix).exists():
+                Path(base + suffix).unlink()
+    return put
+
+
+def run_sql(store: str, statement: str, limit: int) -> dict:
+    spec = STORES[store]
+    paths = spec["paths"]()
+    if not paths:
+        raise Unreadable(f"no {store} database found")
+    con, tmp = connect(paths[0], spec.get("copy", False))
+    try:
+        try:
+            rows = [dict(r) for r in con.execute(statement).fetchmany(max(limit, 1))]
+            return {"rows": rows}
+        except sqlite3.OperationalError as exc:
+            if "readonly" not in str(exc) and "read-only" not in str(exc):
+                raise
+    finally:
+        con.close()
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+    # It writes. Snapshot, then run it against the real file, never a copy.
+    dest = backup_files(store, [paths[0]])
+    con = sqlite3.connect(paths[0], timeout=10)
+    con.row_factory = sqlite3.Row
+    try:
+        cur = con.execute(statement)
+        rows = [dict(r) for r in cur.fetchmany(max(limit, 1))] if cur.description else []
+        con.commit()
+        return {"rows": rows, "changed": con.total_changes, "backup": str(dest), "file": str(paths[0])}
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc):
+            raise Unreadable(f"{paths[0]} is locked by the app that owns it; quit it and run this again "
+                             f"(backup kept at {dest})") from exc
+        raise
+    finally:
+        con.close()
+
+
+def _chewbacca_verdicts():
+    """tools/verdicts.py, the kit's verdict log, loaded by path so no module
+    here can shadow it; None when it isn't there. `chewbacca why --verdicts`
+    reads what it writes."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_verdicts")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_verdicts", os.path.join(here, "../tools", "verdicts.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_verdicts"] = mod
+        return mod
+    except Exception:
+        return None
+
+
+def _send_refusal(channel: str, to: str, text: str, subject: str = ""):
+    """tools/send_approval.py's answer for this exact message: None when a
+    person's press approved it, else why nothing was sent. Loaded by path like
+    verdicts.py; when it can't load, nothing sends."""
+    try:
+        import importlib.util
+        mod = sys.modules.get("chewbacca_send_approval")
+        if mod is None:
+            here = os.path.dirname(os.path.realpath(__file__))
+            spec = importlib.util.spec_from_file_location(
+                "chewbacca_send_approval", os.path.join(here, "../tools", "send_approval.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["chewbacca_send_approval"] = mod
+    except Exception as err:
+        return "the send approval check couldn't load (%s), so nothing was sent" % err
+    return mod.refusal(channel, to, text, subject)
+
+
+def forward_to_app(store: str, verb: str, args: list[str]) -> int:
+    app, _verbs = APP_VERBS[store]
+    sends = store == "messages" and verb == "send"
+    v = _chewbacca_verdicts() if sends else None
+    to = args[0] if args else ""
+    if store == "messages" and os.environ.get("CHEWBACCA_NO_SEND"):
+        # 2026-10-08: a live test send reached a client. CHEWBACCA_NO_SEND
+        # turns every send into a printout.
+        print(f"[no send] mac messages send {' '.join(args)}")
+        if v:
+            v.send_row("mac-db messages send", "held", to, "CHEWBACCA_NO_SEND")
+        return 0
+    if sends:
+        # Only `<to> <text> [--json]`: any other flag could make what mac sends
+        # differ from the text the person approved.
+        if len(args) not in (2, 3) or (len(args) == 3 and args[2] != "--json") or args[0].startswith("-"):
+            print("mac-db messages send takes exactly <to> <text> [--json]. Nothing was sent.", file=sys.stderr)
+            return 2
+        refused = _send_refusal("imessage", args[0], args[1])
+        if refused:
+            print(refused, file=sys.stderr)
+            if v:
+                v.send_row("mac-db messages send", "failed", to, "no press")
+            return 6
+    exe = shutil.which("mac")
+    if not exe:
+        raise Unreadable("the `mac` CLI is missing; ./doctor.sh says how to install it")
+    code = subprocess.run([exe, app, verb, *args]).returncode
+    if v:
+        v.send_row("mac-db messages send", "sent" if code == 0 else "failed", to, "" if code == 0 else "exit %d" % code)
+    return code
+
+
+# ---- output ------------------------------------------------------------------
+
+def when(ts) -> str:
+    if ts is None:
+        return ""
+    try:
+        return dt.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+    except (OverflowError, OSError, ValueError):
+        return str(ts)
+
+
+def show(rows: list[dict], as_json: bool) -> None:
+    if as_json:
+        for d in rows:
+            for k in ("ts", "ends", "due"):
+                if isinstance(d.get(k), (int, float)):
+                    d[k + "_local"] = when(d[k])
+        print(json.dumps(rows, indent=2, default=lambda b: b.hex() if isinstance(b, bytes) else str(b)))
+        return
+    if not rows:
+        print("nothing in that window")
+        return
+    for d in rows:
+        rest = [str(v) for k, v in d.items()
+                if k not in ("ts", "source") and v not in (None, "", 0) and not isinstance(v, bytes)
+                and not (k in ("ends", "due") and isinstance(v, float))]
+        line = "  ".join(x.replace("\n", " ")[:160] for x in rest)
+        print(f"{when(d.get('ts'))}  {line}")
+
+
+def stores_report() -> list[dict]:
+    out = []
+    for name, spec in STORES.items():
+        paths = spec["paths"]()
+        entry = {"store": name, "files": len(paths), "readable": False, "rows": 0, "newest": ""}
+        if not paths:
+            entry["note"] = "not on this Mac"
+        for path in paths:
+            try:
+                con, tmp = connect(path, spec.get("copy", False))
+            except Unreadable as exc:
+                entry["note"] = "needs Full Disk Access" if "authoriz" in str(exc) else str(exc)[-80:]
+                continue
+            try:
+                # Calendar keeps a 2222-02-21 sentinel and interactionC holds
+                # events a year out, so "newest" ignores anything past a year ahead.
+                n, newest = con.execute(f"select count(*), max(case when ts < ? then ts end) from ({spec['sql']})",
+                                        (time.time() + 366 * 86400,)).fetchone()
+                entry["readable"] = True
+                entry["rows"] += n or 0
+                if newest and when(newest) > entry["newest"]:
+                    entry["newest"] = when(newest)
+            except sqlite3.DatabaseError as exc:
+                entry["note"] = f"query failed: {exc}"
+            finally:
+                con.close()
+                if tmp:
+                    shutil.rmtree(tmp, ignore_errors=True)
+        out.append(entry)
+    streams = biome_streams()
+    out.append({"store": "biome", "files": sum(s["files"] for s in streams), "readable": bool(streams),
+                "rows": len(streams), "newest": when(streams[0]["ts"]) if streams else "",
+                "note": f"{len(streams)} streams" if streams else "no streams found"})
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+    cmd, rest = argv[0], argv[1:]
+    if cmd in APP_VERBS and rest and rest[0] in APP_VERBS[cmd][1]:
+        try:
+            return forward_to_app(cmd, rest[0], rest[1:])
+        except Unreadable as exc:
+            print(f"mac-db: {exc}", file=sys.stderr)
+            return 1
+    ap = argparse.ArgumentParser(prog=f"mac-db {cmd}")
+    ap.add_argument("target", nargs="?")
+    ap.add_argument("query", nargs="?")
+    ap.add_argument("--days", type=float, default=None)
+    ap.add_argument("--ahead", type=float, default=None)
+    ap.add_argument("--search", "-s", default=None)
+    ap.add_argument("--limit", "-n", type=int, default=50)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fix", action="store_true", help="open the Full Disk Access pane")
+    ap.add_argument("--clear", action="store_true", help="biome: move a stream's files into a backup")
+    a = ap.parse_args(rest)
+    try:
+        if cmd == "stores":
+            report = stores_report()
+            if a.json:
+                print(json.dumps(report, indent=2))
+            else:
+                for r in report:
+                    state = "ok " if r["readable"] else "-- "
+                    print(f"{state} {r['store']:<13} {r['rows']:>9,} rows  newest {r['newest'] or '-':<16}  {r.get('note', '')}")
+            if a.fix and any("Full Disk" in r.get("note", "") for r in report):
+                subprocess.run(["open", FDA_PANE], check=False)
+            return 0
+        if cmd == "note":
+            if not a.target or not a.target.isdigit():
+                ap.error("mac-db note <id>, ids come from `mac-db notes`")
+            n = read_note(int(a.target))
+            if a.json:
+                print(json.dumps(n, indent=2))
+            else:
+                print(f"{n['title']}  ({when(n['ts'])})\n")
+                print("[locked note, the text is encrypted]" if n.get("locked") else n["text"])
+            return 0
+        if cmd == "backups":
+            for d in sorted(BACKUPS.glob("*-*"), key=lambda p: p.stat().st_mtime, reverse=True) if BACKUPS.is_dir() else []:
+                mb = sum(f.stat().st_size for f in d.iterdir()) // 2**20
+                print(f"{when(d.stat().st_mtime)}  {d.name:<40} {mb:>6,} MB  {d}")
+            return 0
+        if cmd == "restore":
+            if not a.target:
+                ap.error("mac-db restore <backup dir or name>, from `mac-db backups`")
+            dest = Path(a.target) if Path(a.target).is_dir() else BACKUPS / a.target
+            if not (dest / "manifest.json").exists():
+                raise Unreadable(f"no backup at {dest}")
+            for f in restore_backup(dest):
+                print(f"restored {f}")
+            return 0
+        if cmd == "biome" and a.clear:
+            if not a.target:
+                ap.error("mac-db biome <Stream.Name> --clear")
+            files = [f for root in BIOME_ROOTS for f in (L / root / a.target / "local").glob("*") if f.is_file()]
+            if not files:
+                raise Unreadable(f"no Biome stream called {a.target}")
+            dest = backup_files(f"biome-{a.target}", files)
+            for f in files:
+                f.unlink()
+            print(f"cleared {len(files)} files from {a.target}; backup at {dest}")
+            return 0
+        if cmd == "biome":
+            if not a.target:
+                streams = biome_streams()
+                if a.json:
+                    print(json.dumps(streams, indent=2))
+                else:
+                    for s in streams:
+                        print(f"{when(s['ts'])}  {s['stream']:<45} {s['files']:>3} files  {s['bytes'] // 1024:>7,} KB")
+                return 0
+            days = 7 if a.days is None else a.days
+            since = time.time() - days * 86400 if days else None
+            show(read_biome(a.target, since, a.search, a.limit), a.json)
+            return 0
+        if cmd in ("schema", "sql"):
+            if a.target not in STORES:
+                ap.error(f"store must be one of: {', '.join(STORES)}")
+            spec = STORES[a.target]
+            paths = spec["paths"]()
+            if not paths:
+                raise Unreadable(f"no {a.target} database found")
+            con, tmp = connect(paths[0], spec.get("copy", False))
+            try:
+                if cmd == "schema":
+                    for (t,) in con.execute("select name from sqlite_master where type='table' order by name"):
+                        cols = [c[1] for c in con.execute(f'pragma table_info("{t}")')]
+                        print(f"{t}: {', '.join(cols)}")
+                else:
+                    if not a.query:
+                        ap.error('mac-db sql <store> "select ..."')
+                    con.close()
+                    out = run_sql(a.target, a.query, a.limit)
+                    print(json.dumps(out if "changed" in out else out["rows"], indent=2,
+                                     default=lambda b: f"<{len(b)} bytes>" if isinstance(b, bytes) else str(b)))
+            finally:
+                con.close()
+                if tmp:
+                    shutil.rmtree(tmp, ignore_errors=True)
+            return 0
+        if cmd not in STORES:
+            print(f"mac-db: unknown store {cmd!r}. Stores: {', '.join(STORES)}, biome", file=sys.stderr)
+            return 2
+        spec = STORES[cmd]
+        days = spec.get("days", 7) if a.days is None else a.days
+        ahead = spec.get("ahead", 0) if a.ahead is None else a.ahead
+        now = time.time()
+        since = now - days * 86400 if days else None
+        until = now + ahead * 86400 if (ahead or days) else None
+        show(query_store(cmd, since, until, a.search, a.limit), a.json)
+        return 0
+    except sqlite3.DatabaseError as exc:
+        print(f"mac-db: {exc}", file=sys.stderr)
+        return 1
+    except Unreadable as exc:
+        msg = str(exc)
+        print(f"mac-db: {msg}", file=sys.stderr)
+        if "authoriz" in msg or "permission" in msg.lower():
+            print("This app needs Full Disk Access. `mac-db stores --fix` opens the pane.", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -31,7 +31,7 @@ from clay_page import Changed, PageError, Paused, Stopped, WrongTable
 from clay_reads import AutoRunUnknown, ReadError, ids_from_href
 from clay_recipe import fill
 
-# The 300 ms glide in docs/CLAY-HUD.md: the pointer reaches the control before
+# The 300 ms glide in docs/plans/CLAY-HUD.md: the pointer reaches the control before
 # it is pressed, so the person sees what is about to happen. Guessed, never
 # measured on the glass.
 GLIDE_S = 0.3

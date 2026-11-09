@@ -1,6 +1,8 @@
 ---
 name: manim
-description: Make an animated math or explainer video with Manim Community (ManimCE), the 3Blue1Brown-style engine. Use when the user asks for a manim video, a 3b1b-style animation, an animated proof, an explainer with graphs and equations, a funny math video about a friend, or links github.com/ManimCommunity/manim or github.com/3b1b/manim. Also use when a manim render fails, looks wrong, or text overlaps.
+description: "Animated math or explainer videos with Manim Community, the 3Blue1Brown engine. Use for a manim or 3b1b-style video, an animated proof, graphs and equations, or a manim render that fails or overlaps."
+triggers: >-
+  Make an animated math or explainer video with Manim Community (ManimCE), the 3Blue1Brown-style engine. Use when the user asks for a manim video, a 3b1b-style animation, an animated proof, an explainer with graphs and equations, a funny math video about a friend, or links github.com/ManimCommunity/manim or github.com/3b1b/manim. Also use when a manim render fails, looks wrong, or text overlaps.
 ---
 
 # Manim videos

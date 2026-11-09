@@ -1,0 +1,493 @@
+{
+ "status": "OK",
+ "campus": {
+  "campusid": 155,
+  "name": "USC Campus Dining"
+ },
+ "locations": [
+  {
+   "locationid": 1221,
+   "name": "Bowls",
+   "cafeteriaid": 1084,
+   "is_hidden": 0,
+   "is_deleted": 0,
+   "is_ordering_disabled": 0,
+   "is_currently_takeout_open": 1,
+   "estimated_wait_time": 4,
+   "order_queue_count": 3,
+   "is_currently_busy_period": 0,
+   "mealplan_payments_allowed": 1,
+   "creditcard_payments_allowed": 1,
+   "takeout_open_time": "11:30:00",
+   "takeout_close_time": "18:30:00",
+   "hours_list": [
+    {
+     "day_of_week": 1,
+     "label": "Monday",
+     "takeout_open_time": "11:30:00",
+     "takeout_close_time": "18:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 2,
+     "label": "Tuesday",
+     "takeout_open_time": "11:30:00",
+     "takeout_close_time": "18:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 3,
+     "label": "Wednesday",
+     "takeout_open_time": "11:30:00",
+     "takeout_close_time": "18:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 4,
+     "label": "Thursday",
+     "takeout_open_time": "11:30:00",
+     "takeout_close_time": "18:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 5,
+     "label": "Friday",
+     "takeout_open_time": "11:30:00",
+     "takeout_close_time": "16:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 6,
+     "label": "Saturday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 7,
+     "label": "Sunday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    }
+   ],
+   "header_text": "Menu Items Have Not Been Analyzed For Allergens"
+  },
+  {
+   "locationid": 1215,
+   "name": "Taco Taco",
+   "cafeteriaid": 1078,
+   "is_hidden": 0,
+   "is_deleted": 0,
+   "is_ordering_disabled": 0,
+   "is_currently_takeout_open": 1,
+   "estimated_wait_time": 5,
+   "order_queue_count": 19,
+   "is_currently_busy_period": 0,
+   "mealplan_payments_allowed": 1,
+   "creditcard_payments_allowed": 1,
+   "takeout_open_time": "11:00:00",
+   "takeout_close_time": "18:00:00",
+   "hours_list": [
+    {
+     "day_of_week": 1,
+     "label": "Monday",
+     "takeout_open_time": "11:00:00",
+     "takeout_close_time": "18:00:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 2,
+     "label": "Tuesday",
+     "takeout_open_time": "11:00:00",
+     "takeout_close_time": "18:00:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 3,
+     "label": "Wednesday",
+     "takeout_open_time": "11:00:00",
+     "takeout_close_time": "18:00:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 4,
+     "label": "Thursday",
+     "takeout_open_time": "11:00:00",
+     "takeout_close_time": "18:00:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 5,
+     "label": "Friday",
+     "takeout_open_time": "11:00:00",
+     "takeout_close_time": "16:00:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 6,
+     "label": "Saturday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 7,
+     "label": "Sunday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    }
+   ],
+   "header_text": "Menu Items Have Not Been Analyzed For Allergens"
+  },
+  {
+   "locationid": 1222,
+   "name": "Dining Dollar Donations Drive",
+   "cafeteriaid": 1085,
+   "is_hidden": 1,
+   "is_deleted": 0,
+   "is_ordering_disabled": 0,
+   "is_currently_takeout_open": 1,
+   "estimated_wait_time": 0,
+   "order_queue_count": 0,
+   "is_currently_busy_period": 0,
+   "mealplan_payments_allowed": 1,
+   "creditcard_payments_allowed": 0,
+   "takeout_open_time": "00:00:00",
+   "takeout_close_time": "23:59:59",
+   "hours_list": [
+    {
+     "day_of_week": 1,
+     "label": "Monday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 2,
+     "label": "Tuesday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 3,
+     "label": "Wednesday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 4,
+     "label": "Thursday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 5,
+     "label": "Friday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 6,
+     "label": "Saturday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 7,
+     "label": "Sunday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "23:59:59",
+     "takeout_hours_type": 2,
+     "holiday_date": ""
+    }
+   ],
+   "header_text": ""
+  },
+  {
+   "locationid": 1214,
+   "name": "Panda Express",
+   "cafeteriaid": 1077,
+   "is_hidden": 0,
+   "is_deleted": 0,
+   "is_ordering_disabled": 0,
+   "is_currently_takeout_open": 0,
+   "estimated_wait_time": 0,
+   "order_queue_count": 2,
+   "is_currently_busy_period": 0,
+   "mealplan_payments_allowed": 1,
+   "creditcard_payments_allowed": 1,
+   "takeout_open_time": "10:30:00",
+   "takeout_close_time": "17:30:00",
+   "hours_list": [
+    {
+     "day_of_week": 1,
+     "label": "Monday",
+     "takeout_open_time": "10:30:00",
+     "takeout_close_time": "17:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 2,
+     "label": "Tuesday",
+     "takeout_open_time": "10:30:00",
+     "takeout_close_time": "17:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 3,
+     "label": "Wednesday",
+     "takeout_open_time": "10:30:00",
+     "takeout_close_time": "17:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 4,
+     "label": "Thursday",
+     "takeout_open_time": "10:30:00",
+     "takeout_close_time": "17:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 5,
+     "label": "Friday",
+     "takeout_open_time": "10:30:00",
+     "takeout_close_time": "16:30:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 6,
+     "label": "Saturday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 7,
+     "label": "Sunday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    }
+   ],
+   "header_text": "Menu Items Have Not Been Analyzed For Allergens"
+  },
+  {
+   "locationid": 1707,
+   "name": "Breakfast and Sandwiches",
+   "cafeteriaid": 1535,
+   "is_hidden": 0,
+   "is_deleted": 0,
+   "is_ordering_disabled": 0,
+   "is_currently_takeout_open": 0,
+   "estimated_wait_time": 0,
+   "order_queue_count": 66,
+   "is_currently_busy_period": 1,
+   "mealplan_payments_allowed": 1,
+   "creditcard_payments_allowed": 1,
+   "takeout_open_time": "08:00:00",
+   "takeout_close_time": "10:15:00",
+   "hours_list": [
+    {
+     "day_of_week": 1,
+     "label": "Monday",
+     "takeout_open_time": "08:00:00",
+     "takeout_close_time": "10:15:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 2,
+     "label": "Tuesday",
+     "takeout_open_time": "08:00:00",
+     "takeout_close_time": "10:15:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 3,
+     "label": "Wednesday",
+     "takeout_open_time": "08:00:00",
+     "takeout_close_time": "10:15:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 4,
+     "label": "Thursday",
+     "takeout_open_time": "08:00:00",
+     "takeout_close_time": "10:15:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 5,
+     "label": "Friday",
+     "takeout_open_time": "08:00:00",
+     "takeout_close_time": "10:15:00",
+     "takeout_hours_type": 0,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 6,
+     "label": "Saturday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    },
+    {
+     "day_of_week": 7,
+     "label": "Sunday",
+     "takeout_open_time": "00:00:00",
+     "takeout_close_time": "00:00:00",
+     "takeout_hours_type": 1,
+     "holiday_date": ""
+    }
+   ],
+   "header_text": "Menu Items Have Not Been Analyzed For Allergens"
+  }
+ ],
+ "cafeterias": [
+  {
+   "cafeteriaid": 1077,
+   "group_display_name": "Ronald Tutor Campus Center",
+   "groupid": 10545,
+   "latitude": 34.0204484855,
+   "longitude": -118.2863371226
+  },
+  {
+   "cafeteriaid": 1078,
+   "group_display_name": "Ronald Tutor Campus Center",
+   "groupid": 10545,
+   "latitude": 34.0204484855,
+   "longitude": -118.2863371226
+  },
+  {
+   "cafeteriaid": 1084,
+   "group_display_name": "Ronald Tutor Campus Center",
+   "groupid": 10545,
+   "latitude": 34.0204484855,
+   "longitude": -118.2863371226
+  },
+  {
+   "cafeteriaid": 1085,
+   "group_display_name": "",
+   "groupid": 0,
+   "latitude": 0.0,
+   "longitude": 0.0
+  },
+  {
+   "cafeteriaid": 1535,
+   "group_display_name": "Seeds Marketplace",
+   "groupid": 10850,
+   "latitude": 34.0205590687,
+   "longitude": -118.2860079109
+  }
+ ],
+ "cafeteria_groups": [
+  {
+   "group_display_name": "Ronald Tutor Campus Center",
+   "group_display_subtitle": "RTCC",
+   "object_type": "cafeteria_group",
+   "groupid": 10545,
+   "latitude": 34.0204484855,
+   "campusid": 155,
+   "display_priority": 6,
+   "longitude": -118.2863371226
+  },
+  {
+   "group_display_name": "Health Sciences Campus",
+   "group_display_subtitle": "HSC",
+   "object_type": "cafeteria_group",
+   "groupid": 10550,
+   "latitude": 34.0607602282,
+   "campusid": 155,
+   "display_priority": 1,
+   "longitude": -118.2058036845
+  },
+  {
+   "group_display_name": "University Park Campus",
+   "group_display_subtitle": "UPC",
+   "object_type": "cafeteria_group",
+   "groupid": 10574,
+   "latitude": 34.0213675381,
+   "campusid": 155,
+   "display_priority": 4,
+   "longitude": -118.2824835171
+  },
+  {
+   "group_display_name": "Systems",
+   "group_display_subtitle": "SYS",
+   "object_type": "cafeteria_group",
+   "groupid": 10765,
+   "latitude": 0.0,
+   "campusid": 155,
+   "display_priority": 0,
+   "longitude": 0.0
+  },
+  {
+   "group_display_name": "Seeds Marketplace",
+   "group_display_subtitle": "SEEDS",
+   "object_type": "cafeteria_group",
+   "groupid": 10850,
+   "latitude": 34.0205590687,
+   "campusid": 155,
+   "display_priority": 7,
+   "longitude": -118.2860079109
+  },
+  {
+   "group_display_name": "The Lab",
+   "group_display_subtitle": "LAB",
+   "object_type": "cafeteria_group",
+   "groupid": 10987,
+   "latitude": 34.0199549714,
+   "campusid": 155,
+   "display_priority": 1,
+   "longitude": -118.2808996032
+  },
+  {
+   "group_display_name": "Upstairs",
+   "group_display_subtitle": "UPS",
+   "object_type": "cafeteria_group",
+   "groupid": 11100,
+   "latitude": 0.0,
+   "campusid": 155,
+   "display_priority": 8,
+   "longitude": 0.0
+  }
+ ]
+}

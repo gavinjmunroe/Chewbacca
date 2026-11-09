@@ -4,8 +4,9 @@ import SwiftUI
 
 /// The `window` chrome's display face.
 ///
-/// TypeSafe sets its windows in LisaTerminal Paper, a licensed face
-/// (typesafe.ai's stylesheet, read 2026-10-08), so it cannot ship here.
+/// TypeSafe sets its windows in LisaTerminal Paper (typesafe.ai's stylesheet,
+/// read 2026-10-08), whose file names no licence (its name table, read
+/// 2026-10-11), so it cannot ship here.
 /// Departure Mono is Helena Zhang's pixel mono under the OFL, in the bundle at
 /// `Contents/Resources/Fonts` and registered by `ATSApplicationFontsPath`.
 ///
@@ -47,4 +48,31 @@ extension View {
     nonisolated func pixelFont(_ size: CGFloat) -> some View {
         font(Typeface.pixel(size)).fontDesign(nil)
     }
+}
+
+/// The home panel's type: SF Pro, the system face, and nothing else (the
+/// ios27-design deny list: one family; Regular, Semibold and Bold only; no
+/// all-caps). Sizes are macOS's own text styles, the Large Title for the day
+/// and Body plus a point for a row, which a desktop panel is read from
+/// further away than a window. Fixed, because macOS has no Dynamic Type.
+///
+/// Asked for on 2026-10-17, "use it to redo the kyber home panel", with
+/// Apple's font chosen over keeping TypeSafe's pixel mono, which this
+/// replaced (it was asked for 2026-10-11, "go on the typesafe font style").
+enum HomeType {
+    /// "Sunday".
+    static let headline = Font.system(size: 26, weight: .bold)
+    /// A list's name when the panel shows chosen lists without Kyber's own
+    /// title ("To-do", "Projects"): macOS's Title 1 size.
+    static let panelTitle = Font.system(size: 22, weight: .bold)
+    /// "October 11", beside the day.
+    static let date = Font.system(size: 15)
+    /// "Calendar", "To-do", "Projects", and the panel's name.
+    static let section = Font.system(size: 13, weight: .semibold)
+    /// A row's words, and the field a to-do is typed into.
+    static let title = Font.system(size: 14)
+    /// Times, counts, details and notes.
+    static let detail = Font.system(size: 12)
+    /// "Tomorrow", over its events, and a pressable word.
+    static let label = Font.system(size: 12, weight: .semibold)
 }

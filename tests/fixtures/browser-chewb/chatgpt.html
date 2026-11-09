@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>ChatGPT</title></head>
+<body>
+<!-- A stand-in for chatgpt.com: the attributes the extension reads, nothing else. -->
+<main>
+  <div id="thread">
+    <article data-testid="conversation-turn-1"><div data-message-author-role="assistant" data-message-id="old">
+      <p>From an old conversation:</p>
+      <pre><div>chewbacca</div><code class="language-chewbacca">{"tool": "skills", "args": {}}</code></pre>
+    </div></article>
+  </div>
+  <form><textarea name="prompt" id="mobile-composer-prompt" aria-label="Chat with ChatGPT" placeholder="Ask ChatGPT"></textarea>
+  <button type="button" aria-label="Send message">Send</button></form>
+</main>
+<script src="/__fixture/render.js"></script>
+<script>
+  let n = 1;
+  window.__say = (md) => {
+    const turn = document.createElement("article");
+    turn.setAttribute("data-testid", "conversation-turn-" + (++n));
+    const msg = document.createElement("div");
+    msg.setAttribute("data-message-author-role", "assistant");
+    msg.append(window.__render(md, "label"));
+    turn.append(msg); document.getElementById("thread").append(turn);
+  };
+  window.__user = (text) => {
+    const msg = document.createElement("div");
+    msg.setAttribute("data-message-author-role", "user");
+    msg.textContent = text; document.getElementById("thread").append(msg);
+  };
+  window.__composer = () => document.querySelector('textarea[name="prompt"]').value;
+</script>
+</body></html>

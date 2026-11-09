@@ -1,0 +1,9 @@
+{
+  "_about": "Trigger phrases the keyword router in .claude/hooks/skill-route.sh checks before skill descriptions. Learned 2026-10-31 by tools/skill_route_phrases.py learn (typed train prompts, support 2+, train precision 0.75+), then cut by hand of person and client names and of fragments with no topic (will have, should i add, screw, 100). Measured on the held-out split by tools/skill_route_eval.py; see BACKLOG item 3. Add a phrase only with a held-out run that shows it helps.",
+  "phrases": {
+    "clay-navigation": ["clay ux"],
+    "gtm-engineering": ["campaigns", "launch", "gtme"],
+    "social": ["post"],
+    "texts": ["texts", "text to send"]
+  }
+}

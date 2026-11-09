@@ -1,0 +1,26 @@
+{
+  "skill": "launch-funnel",
+  "cases": [
+    {
+      "prompt": "Write landing page copy for my app",
+      "expect_tools": [
+        "launch-funnel"
+      ],
+      "why": "copy starts from the persona and value proposition"
+    },
+    {
+      "prompt": "Make a waitlist page with a deposit for preorders",
+      "expect_tools": [
+        "launch-funnel"
+      ],
+      "why": "the reservation page formula and its math"
+    },
+    {
+      "prompt": "Reverse engineer Notion's landing page",
+      "expect_tools": [
+        "launch-funnel"
+      ],
+      "why": "section by section, purpose in landing page terms"
+    }
+  ]
+}

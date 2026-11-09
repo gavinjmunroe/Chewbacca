@@ -4,7 +4,10 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +28,7 @@ class OnboardingTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_empty_setup_has_complete_private_context_and_no_inferred_identity(self):
         result = runtime.setup('codex')
         brain = self.home / 'brain'
@@ -91,19 +95,22 @@ class OnboardingTests(unittest.TestCase):
         self.assertNotIn('UnrelatedAccountOwner', result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_runtime_does_not_silently_ignore_a_permission_flag(self):
-        result = subprocess.run(['bash', str(ROOT / 'setup.sh'), '--runtime', 'codex', '--full-send'],
-            text=True, capture_output=True, timeout=3)
-        self.assertEqual(result.returncode, 2)
-        self.assertEqual(list(self.home.iterdir()), [])
+    def test_runtime_keeps_prompts_when_asked(self):
+        # Prompts have been off by default since ffaa02c5 (2026-10-16), the --runtime path
+        # included, so what has to hold is that asking to keep them works.
+        result = subprocess.run(['bash', str(ROOT / 'setup.sh'), '--runtime', 'codex', '--ask-permissions',
+            '--brain-dir', str(self.home / 'b'), '--name', 'Zoe'], text=True, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('Turning off permission prompts', result.stdout)
 
     def test_runtime_cli_passes_explicit_name_and_path_and_outputs_brief_result(self):
         brain = self.home / 'chosen brain'
         result = subprocess.run(['bash', str(ROOT / 'setup.sh'), '--runtime', 'codex',
-            '--brain-dir', str(brain), '--name', 'Zoë'], text=True, capture_output=True, timeout=5)
+            '--ask-permissions', '--brain-dir', str(brain), '--name', 'Zoë'], text=True, capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Name: Zoë', (brain / 'core/identity.md').read_text())
-        self.assertLess(len(result.stdout.splitlines()), 12)
+        # The brief result plus the no-prompts line and the first-win week, which joined it later.
+        self.assertLess(len(result.stdout.splitlines()), 20)
         self.assertFalse((self.home / '.claude').exists())
 
 

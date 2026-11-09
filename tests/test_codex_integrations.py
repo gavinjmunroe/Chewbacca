@@ -3,14 +3,19 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import codex_integrations
 
 
 class IntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_selected_servers_preserve_existing_settings_and_auth(self):
         with tempfile.TemporaryDirectory() as temp:
             source, target = Path(temp) / 'source.json', Path(temp) / 'config.toml'
@@ -31,6 +36,18 @@ class IntegrationTests(unittest.TestCase):
             before = target.read_text()
             codex_integrations.import_servers(source, target, ['remote', 'local'])
             self.assertEqual(target.read_text(), before)
+
+    def test_without_a_toml_parser_nothing_changes(self):
+        # Stock macOS Python 3.9 has no tomllib; the import used to raise there.
+        with tempfile.TemporaryDirectory() as temp:
+            source, target = Path(temp) / 'source.json', Path(temp) / 'config.toml'
+            source.write_text(json.dumps({'mcpServers': {'local': {'command': 'node'}}}))
+            target.write_text('approval_policy = "never"\n')
+            with patch.object(codex_integrations, 'tomllib', None):
+                result = codex_integrations.import_servers(source, target, ['local'])
+            self.assertEqual(result['added'], [])
+            self.assertIn('unchanged', result)
+            self.assertEqual(target.read_text(), 'approval_policy = "never"\n')
 
 
 if __name__ == '__main__':

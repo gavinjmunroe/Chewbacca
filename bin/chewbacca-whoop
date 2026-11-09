@@ -1,0 +1,931 @@
+#!/usr/bin/env python3
+"""chewbacca whoop: sleep, recovery, strain and workouts from WHOOP's official API.
+
+  chewbacca whoop auth                  connect once: opens a local page that walks
+                                        through creating the WHOOP app, then WHOOP's sign-in
+  chewbacca whoop status                is it connected, and as whom
+  chewbacca whoop today                 current cycle: recovery, last sleep, naps, strain, workouts
+  chewbacca whoop sleep [--days N] [--limit N]      duration, stages, performance, sleep need
+  chewbacca whoop recovery [--days N] [--limit N]   score, HRV, resting HR, SpO2, skin temp
+  chewbacca whoop strain [--days N] [--limit N]     day strain, energy, heart rate per cycle
+  chewbacca whoop workouts [--days N] [--limit N]   sport, strain, heart rate, zones
+  chewbacca whoop logout                revoke at WHOOP and delete the saved sign-in
+  Every command takes --json. Exit 3 means never connected. Exit 4 means it was, and
+  WHOOP has since refused the sign-in, so it needs auth again.
+
+  auth --client-id X        take the id here and the secret on stdin, skipping the page
+  auth --redirect-uri URI   use another redirect registered on the app
+  auth --callback-url URL   finish sign-in from the URL the browser landed on, for
+                            when the redirect page didn't load
+
+Docs read 2026-11-04: developer.whoop.com/docs/developing/oauth, /developing/rate-limiting
+and the OpenAPI spec at api.prod.whoop.com/developer/doc/openapi.json.
+
+Scopes: every scope WHOOP publishes, per feedback_never_read_only. WHOOP's OAuth
+has no write scope for any of this data, so these reads are all there is to ask for.
+
+Storage: the client id and secret and the tokens live in the macOS login keychain
+(generic passwords, service chewbacca-whoop). They go in through `security -i` on
+stdin, never argv, because any local process can read argv with `ps` (the office
+security review, 2026-10-09). Health data is never written anywhere by this tool.
+"""
+import argparse
+import base64
+import binascii
+import contextlib
+import datetime
+import fcntl
+import html
+import http.client
+import http.server
+import json
+import os
+import pathlib
+import re
+import secrets
+import socket
+import string
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+SERVICE = "chewbacca-whoop"
+SECURITY = os.environ.get("CHEWBACCA_WHOOP_SECURITY") or "/usr/bin/security"
+OPENER = os.environ.get("CHEWBACCA_WHOOP_OPEN") or "/usr/bin/open"
+DASHBOARD = "https://developer-dashboard.whoop.com/apps/create"
+SCOPES = "offline read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement"
+# WHOOP's edge can refuse urllib's default agent, and the docs don't say either way.
+USER_AGENT = "chewbacca-whoop/1.0"
+
+_TEST_BASE = os.environ.get("CHEWBACCA_WHOOP_BASE", "")
+# Only loopback may stand in for WHOOP, so the override can never send a token elsewhere.
+if _TEST_BASE and not re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", _TEST_BASE):
+    sys.exit("chewbacca whoop: refused: CHEWBACCA_WHOOP_BASE must be http://127.0.0.1:<port>")
+HOST = _TEST_BASE or "https://api.prod.whoop.com"
+API = HOST + "/developer"
+AUTH_URL = HOST + "/oauth/oauth2/auth"
+TOKEN_URL = HOST + "/oauth/oauth2/token"
+
+# Has to match the app's dashboard entry character for character, so it's one fixed
+# value. The port itself is arbitrary, never measured against anything.
+PORT = int(os.environ.get("CHEWBACCA_WHOOP_PORT") or 8787)
+DEFAULT_REDIRECT = f"http://localhost:{PORT}/callback"
+# Long enough to create a WHOOP team and app by hand. Guessed, never measured.
+AUTH_WAIT = float(os.environ.get("CHEWBACCA_WHOOP_AUTH_WAIT") or 900)
+# Refresh a minute early so a token can't expire between the check and the call.
+# Guessed, never measured; a late 401 is still handled by one forced refresh.
+EXPIRY_MARGIN = 60
+# WHOOP's documented cap per page.
+PAGE = 25
+# `security -i` truncates a line near 4 KB (measured for chewbacca office: a
+# 12,000-char value came back as 4,031 chars).
+KEYCHAIN_LINE_MAX = 3900
+MAX_RESPONSE = 5_000_000
+TIMEOUT = 20
+# Set by the brief, which kills this process at its own limit. A kill between WHOOP
+# rotating the refresh token and the save would lose the sign-in, so the tool stops
+# itself first.
+BUDGET = float(os.environ.get("CHEWBACCA_WHOOP_BUDGET") or 0)
+STARTED = time.time()
+# Neither has been measured against a really locked keychain. Guessed.
+SECURITY_TIMEOUT = 10
+LOCK_WAIT = 30
+LOCK = pathlib.Path.home() / ".chewbacca" / "whoop.lock"
+UNSAFE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+SECRETS = set()
+NOT_CONNECTED = 3
+SIGNED_OUT = 4
+
+
+class Stop(Exception):
+    """WHOOP pushed back or something's misconfigured. Printed once, never retried."""
+
+    def __init__(self, message, code=1):
+        super().__init__(message)
+        self.code = code
+
+
+class BadState(Stop):
+    """A request that isn't from this sign-in. Any web page can send one to loopback."""
+
+
+def remember(*values):
+    for value in values:
+        if isinstance(value, str) and len(value) >= 8:
+            SECRETS.add(value)
+
+
+def scrub(text):
+    text = str(text)
+    for value in SECRETS:
+        text = text.replace(value, "[redacted]")
+    return text
+
+
+def clean(text):
+    """Sport names and API errors come from outside and land in a terminal an agent reads."""
+    return UNSAFE.sub("", scrub(text))
+
+
+def say(text=""):
+    print(clean(text))
+
+
+# ── keychain ─────────────────────────────────────────────────────────────────
+
+def security(*args, stdin=None):
+    try:
+        return subprocess.run([SECURITY, *args], input=stdin, capture_output=True, text=True,
+                              timeout=SECURITY_TIMEOUT)
+    except OSError as e:
+        raise Stop(f"the macOS keychain tool isn't available ({type(e).__name__}). This needs a Mac.")
+    except subprocess.TimeoutExpired:
+        raise Stop(f"the keychain didn't answer in {SECURITY_TIMEOUT}s. Is it locked?")
+
+
+def kc_read(account):
+    r = security("find-generic-password", "-s", SERVICE, "-a", account, "-w")
+    if r.returncode == 44:  # errSecItemNotFound, as `security` reports it
+        return None
+    if r.returncode != 0:
+        raise Stop(f"could not read the login keychain (security exit {r.returncode}). Is it locked?")
+    try:
+        doc = json.loads(base64.b64decode(r.stdout.strip(), validate=True))
+    except (binascii.Error, ValueError):
+        raise Stop(f"the saved {account} item in the keychain is unreadable. Run: chewbacca whoop logout")
+    for key in ("client_secret", "access_token", "refresh_token"):
+        remember(doc.get(key))
+    return doc
+
+
+def kc_write(account, doc):
+    encoded = base64.b64encode(json.dumps(doc).encode()).decode()
+    line = f"add-generic-password -U -s {SERVICE} -a {account} -w {encoded}\n"
+    if len(line) > KEYCHAIN_LINE_MAX:
+        raise Stop(f"the {account} item is too long for the keychain path ({len(line)} chars). Nothing saved.")
+    security("-i", stdin=line)
+    # `security -i` can exit 0 when the command inside it failed, so read it back.
+    if kc_read(account) != doc:
+        raise Stop(f"the {account} item didn't save to the login keychain. Is it locked?")
+
+
+def kc_delete(account):
+    return security("delete-generic-password", "-s", SERVICE, "-a", account).returncode == 0
+
+
+@contextlib.contextmanager
+def locked():
+    """Every token write runs under this. See refresh()."""
+    wait = LOCK_WAIT
+    if BUDGET:
+        wait = min(wait, max(0, BUDGET - (time.time() - STARTED)))
+    deadline = time.time() + wait
+    try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        lock = open(LOCK, "w")
+    except OSError as e:
+        raise Stop(f"could not write the lock at {LOCK} ({type(e).__name__}).")
+    with lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() >= deadline:
+                    raise Stop("another WHOOP command is holding the sign-in lock. Try again shortly.")
+                time.sleep(0.1)
+        yield
+
+
+# ── http ─────────────────────────────────────────────────────────────────────
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib re-sends the Authorization header on a redirect. WHOOP's API has no
+    reason to redirect, so one stops the command instead."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+OPENER_HTTP = urllib.request.build_opener(NoRedirect, urllib.request.ProxyHandler({}))
+
+
+def http_call(request):
+    """(status, headers, parsed JSON or None). A non-2xx is returned for the caller to judge."""
+    request.add_header("User-Agent", USER_AGENT)
+    request.add_header("Accept", "application/json")
+    timeout = TIMEOUT
+    if BUDGET:
+        timeout = min(timeout, BUDGET - (time.time() - STARTED))
+        if timeout <= 0:
+            raise Stop("ran out of its time budget before WHOOP answered.")
+    try:
+        try:
+            with OPENER_HTTP.open(request, timeout=timeout) as r:
+                status, headers, body = r.status, r.headers, r.read(MAX_RESPONSE + 1)
+        except urllib.error.HTTPError as e:
+            status, headers, body = e.code, e.headers, e.read(MAX_RESPONSE + 1)
+    except (urllib.error.URLError, socket.timeout, OSError, http.client.HTTPException) as e:
+        raise Stop(f"could not reach WHOOP ({type(e).__name__}). Check the connection and try again.")
+    if len(body) > MAX_RESPONSE:
+        raise Stop("WHOOP sent an oversized response. Nothing used.")
+    try:
+        return status, headers, json.loads(body) if body else None
+    except ValueError:
+        return status, headers, None
+
+
+def token_request(fields):
+    req = urllib.request.Request(TOKEN_URL, data=urllib.parse.urlencode(fields).encode(), method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    return http_call(req)
+
+
+def store_tokens(doc):
+    remember(doc.get("access_token"), doc.get("refresh_token"))
+    try:
+        expires_in = float(doc.get("expires_in") or 0)
+    except (TypeError, ValueError):
+        expires_in = 0  # Treated as already expired, so the next command refreshes.
+    tokens = {
+        "access_token": doc["access_token"],
+        "refresh_token": doc.get("refresh_token"),
+        "expires_at": time.time() + expires_in,
+        "scope": doc.get("scope"),
+    }
+    kc_write("tokens", tokens)
+    return tokens
+
+
+def refresh(used_access_token=None):
+    """A fresh access token. A refresh token works once and a second concurrent use
+    fails (WHOOP's OAuth docs), and tabs and the morning brief can all land here at
+    the same moment, so the whole read, refresh and save runs under one file lock."""
+    with locked():
+        tokens = kc_read("tokens")
+        if not tokens:
+            raise Stop("not connected. Run: chewbacca whoop auth", NOT_CONNECTED)
+        # Another process may have refreshed while this one waited on the lock.
+        if tokens["access_token"] != used_access_token and tokens.get("expires_at", 0) > time.time() + EXPIRY_MARGIN:
+            return tokens["access_token"]
+        if not tokens.get("refresh_token"):
+            raise Stop("the sign-in expired and has no refresh token. Run: chewbacca whoop auth", SIGNED_OUT)
+        client = kc_read("client")
+        if not client:
+            raise Stop("the WHOOP app's client id is gone. Run: chewbacca whoop auth", SIGNED_OUT)
+        # Spending the refresh token with a keychain that can't save the next one
+        # would lose the sign-in, so prove it can save first. A changed value, since
+        # a failed write of identical bytes reads back as a success.
+        kc_write("tokens", dict(tokens, checked_at=time.time()))
+        status, _, doc = token_request({
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "client_id": client["client_id"],
+            "client_secret": client["client_secret"],
+            "scope": "offline",
+        })
+        if status != 200 or not isinstance(doc, dict) or not doc.get("access_token"):
+            if status in (400, 401, 403):
+                raise Stop(f"WHOOP refused the saved sign-in (HTTP {status}). Run: chewbacca whoop auth", SIGNED_OUT)
+            raise Stop(f"WHOOP's token endpoint answered HTTP {status}. Try again shortly.")
+        # WHOOP rotates the refresh token; keep the old one only if none came back.
+        doc.setdefault("refresh_token", tokens["refresh_token"])
+        for attempt in range(3):
+            try:
+                return store_tokens(doc)["access_token"]
+            except Stop:
+                time.sleep(0.2 * (attempt + 1))
+        raise Stop("WHOOP rotated the sign-in and the keychain wouldn't save the new one, so the "
+                   "sign-in is gone. Run: chewbacca whoop auth", SIGNED_OUT)
+
+
+def access_token():
+    tokens = kc_read("tokens")
+    if not tokens:
+        raise Stop("not connected. Run: chewbacca whoop auth", NOT_CONNECTED)
+    if tokens.get("expires_at", 0) > time.time() + EXPIRY_MARGIN:
+        return tokens["access_token"]
+    return refresh(tokens["access_token"])
+
+
+def api(path, query=None, method="GET", missing_ok=False, _retried=False):
+    url = API + path + ("?" + urllib.parse.urlencode(query) if query else "")
+    token = access_token()
+    req = urllib.request.Request(url, method=method)
+    req.add_header("Authorization", f"Bearer {token}")
+    status, headers, doc = http_call(req)
+    if status == 401 and not _retried:
+        # Revoked or expired early. One forced refresh, then the 401 is real.
+        refresh(token)
+        return api(path, query, method, missing_ok, _retried=True)
+    if status == 401:
+        raise Stop("WHOOP refused the token (HTTP 401). Run: chewbacca whoop auth", SIGNED_OUT)
+    if status == 403:
+        raise Stop("WHOOP says this sign-in lacks that scope (HTTP 403). Tick every scope on the "
+                   "app in the dashboard, then run: chewbacca whoop auth")
+    if status == 404 and missing_ok:
+        return None
+    if status == 429:
+        wait = headers.get("X-RateLimit-Reset") if headers else None
+        raise Stop(f"WHOOP's rate limit hit (HTTP 429). Resets in {wait or 'an unknown number of'} seconds.")
+    if status == 204:
+        return None
+    if status != 200 or not isinstance(doc, dict):
+        raise Stop(f"WHOOP answered HTTP {status} for {path}.")
+    return doc
+
+
+def iso(moment):
+    return moment.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def collection(path, days=None, limit=30, start=None, notice=False):
+    if days is not None:
+        start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    records, token = [], None
+    while len(records) < limit:
+        query = {"limit": min(PAGE, limit - len(records))}
+        if start is not None:
+            query["start"] = iso(start)
+        if token:
+            query["nextToken"] = token
+        page = (api(path, query) or {})
+        rows = page.get("records") or []
+        records.extend(rows)
+        token = page.get("next_token")
+        if not token or not rows:
+            break
+    # Reading a cut-off list as the whole span is how a month passes for a year.
+    if notice and token:
+        print(f"chewbacca whoop: stopped at {limit} records and WHOOP has more. Raise --limit.", file=sys.stderr)
+    return records[:limit]
+
+
+def history(path, args):
+    return collection(path, args.days, args.limit, notice=True)
+
+
+# ── shaping ──────────────────────────────────────────────────────────────────
+
+def hours(milli):
+    return None if milli is None else round(milli / 3_600_000, 2)
+
+
+def parse_time(text):
+    """Python 3.9 (Apple's) can't read a Z suffix or arbitrary fractions."""
+    if not text:
+        return None
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)?$", text)
+    if not m:
+        return None
+    offset = m.group(2) or "Z"
+    return datetime.datetime.fromisoformat(m.group(1) + ("+00:00" if offset == "Z" else offset))
+
+
+def local_clock(text, offset):
+    """The time as it read on the wall where the band was, from the record's own offset."""
+    moment = parse_time(text)
+    if moment is None:
+        return "?"
+    m = re.fullmatch(r"([+-])(\d\d):(\d\d)", offset or "")
+    if m:
+        delta = datetime.timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+        moment = moment.astimezone(datetime.timezone(delta if m.group(1) == "+" else -delta))
+    else:
+        moment = moment.astimezone()
+    return moment.strftime("%a %b %-d %-I:%M%p").replace("AM", "am").replace("PM", "pm")
+
+
+def span_hours(start, end):
+    a, b = parse_time(start), parse_time(end)
+    return round((b - a).total_seconds() / 3600, 2) if a and b else None
+
+
+def shape_sleep(r):
+    score = r.get("score") or {}
+    stages = score.get("stage_summary") or {}
+    need = score.get("sleep_needed") or {}
+    parts = [stages.get(k) for k in ("total_light_sleep_time_milli", "total_slow_wave_sleep_time_milli",
+                                     "total_rem_sleep_time_milli")]
+    need_parts = [need.get(k) for k in ("baseline_milli", "need_from_sleep_debt_milli",
+                                        "need_from_recent_strain_milli", "need_from_recent_nap_milli")]
+    return {
+        "id": r.get("id"),
+        "cycle_id": r.get("cycle_id"),
+        "start": r.get("start"),
+        "end": r.get("end"),
+        "timezone_offset": r.get("timezone_offset"),
+        "nap": r.get("nap"),
+        "score_state": r.get("score_state"),
+        # None while unscored. A zero here would read as "slept zero hours".
+        "asleep_hours": hours(sum(parts)) if all(p is not None for p in parts) else None,
+        "in_bed_hours": hours(stages.get("total_in_bed_time_milli")),
+        "awake_hours": hours(stages.get("total_awake_time_milli")),
+        "light_hours": hours(parts[0]),
+        "deep_hours": hours(parts[1]),
+        "rem_hours": hours(parts[2]),
+        "sleep_cycles": stages.get("sleep_cycle_count"),
+        "disturbances": stages.get("disturbance_count"),
+        "performance_pct": score.get("sleep_performance_percentage"),
+        "efficiency_pct": score.get("sleep_efficiency_percentage"),
+        "consistency_pct": score.get("sleep_consistency_percentage"),
+        "respiratory_rate": score.get("respiratory_rate"),
+        "need_hours": hours(sum(need_parts)) if all(p is not None for p in need_parts) else None,
+        "debt_hours": hours(need.get("need_from_sleep_debt_milli")),
+    }
+
+
+def shape_recovery(r):
+    score = r.get("score") or {}
+    return {
+        "cycle_id": r.get("cycle_id"),
+        "sleep_id": r.get("sleep_id"),
+        "updated_at": r.get("updated_at"),
+        "score_state": r.get("score_state"),
+        "recovery_pct": score.get("recovery_score"),
+        "hrv_ms": score.get("hrv_rmssd_milli"),
+        "resting_hr": score.get("resting_heart_rate"),
+        "spo2_pct": score.get("spo2_percentage"),
+        "skin_temp_c": score.get("skin_temp_celsius"),
+        "calibrating": score.get("user_calibrating"),
+    }
+
+
+def shape_cycle(r):
+    score = r.get("score") or {}
+    return {
+        "id": r.get("id"),
+        "start": r.get("start"),
+        "end": r.get("end"),
+        "timezone_offset": r.get("timezone_offset"),
+        "updated_at": r.get("updated_at"),
+        "score_state": r.get("score_state"),
+        "strain": score.get("strain"),
+        "kilojoule": score.get("kilojoule"),
+        "average_hr": score.get("average_heart_rate"),
+        "max_hr": score.get("max_heart_rate"),
+        "step_count": r.get("step_count"),
+    }
+
+
+def shape_workout(r):
+    score = r.get("score") or {}
+    zones = score.get("zone_durations") or {}
+    return {
+        "id": r.get("id"),
+        "sport": r.get("sport_name"),
+        "start": r.get("start"),
+        "end": r.get("end"),
+        "timezone_offset": r.get("timezone_offset"),
+        "duration_hours": span_hours(r.get("start"), r.get("end")),
+        "score_state": r.get("score_state"),
+        "strain": score.get("strain"),
+        "average_hr": score.get("average_heart_rate"),
+        "max_hr": score.get("max_heart_rate"),
+        "kilojoule": score.get("kilojoule"),
+        "distance_m": score.get("distance_meter"),
+        "zone_hours": {k.replace("zone_", "").replace("_milli", ""): hours(v) for k, v in zones.items()},
+    }
+
+
+def dur(value):
+    if value is None:
+        return "?"
+    minutes = int(round(value * 60))
+    return f"{minutes // 60}h {minutes % 60:02d}m"
+
+
+def num(value, digits=0, suffix=""):
+    return "?" if value is None else f"{value:.{digits}f}{suffix}"
+
+
+def sleep_line(s):
+    label = "Nap" if s["nap"] else "Sleep"
+    when = f"{local_clock(s['start'], s['timezone_offset'])} to {local_clock(s['end'], s['timezone_offset'])}"
+    if s["asleep_hours"] is None:
+        return f"{label} {when}: not scored ({s['score_state']})"
+    return (f"{label} {when}: {dur(s['asleep_hours'])} asleep of {dur(s['in_bed_hours'])} in bed, "
+            f"performance {num(s['performance_pct'], 0, '%')}, deep {dur(s['deep_hours'])}, REM {dur(s['rem_hours'])}, "
+            f"need {dur(s['need_hours'])}, debt {dur(s['debt_hours'])}")
+
+
+def recovery_line(r):
+    if r["recovery_pct"] is None:
+        return f"Recovery: not scored ({r['score_state']})"
+    note = ", still calibrating" if r["calibrating"] else ""
+    return (f"Recovery {num(r['recovery_pct'], 0, '%')}: HRV {num(r['hrv_ms'], 1, ' ms')}, "
+            f"resting HR {num(r['resting_hr'])}, SpO2 {num(r['spo2_pct'], 0, '%')}{note}")
+
+
+def cycle_line(c):
+    when = local_clock(c["start"], c["timezone_offset"])
+    tail = "" if c["end"] else ", still running"
+    if c["strain"] is None:
+        return f"Cycle from {when}: not scored ({c['score_state']}){tail}"
+    return (f"Cycle from {when}: strain {num(c['strain'], 1)}, {num(c['kilojoule'])} kJ, "
+            f"avg HR {num(c['average_hr'])}, max HR {num(c['max_hr'])}{tail}")
+
+
+def workout_line(w):
+    when = local_clock(w["start"], w["timezone_offset"])
+    if w["strain"] is None:
+        return f"{w['sport']} {when}: {dur(w['duration_hours'])}, not scored ({w['score_state']})"
+    return (f"{w['sport']} {when}: {dur(w['duration_hours'])}, strain {num(w['strain'], 1)}, "
+            f"avg HR {num(w['average_hr'])}, max HR {num(w['max_hr'])}")
+
+
+def emit(args, data, lines, empty):
+    if args.json:
+        print(scrub(json.dumps(data, indent=2)))
+        return
+    for line in lines or [empty]:
+        say(line)
+
+
+# ── data commands ────────────────────────────────────────────────────────────
+
+def cmd_sleep(args):
+    rows = [shape_sleep(r) for r in history("/v2/activity/sleep", args)]
+    emit(args, rows, [sleep_line(s) for s in rows], f"No sleep recorded in the last {args.days} days.")
+
+
+def cmd_recovery(args):
+    rows = [shape_recovery(r) for r in history("/v2/recovery", args)]
+    # updated_at moves when WHOOP rescores, so it's labeled as that and not as the day.
+    lines = [f"{recovery_line(r)} (updated {local_clock(r['updated_at'], None)})" for r in rows]
+    emit(args, rows, lines, f"No recovery recorded in the last {args.days} days.")
+
+
+def cmd_strain(args):
+    rows = [shape_cycle(r) for r in history("/v2/cycle", args)]
+    emit(args, rows, [cycle_line(c) for c in rows], f"No cycles recorded in the last {args.days} days.")
+
+
+def cmd_workouts(args):
+    rows = [shape_workout(r) for r in history("/v2/activity/workout", args)]
+    emit(args, rows, [workout_line(w) for w in rows], f"No workouts recorded in the last {args.days} days.")
+
+
+def today():
+    """The current cycle and what hangs off it. Recovery and sleep come from the cycle
+    itself: the newest of each could be yesterday's, and advice built on yesterday's
+    recovery shown as today's is worse than saying there isn't one yet."""
+    cycles = collection("/v2/cycle", limit=1)
+    if not cycles:
+        return {"cycle": None, "recovery": None, "sleep": None, "naps": [], "workouts": [], "minutes_since_sync": None}
+    cycle = cycles[0]
+    cid = cycle.get("id")
+    recovery = api(f"/v2/cycle/{cid}/recovery", missing_ok=True)
+    sleep = api(f"/v2/cycle/{cid}/sleep", missing_ok=True)
+    start = parse_time(cycle.get("start"))
+    since = {"start": start} if start else {"days": 1}
+    naps = [shape_sleep(r) for r in collection("/v2/activity/sleep", limit=25, **since)
+            if r.get("nap") and r.get("id") != (sleep or {}).get("id")]
+    workouts = [shape_workout(r) for r in collection("/v2/activity/workout", limit=25, **since)]
+    synced = parse_time(cycle.get("updated_at"))
+    age = None
+    if synced:
+        age = int((datetime.datetime.now(datetime.timezone.utc) - synced).total_seconds() // 60)
+    return {
+        "cycle": shape_cycle(cycle),
+        "recovery": shape_recovery(recovery) if recovery else None,
+        "sleep": shape_sleep(sleep) if sleep else None,
+        "naps": naps,
+        "workouts": workouts,
+        "minutes_since_sync": age,
+    }
+
+
+def cmd_today(args):
+    t = today()
+    if not t["cycle"]:
+        emit(args, t, [], "WHOOP has no cycles for this account yet.")
+        return
+    lines = []
+    if t["minutes_since_sync"] is not None:
+        lines.append(f"Last updated by WHOOP {dur(t['minutes_since_sync'] / 60)} ago")
+    lines.append(recovery_line(t["recovery"]) if t["recovery"] else "Recovery: none yet for this cycle")
+    lines.append(sleep_line(t["sleep"]) if t["sleep"] else "Sleep: none recorded for this cycle")
+    lines += [sleep_line(n) for n in t["naps"]]
+    lines.append(cycle_line(t["cycle"]))
+    lines += [workout_line(w) for w in t["workouts"]]
+    emit(args, t, lines, "")
+
+
+def cmd_status(args):
+    client, tokens = kc_read("client"), kc_read("tokens")
+    if not tokens:
+        state = {"connected": False, "app_saved": bool(client)}
+        if args.json:
+            print(json.dumps(state, indent=2))
+        else:
+            say("Not connected. Run: chewbacca whoop auth")
+        raise SystemExit(NOT_CONNECTED)
+    profile = api("/v2/user/profile/basic")
+    state = {"connected": True, "first_name": profile.get("first_name"), "scope": tokens.get("scope")}
+    emit(args, state, [f"Connected as {state['first_name']}. Scopes: {state['scope']}"], "")
+
+
+def cmd_logout(args):
+    revoked = False
+    # Inside the try: logout is what an unreadable item's error says to run, so it
+    # still has to delete when the read fails.
+    try:
+        if kc_read("tokens"):
+            api("/v2/user/access", method="DELETE")
+            revoked = True
+    except Stop as e:
+        say(f"Could not revoke at WHOOP: {e}")
+    with locked():
+        removed = [kc_delete(a) for a in ("tokens", "client", "pending")]
+    say(f"Revoked at WHOOP: {'yes' if revoked else 'no'}. Removed {sum(removed)} keychain items.")
+
+
+# ── sign-in ──────────────────────────────────────────────────────────────────
+
+SETUP_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect WHOOP</title>
+<style>
+:root{{--bg:#101114;--panel:#1a1c21;--line:#2c2f36;--ink:#eef0f3;--dim:#a2a7b0;--accent:#7ce0b2}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;padding:16px}}
+main{{max-width:34rem;margin:8vh auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px}}
+h1{{font-size:1.4rem;margin:0 0 16px}}
+ol{{padding-left:1.2rem;margin:0 0 20px}}
+li{{margin-bottom:8px}}
+a{{color:var(--accent)}}
+code{{display:block;width:fit-content;max-width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;overflow-wrap:anywhere;user-select:all}}
+label{{display:block;margin:12px 0 4px;color:var(--dim);font-size:.9rem}}
+input{{width:100%;padding:10px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;font:inherit}}
+input:focus{{outline:2px solid var(--accent);outline-offset:1px}}
+button{{margin-top:20px;width:100%;padding:12px;background:var(--accent);color:#0c1411;border:0;border-radius:8px;font-family:inherit;font-weight:600;font-size:1rem;cursor:pointer;transition:opacity 120ms ease-out}}
+@media (hover:hover) and (pointer:fine){{button:hover{{opacity:.85}}}}
+button:active{{transform:scale(.97)}}
+</style></head><body><main><h1>Connect WHOOP to Chewbacca</h1><ol>
+<li><a href="{dashboard}" target="_blank" rel="noopener">Create a WHOOP app</a>. Any name works. It may ask you to make a team first.</li>
+<li>Tick every scope.</li>
+<li>Add this exact redirect URL: <code>{redirect}</code> If WHOOP rejects it, tell Chewbacca.</li>
+<li>Paste the Client ID and Client Secret it gives you here. They stay in this Mac's keychain.</li>
+</ol><form method="post" action="/setup/{key}">
+<label for="client_id">Client ID</label><input id="client_id" name="client_id" required autocomplete="off">
+<label for="client_secret">Client Secret</label><input id="client_secret" name="client_secret" type="password" required autocomplete="off">
+<button type="submit">Continue to WHOOP sign-in</button></form></main></body></html>"""
+DONE_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>WHOOP</title>
+<style>body{margin:0;background:#101114;color:#eef0f3;font:18px/1.5 -apple-system,sans-serif;padding:16vh 16px;text-align:center}</style>
+</head><body>%s</body></html>"""
+VALID_CLIENT = re.compile(r"[\x21-\x7e]{8,512}")
+
+
+def authorize_url(client, state):
+    return AUTH_URL + "?" + urllib.parse.urlencode({
+        "response_type": "code",
+        "client_id": client["client_id"],
+        "redirect_uri": client["redirect_uri"],
+        "scope": SCOPES,
+        "state": state,
+    })
+
+
+def exchange(client, code):
+    status, _, doc = token_request({
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": client["client_id"],
+        "client_secret": client["client_secret"],
+        "redirect_uri": client["redirect_uri"],
+    })
+    if status != 200 or not isinstance(doc, dict) or not doc.get("access_token"):
+        error = doc.get("error") if isinstance(doc, dict) else None
+        if error == "invalid_client":
+            # A saved bad secret would otherwise skip the page on every retry.
+            kc_delete("client")
+            raise Stop("WHOOP says the Client ID or Secret is wrong. Removed them, so the next "
+                       "chewbacca whoop auth asks again.")
+        raise Stop(f"WHOOP refused the sign-in code (HTTP {status}{', ' + str(error) if error else ''}). "
+                   "A wrong secret or a redirect URL that doesn't match the app are the usual causes.")
+    with locked():
+        tokens = store_tokens(doc)
+    kc_delete("pending")
+    if not tokens.get("refresh_token"):
+        raise Stop("WHOOP sent no refresh token, so this sign-in dies within the hour. Run auth again.")
+    return tokens
+
+
+def finish_from_url(client, url, state):
+    query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+    # State first, and the description never: until state matches, every parameter here
+    # was written by whichever web page sent the request, and this line reaches an agent.
+    if not state or query.get("state") != state:
+        raise BadState("that URL's state doesn't match this sign-in. Run auth again and use the newest URL.")
+    if query.get("error"):
+        code = re.sub(r"[^a-z_]", "", query["error"])[:40]
+        raise Stop(f"WHOOP sign-in failed: {code}.")
+    if not query.get("code"):
+        raise Stop("that URL has no sign-in code in it.")
+    return exchange(client, query["code"])
+
+
+def loopback_port(uri):
+    parts = urllib.parse.urlsplit(uri)
+    try:
+        if parts.scheme == "http" and parts.hostname in ("localhost", "127.0.0.1"):
+            return parts.port or 80
+    except ValueError:
+        raise Stop("that --redirect-uri has a bad port.")
+    return None
+
+
+def open_page(url):
+    # -g keeps it behind whatever he's typing in (do-it-yourself.md, 2026-10-10).
+    try:
+        subprocess.run([OPENER, "-g", url], capture_output=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def serve_signin(client, redirect_uri, state):
+    """One local page for the app's id and secret, then WHOOP's callback."""
+    key = secrets.token_urlsafe(16)
+    outcome = {"client": client, "tokens": None, "error": None}
+    callback_path = urllib.parse.urlsplit(redirect_uri).path or "/"
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        # A browser preconnect opens a socket and sends nothing. Guessed, never measured.
+        timeout = 5
+
+        def log_message(self, *args):
+            pass  # A request line can hold the sign-in code.
+
+        def reply(self, code, body, location=None):
+            self.send_response(code)
+            if location:
+                self.send_header("Location", location)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body.encode())
+
+        def do_GET(self):
+            parts = urllib.parse.urlsplit(self.path)
+            if parts.path == f"/setup/{key}":
+                self.reply(200, SETUP_PAGE.format(dashboard=html.escape(DASHBOARD),
+                                                  redirect=html.escape(redirect_uri), key=key))
+            elif parts.path == callback_path and outcome["client"]:
+                try:
+                    tokens = finish_from_url(outcome["client"], self.path, state)
+                except BadState:
+                    # Not from this sign-in, so it doesn't get to end it.
+                    self.reply(400, DONE_PAGE % "That link isn't from this sign-in.")
+                except Stop as e:
+                    self.reply(400, DONE_PAGE % "That sign-in didn't work. Chewbacca has the reason.")
+                    outcome["error"] = e
+                except Exception as e:
+                    self.reply(500, DONE_PAGE % "That sign-in didn't work. Chewbacca has the reason.")
+                    outcome["error"] = Stop(f"sign-in failed ({type(e).__name__}).")
+                else:
+                    self.reply(200, DONE_PAGE % "WHOOP is connected. You can close this tab.")
+                    outcome["tokens"] = tokens
+            else:
+                self.reply(404, DONE_PAGE % "Nothing here.")
+
+        def do_POST(self):
+            if urllib.parse.urlsplit(self.path).path != f"/setup/{key}":
+                self.reply(404, DONE_PAGE % "Nothing here.")
+                return
+            try:
+                size = min(int(self.headers.get("Content-Length") or 0), 8192)
+            except ValueError:
+                size = 0
+            form = dict(urllib.parse.parse_qsl(self.rfile.read(size).decode("utf-8", "replace")))
+            cid, secret = form.get("client_id", "").strip(), form.get("client_secret", "").strip()
+            if not VALID_CLIENT.fullmatch(cid) or not VALID_CLIENT.fullmatch(secret):
+                self.reply(400, DONE_PAGE % "That Client ID or Secret looks wrong. Go back and paste them again.")
+                return
+            remember(secret)
+            saved = {"client_id": cid, "client_secret": secret, "redirect_uri": redirect_uri}
+            try:
+                kc_write("client", saved)
+            except Stop as e:
+                outcome["error"] = e
+                self.reply(500, DONE_PAGE % "Couldn't save to the keychain. Chewbacca has the reason.")
+                return
+            outcome["client"] = saved
+            self.reply(303, "", location=authorize_url(saved, state))
+
+    class Server(http.server.ThreadingHTTPServer):
+        """Threads, so a client that stalls can't outlast the deadline below."""
+
+        def handle_error(self, request, client_address):
+            pass  # A dropped browser socket isn't worth a traceback.
+
+    try:
+        server = Server(("127.0.0.1", PORT), Handler)
+    except OSError:
+        raise Stop(f"port {PORT} is busy, and the redirect registered on the app needs it. Close what's on it.")
+    server.timeout = 1
+    url = authorize_url(client, state) if client else f"http://localhost:{PORT}/setup/{key}"
+    say("Opening WHOOP's sign-in." if client else f"Opening the setup page: {url}")
+    open_page(url)
+    deadline = time.time() + AUTH_WAIT
+    try:
+        while time.time() < deadline and not outcome["tokens"] and not outcome["error"]:
+            server.handle_request()
+    finally:
+        server.server_close()
+    if outcome["error"]:
+        raise outcome["error"]
+    if not outcome["tokens"]:
+        raise Stop(f"nobody finished the sign-in within {int(AUTH_WAIT // 60)} minutes. Run auth again.")
+
+
+def cmd_auth(args):
+    client = kc_read("client")
+    if args.callback_url:
+        pending = kc_read("pending")
+        if not client or not pending:
+            raise Stop("no sign-in is waiting. Run: chewbacca whoop auth")
+        finish_from_url(client, args.callback_url, pending.get("state"))
+        say("WHOOP is connected.")
+        return
+    if args.redirect_uri and not re.fullmatch(r"[a-z][a-z0-9+.-]*://\S+", args.redirect_uri):
+        raise Stop("that --redirect-uri isn't a URL.")
+    redirect_uri = args.redirect_uri or (client or {}).get("redirect_uri") or DEFAULT_REDIRECT
+    port_of_redirect = loopback_port(redirect_uri)
+    if args.client_id:
+        secret = sys.stdin.readline().strip()
+        if not VALID_CLIENT.fullmatch(args.client_id) or not VALID_CLIENT.fullmatch(secret):
+            raise Stop("pass --client-id and put the client secret on stdin.")
+        remember(secret)
+        client = {"client_id": args.client_id, "client_secret": secret, "redirect_uri": redirect_uri}
+        kc_write("client", client)
+    elif client and client.get("redirect_uri") != redirect_uri:
+        client = dict(client, redirect_uri=redirect_uri)
+        kc_write("client", client)
+    # WHOOP's docs: "The state parameter must be eight characters long".
+    # Letters and digits so it survives any URL handling: 47 bits, and a wrong guess no
+    # longer ends the sign-in, so it has to hold up to repeated tries.
+    state = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+    kc_write("pending", {"state": state})
+    if port_of_redirect == PORT:
+        serve_signin(client, redirect_uri, state)
+        say("WHOOP is connected.")
+        return
+    if not client:
+        raise Stop("--redirect-uri off this Mac needs --client-id too, with the secret on stdin.")
+    url = authorize_url(client, state)
+    say(f"Sign in at: {url}")
+    say("Then finish with: chewbacca whoop auth --callback-url '<the URL the browser landed on>'")
+    open_page(url)
+
+
+def build_parser():
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", action="store_true", help="structured output")
+    span = argparse.ArgumentParser(add_help=False)
+    span.add_argument("--days", type=int, default=7, help="how far back (default 7)")
+    span.add_argument("--limit", type=int, default=5000, help="most records to return (default 5000)")
+    parser = argparse.ArgumentParser(prog="chewbacca whoop", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    subs = parser.add_subparsers(dest="command", required=True)
+    auth = subs.add_parser("auth", parents=[common], help="connect WHOOP")
+    auth.add_argument("--client-id", help="the app's client id; the secret comes on stdin")
+    auth.add_argument("--redirect-uri", help="a redirect URL registered on the app")
+    auth.add_argument("--callback-url", help="the URL the browser landed on after sign-in")
+    auth.set_defaults(func=cmd_auth)
+    for name, func, text in (("status", cmd_status, "connected or not"),
+                             ("today", cmd_today, "the current cycle"),
+                             ("logout", cmd_logout, "revoke and forget the sign-in")):
+        subs.add_parser(name, parents=[common], help=text).set_defaults(func=func)
+    for name, func, text in (("sleep", cmd_sleep, "sleep and naps"),
+                             ("recovery", cmd_recovery, "recovery, HRV, resting HR"),
+                             ("strain", cmd_strain, "day strain per cycle"),
+                             ("workouts", cmd_workouts, "workouts")):
+        subs.add_parser(name, parents=[common, span], help=text).set_defaults(func=func)
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
+    if hasattr(args, "days") and (not 1 <= args.days <= 3650 or not 1 <= args.limit <= 5000):
+        print("chewbacca whoop: --days runs 1 to 3650 and --limit 1 to 5000.", file=sys.stderr)
+        return 2
+    try:
+        args.func(args)
+    except Stop as e:
+        print(f"chewbacca whoop: {clean(e)}", file=sys.stderr)
+        return e.code
+    except KeyboardInterrupt:
+        return 130
+    except Exception as e:
+        # The type and a scrubbed message, never a traceback (office's security review).
+        print(f"chewbacca whoop: failed ({type(e).__name__}): {clean(e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

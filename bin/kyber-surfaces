@@ -60,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import live_glass  # noqa: E402
 import surface_lint  # noqa: E402
 import hud_events  # noqa: E402
+import kit_snapshot  # noqa: E402
 import osgraph  # noqa: E402
 import osgraph_ingest  # noqa: E402
 import surfaces  # noqa: E402
@@ -80,6 +81,8 @@ HOME_PANEL = BOB / "home-panel.json"
 HOME_DONE = BOB / "home-done.json"
 # To-dos handed to the agent from the panel (home_agent).
 HOME_AGENT = BOB / "home-agent.json"
+# To-dos typed on the panel (home_feed.add).
+HOME_ADDED = BOB / "home-added.json"
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
@@ -207,6 +210,9 @@ class Daemon:
         self.lock = threading.RLock()
         self.next_ingest = 0.0
         self.ingesting = False
+        # When the display or a client last asked for anything; a kit
+        # handover waits for HANDOVER_QUIET_S of quiet after it.
+        self.touched = clock()
 
     # ── the graph ────────────────────────────────────────────────────────
 
@@ -266,7 +272,8 @@ class Daemon:
             rows = home_feed.cached_projects(now, time.monotonic(), self.ctx.home)
             body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}),
                                    done=home_feed.load_done(home_feed.done_path(self.home_path)),
-                                   agent=home_agent.load(home_agent.state_path(self.home_path)))
+                                   agent=home_agent.load(home_agent.state_path(self.home_path)),
+                                   added=home_feed.load_added(home_feed.added_path(self.home_path)))
             home_feed.write(body, self.home_path)
         except Exception as err:  # noqa: BLE001  the panel never takes the daemon down
             log(f"home: {err}")
@@ -293,6 +300,12 @@ class Daemon:
         try:
             body = json.loads(self.state_path.read_text())
         except (OSError, json.JSONDecodeError):
+            # A first start ever puts the launcher rail up, so every surface is
+            # one press away while the glass is still being figured out
+            # (Caleb, 2026-10-11: "a side bar with the diff hud surfaces to
+            # choose from would be nice"). After that the saved state rules,
+            # and the rail has no close, so it stays.
+            self.open_surface("apps", None)
             return
         self.space = str(body.get("space") or "")
         self.space_sets = {k: v for k, v in (body.get("spaces") or {}).items() if isinstance(v, dict)}
@@ -338,6 +351,7 @@ class Daemon:
                     self.close_surface(next(iter(self.open)), save=False)
                 live = Live(provider, kind, arg, self.place(name, provider.region, region))
                 self.open[name] = live
+                provider.poke = lambda n=name: self.spawn(lambda: self.repush(n))
                 fresh = True
             else:
                 fresh = False
@@ -363,15 +377,21 @@ class Daemon:
             self.push(live, extra=dict(live.values))
             return
         live.sent = {}
+        # The model before the layout: a provider whose components follow its
+        # model (agents.py `_replan`, the doc surface) sets what layout()
+        # draws when model() runs. Laid out first, the agents card's opening
+        # frame was its title over an empty status line, because "Loading…"
+        # had a value and no component yet; on 2026-10-11 at 17:55 that was
+        # all Caleb saw of "Show my agents" while the engine was asked.
+        try:
+            model = p.model(live.data, live.error, live.values, self.ctx)
+        except Exception as err:  # noqa: BLE001  a provider bug shows on its panel, not as a dead daemon
+            model = {p.p("note"): f"This surface hit a bug: {err}"}
         shape = getattr(p, "shape", None)
         live.shape = shape() if callable(shape) else None
         initial = p.initial()
         initial.update({k: v for k, v in live.values.items() if k.startswith(f"/{p.name}/")})
         lines = [head] + p.layout()
-        try:
-            model = p.model(live.data, live.error, live.values, self.ctx)
-        except Exception as err:  # noqa: BLE001  a provider bug shows on its panel, not as a dead daemon
-            model = {p.p("note"): f"This surface hit a bug: {err}"}
         for pointer, value in {**initial, **model}.items():
             lines.append(data_line(pointer, value))
             live.sent[pointer] = json.dumps(value, sort_keys=True)
@@ -420,6 +440,14 @@ class Daemon:
         if lines:
             self.hud.send([f"@ {p.name}"] + lines)
         return lines
+
+    def repush(self, name: str) -> None:
+        """A provider's own thread has something new: push the model as it
+        stands, with no fetch (Provider.poke)."""
+        with self.lock:
+            live = self.open.get(name)
+            if live is not None:
+                self.push(live)
 
     def close_surface(self, name: str, save: bool = True) -> str:
         with self.lock:
@@ -498,6 +526,8 @@ class Daemon:
         """One line from the display. Only `e`, `v` and `x` matter here; `h`
         (what was said) belongs to hud-listen and is never read."""
         line = line.strip()
+        if line:
+            self.touched = self.clock()
         if line.startswith("e "):
             # Read with bin/lib/hud_events.py, the one reader every client
             # shares: values are JSON, and a line that does not parse cleanly
@@ -613,6 +643,8 @@ class Daemon:
             with self.lock:
                 if self.open.get(live.provider.name) is live:
                     live.values.update(result.updates)
+                    if result.relayout:
+                        self.draw(live, full=True)
                     self.push(live, extra={status: result.line, **result.updates})
             if result.opens:
                 self.open_surface(result.opens, arg=result.opens_arg, preset=result.preset)
@@ -671,7 +703,8 @@ class Daemon:
     def command(self, body: dict) -> dict:
         cmd = body.get("cmd")
         if cmd == "ping":
-            return {"ok": True}
+            return {"ok": True, "code": CODE}
+        self.touched = self.clock()
         if cmd == "open":
             msg = self.open_surface(str(body.get("name", "")), body.get("at") or None, body.get("preset") or None,
                                     arg=str(body.get("arg") or ""))
@@ -822,11 +855,32 @@ def ask(body: dict, path: str = CONTROL, timeout: float = 30.0) -> dict | None:
         return None
 
 
+# Which copy of the kit this process runs from. The kit runtime swaps
+# ~/.chewbacca/kit/current to a new snapshot every few minutes, but a daemon
+# keeps running the snapshot it started from. On 2026-10-11 at 5:51pm one
+# started that morning was still serving; it had never heard of the realm
+# surface, its snapshot had been pruned under it, and "Show me my agents"
+# answered "That surface didn't open."
+CODE = str(Path(__file__).resolve().parent.parent)
+
+
 def running() -> bool:
     return bool(ask({"cmd": "ping"}, timeout=2.0))
 
 
+def retire_stale() -> None:
+    """Stop a daemon running other code than this copy, so the next start is current."""
+    reply = ask({"cmd": "ping"}, timeout=2.0)
+    if not reply or reply.get("code") == CODE:
+        return
+    ask({"cmd": "quit"}, timeout=5.0)
+    deadline = time.monotonic() + 5
+    while running() and time.monotonic() < deadline:
+        time.sleep(0.1)
+
+
 def start_daemon() -> bool:
+    retire_stale()
     if running():
         return True
     # One starter at a time. hud-listen starts the daemon as it comes up, and
@@ -860,6 +914,51 @@ def live_context() -> Context:
     return ctx
 
 
+# How often the daemon looks for a kit update, and how long the glass must
+# have been quiet before it hands over to the new snapshot. On 2026-10-11 at
+# 8:11pm the agents icon opened the retired Swift card: this daemon had
+# started at 20:00 on 902977c0, the kit runtime moved `current` on and pruned
+# that snapshot, and the lazy import of the realm surface had nothing left to
+# load. retire_stale only helped when something called `start`; a daemon
+# nobody restarted ran deleted code until it died. Both numbers guessed,
+# never measured: a handover costs about a second of redraw.
+HANDOVER_CHECK_S = 15.0
+HANDOVER_QUIET_S = 30.0
+
+
+def handover_due(daemon: "Daemon", moved: bool) -> bool:
+    """The kit moved under this daemon and nobody has touched the glass lately."""
+    return moved and daemon.clock() - daemon.touched >= HANDOVER_QUIET_S
+
+
+def hand_over(server: socket.socket, link: "HudLink") -> None:
+    """Start the current snapshot's daemon and leave. The control socket
+    closes first so the successor's `running()` check finds nobody home,
+    and the start lock is held so a client's `start` can't race it in."""
+    import fcntl  # noqa: PLC0415
+
+    successor = Path(CODE).parent.parent / "current" / "bin" / "kyber-surfaces"
+    CONTROL_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONTROL_LOCK, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        server.close()
+        with link.lock:
+            if link.sock is not None:
+                try:
+                    link.sock.close()
+                except OSError:
+                    pass
+                link.sock = None
+        log(f"the kit moved; handing over to {successor.resolve()}")
+        with LOG.open("a") as out:
+            subprocess.Popen([sys.executable, str(successor), "run"], stdin=subprocess.DEVNULL,
+                             stdout=out, stderr=out, start_new_session=True)
+        deadline = time.monotonic() + START_WAIT_S
+        while time.monotonic() < deadline and not running():
+            time.sleep(0.1)
+    os._exit(0)
+
+
 def cmd_run() -> int:
     if running():
         print("kyber-surfaces is already running", file=sys.stderr)
@@ -868,13 +967,18 @@ def cmd_run() -> int:
     link = HudLink()
     daemon = Daemon(link, ctx=live_context())
     link.daemon = daemon
-    serve_control(daemon, CONTROL)
+    server = serve_control(daemon, CONTROL)
     daemon.restore()
     threading.Thread(target=link.loop, daemon=True).start()
     log(f"surfaces daemon up: {CONTROL} -> {HUD_SOCKET}, graph {daemon.ctx.graph.path}")
+    next_check = time.monotonic() + HANDOVER_CHECK_S
     try:
         while True:
             daemon.tick()
+            if time.monotonic() >= next_check:
+                next_check = time.monotonic() + HANDOVER_CHECK_S
+                if handover_due(daemon, kit_snapshot.moved(Path(__file__))):
+                    hand_over(server, link)
             time.sleep(0.5)
     except KeyboardInterrupt:
         return 0
@@ -1009,7 +1113,7 @@ def spawn_home_work(row_id: str) -> int:
 
 
 def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work: str = "",
-             send: str = "", drop: str = "") -> int:
+             send: str = "", drop: str = "", add: str = "") -> int:
     """The home panel's feed from the graph as it stands. It never ingests:
     Kyber runs `home --write` when the feed is stale, and the daemon owns
     ingesting. Stamped with when the graph was last written, so a graph
@@ -1018,8 +1122,10 @@ def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work
     `done` crosses a to-do off and `undo` puts it back (home_feed.cross).
     `handle` hands a to-do for someone to the agent, `work` is that run,
     `send` sends the text it drafted and `drop` throws the draft or the
-    answer away (home_agent). Each then writes the feed, so the panel shows
-    it at once."""
+    answer away (home_agent). `add` puts a typed to-do in Reminders and
+    reads Reminders alone back into the graph, so the row is in the feed
+    when the panel next reads it (home_feed.add). Each then writes the feed,
+    so the panel shows it at once."""
     import home_agent  # noqa: PLC0415
     import home_feed  # noqa: PLC0415
 
@@ -1031,10 +1137,16 @@ def cmd_home(write: bool, done: str = "", undo: str = "", handle: str = "", work
         return 1
     ctx = live_context()
     now = ctx.now()
-    acted = bool(done or undo or handle or work or send or drop)
+    acted = bool(done or undo or handle or work or send or drop or add)
     if acted:
         try:
-            if done:
+            if add:
+                _, said = home_feed.add(add, now, HOME_ADDED, home=ctx.home)
+                report = osgraph_ingest.ingest_all(ctx.graph, ctx, days=INGEST_DAYS, only=["reminders"],
+                                                   ids=ctx.ids)
+                if (report.get("reminders") or {}).get("error"):
+                    said = "Added to Reminders; it shows here after the next pass."
+            elif done:
                 said = home_feed.cross(ctx.graph, done, now, HOME_DONE, home=ctx.home)
             elif undo:
                 said = home_feed.uncross(undo, HOME_DONE)
@@ -1073,7 +1185,7 @@ def home_body(ctx, now, graph_path: Path) -> dict:
     failed = home_feed.read(HOME_PANEL).get("failed") or []
     return home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
                            written=home_feed.graph_written(graph_path), done=home_feed.load_done(HOME_DONE),
-                           agent=home_agent.load(HOME_AGENT))
+                           agent=home_agent.load(HOME_AGENT), added=home_feed.load_added(HOME_ADDED))
 
 
 def write_home_feed(ctx, now, graph_path: Path) -> None:
@@ -1101,7 +1213,7 @@ def cmd_forget() -> int:
         gone.append(str(osgraph_runs.RUNS))
     # The home feed and its crossed-off record hold to-do titles and names,
     # so they go with the graph they were read from.
-    for derived in (BADGES, HOME_PANEL, HOME_DONE, HOME_AGENT):
+    for derived in (BADGES, HOME_PANEL, HOME_DONE, HOME_AGENT, HOME_ADDED):
         if derived.exists():
             derived.unlink()
             gone.append(str(derived))
@@ -1142,6 +1254,7 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("home", help="the desktop home panel's feed, as JSON")
     h.add_argument("--write", action="store_true", help="write ~/.bob/home-panel.json instead of printing it")
     crossing = h.add_mutually_exclusive_group()
+    crossing.add_argument("--add", default="", metavar="TEXT", help="add a to-do to Reminders and the panel")
     crossing.add_argument("--done", default="", metavar="ID", help="cross a to-do off, in its own app where it can be")
     crossing.add_argument("--undo", default="", metavar="ID", help="put a crossed-off to-do back")
     crossing.add_argument("--handle", default="", metavar="ID", help="hand a to-do for someone to the agent")
@@ -1168,7 +1281,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "graph":
         return cmd_graph()
     if args.cmd == "home":
-        return cmd_home(args.write, args.done, args.undo, args.handle, args.work, args.send, args.drop)
+        return cmd_home(args.write, args.done, args.undo, args.handle, args.work, args.send, args.drop, args.add)
     if args.cmd == "forget":
         return cmd_forget()
     if args.cmd in ("open", "walk"):

@@ -1,0 +1,10 @@
+{
+  "name": "A",
+  "frozen_at": "2026-10-10T10:00:39-0700",
+  "cfg": { "n": 30, "per": 2, "chars": 450, "timeout": 120 },
+  "model": "haiku",
+  "rerank_py_sha256": "4e673dbf9b8f55ab611b84bae187a6b0c76ed79aa41b2ce73f60ee9a2dbea4c9",
+  "stage_one": "brain.rank with shipped constants (folder_cap 1); frozen index snapshot, 729 files, 3821 chunks",
+  "dev": "n=25: r@5 68.0 -> 92.0, MRR 0.522 -> 0.730. First and only dev try, nothing tuned. No dev query lost.",
+  "note": "Frozen before any sealed run. Timeout raised 60 -> 120 so the sealed number measures the ranking, not the Mac's load; latency is reported separately."
+}

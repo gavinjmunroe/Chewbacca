@@ -1,6 +1,8 @@
 ---
 name: agent-setup
-description: "Finish the parts of this kit's install that need a browser or a permission dialog: screen and accessibility grants, provider keys, any step behind a web console, and verification. Use after setup.sh, when doctor.sh reports a tool installed but unusable, or when the user says to finish setting something up themselves."
+description: "Finish install steps that need a browser or a permission dialog: screen and accessibility grants, provider keys, web consoles. Use after setup.sh or when doctor finds a tool installed but unusable."
+triggers: >-
+  Finish the parts of this kit's install that need a browser or a permission dialog: screen and accessibility grants, provider keys, any step behind a web console, and verification. Use after setup.sh, when doctor.sh reports a tool installed but unusable, or when the user says to finish setting something up themselves.
 license: MIT
 requires: [chewbacca]
 ---
@@ -56,7 +58,7 @@ Say `BLOCKED: grant Screen Recording and Accessibility` and move on to the rest.
 Come back and re-run `peekaboo permissions` when they say it is done.
 
 If permissions read Granted but capture still fails, it is the Bridge, not TCC.
-See [docs/MACOS-TOOLS.md](../../docs/MACOS-TOOLS.md); the kit's `peekaboo`
+See [docs/reference/MACOS-TOOLS.md](../../docs/reference/MACOS-TOOLS.md); the kit's `peekaboo`
 wrapper already forces local execution.
 
 ## 2. Provider API keys
@@ -120,6 +122,23 @@ Four things that will cost you an hour each if you do not know them:
 A consent screen granting access to someone's own account is theirs to approve.
 Get it to the point of one click, hand them the URL, say
 `BLOCKED: approve the consent screen`, and verify after they do.
+
+## 3b. An MCP server that needs a sign-in
+
+`chewbacca mcp add <name>` registers it with Claude Code and Codex and opens
+the browser sign-in itself, so the person's whole job is the one consent
+click. Without a terminal attached the sign-in can't wait for the redirect,
+so it prints `chewbacca mcp login <name>` instead: run that when they're at
+the keyboard. `chewbacca mcp status` says which servers still need it. A
+server that already comes from a plugin (figma, railway, context7) is signed
+in through the plugin's copy, never added twice.
+
+Never answer "set up the X MCP" with "run /mcp" or a list of steps. On
+2026-11-02 a Figma ask got exactly that, and Caleb's answer was "just wire it
+into chewbs to be super easily setupable for anyone". The only line the
+person gets is the consent click `chewbacca mcp add` opens for them. A server
+missing from config/mcp/catalog.json gets added to the catalog (probe its URL
+or look its package up first, then `chewbacca mcp verify`), not hand-wired.
 
 ## 4. Verify and report
 

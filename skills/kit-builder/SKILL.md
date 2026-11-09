@@ -1,6 +1,8 @@
 ---
 name: kit-builder
-description: Build a kit, a repo somebody lives inside for weeks while an agent walks them through a process they have never done and will not do again for years. Use when the user faces a long multi-session process with a deadline and an evaluator (applications, appeals, accommodations, estate admin, a job search, a fundraise, a thesis), when they ask for help with something bureaucratic they have never done, when they want to hand a process to a friend, or when they say "make a kit". Also use to decide whether an idea should be a kit at all, because most should stay skills.
+description: "Build a kit, a repo someone lives in for weeks while an agent walks them through a one-time deadline process: applications, appeals, accommodations, job search, fundraise. Also decides kit vs skill."
+triggers: >-
+  Build a kit, a repo somebody lives inside for weeks while an agent walks them through a process they have never done and will not do again for years. Use when the user faces a long multi-session process with a deadline and an evaluator (applications, appeals, accommodations, estate admin, a job search, a fundraise, a thesis), when they ask for help with something bureaucratic they have never done, when they want to hand a process to a friend, or when they say "make a kit". Also use to decide whether an idea should be a kit at all, because most should stay skills.
 requires: [kits]
 ---
 
@@ -162,6 +164,48 @@ confirm the briefing surfaces it.** Cold start and returning user are different 
 paths and only one gets exercised while you build. A real bug shipped this way: the
 `TEMPLATE: unfilled` check ran inside awk, but the marker sits at the bottom of the file,
 so awk had already processed every row above it. Empty templates hid it completely.
+
+## A kit built for someone else ships with its handoff
+
+When the kit is for another person, the handoff goes out in the same turn as the
+repo: a one-page PDF in `~/Downloads` (`chewbacca pdf`, check it reads 1 page),
+in the order they'll use it. Setup once, what to say every day, what the first
+session asks, the plan, the hard line, and the phrases that make it act. Then
+send it to them along with the repo invite. A repo link alone gives them no
+idea where to start. Caleb, 2026-10-17, after colin-kit shipped with only an
+invite and a text: "Give me a handoff pdf for colin to go ham w this repo".
+
+Write the handoff around their real work. Name each of their actual pieces
+and the part of the kit to start each one from, include the exact setup
+commands, and add a couple of prompts they can type. A page of general
+principles isn't enough: on 2026-10-26 the first colin-video-kit one-pager
+was all principle, and Caleb asked to "Update the pdf for maximum helpfulness
+for Colin".
+
+Also live-test it before you share it: `claude -p "yo"` inside the kit has to
+open with its Phase 0 question, and a "just write it for me" prompt has to hit
+the hard line.
+
+## A kit for someone else carries everything we already know
+
+Code alone is the smallest part of what we can hand over. Before calling a
+repo for another person done, inventory and pull in, scrubbed of client names,
+faces, voices and machine paths:
+
+- the skills that own the work (`skills/<name>/` into the repo's `.claude/skills/`)
+- the lessons on that work, from team memory and the brain, rewritten for them
+- the hooks and tests that would have caught our mistakes
+- the rules that apply (`research-the-craft` for anything creative)
+- the things we built or recreated in that genre: past builds, replicas, studies
+- the handoff one-pager, in the same turn
+
+Client code stays out (only a style study of their public site), and so do
+other people's photos and voices. On 2026-10-26 colin-video-kit shipped as 8
+components, and Caleb sent eight messages adding to it: "Bro there's SO much
+more we can include in the video kit!!!!!!!! Skills, tests, hooks, rules,
+lessons learned", then the Lemma replica, Nalana, the Firm Foundation video,
+the T Combinator dots, microbots, and a one-pager so he runs with it instead
+of "regurgitating what is in there".
 
 ## Write the marker, or it will get rebuilt
 

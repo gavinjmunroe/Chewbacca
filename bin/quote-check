@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""quote-check: is every quote in a research report really in its saved source?
+
+WHY. A research write-up that quotes a source reads as checked, and nothing
+checked it. Two unrelated builders ship the same gate: groundnut
+(github.com/b1rdmania/groundnut) labels each cited unit excerpt_found or
+citation_unconfirmed against a snapshot of the source, and shellward's
+compliance skill (github.com/jnMetaCode/shellward) has a validator that
+"opens each file and checks the quote is really there". This is that gate
+for the deep-research skill: quotation presence, not truth.
+
+  quote-check report.md sources/
+
+A quote is a "..." or curly-quoted span of 6 or more words outside code. Its
+source is the first saved-file citation after it in the same paragraph (else
+the last one before it): a markdown link target, `[source: path]`,
+`(source: path)` or a backticked path. Paths resolve inside the sources
+folder. A URL is not a saved source. An ellipsis inside a quote marks an
+elision, so each piece must appear, in order.
+
+Before matching, both sides get NFKC, straight quote marks, plain hyphens for
+en and em dashes, and collapsed whitespace. Case and words stay exact. A .json
+source is read as its string values joined, a .html source with tags removed.
+
+Exit 0 when every quote is found, 1 listing each one that is not (wrong
+words, missing file, no saved source cited), 2 on bad arguments.
+"""
+import argparse
+import html
+import json
+import os
+import re
+import sys
+import unicodedata
+
+# Five words is still a common phrase ("one of the most important") that
+# turns up in almost any source; six is where the task set the bar, never
+# measured against a corpus.
+MIN_WORDS = 6
+
+QUOTE_RE = re.compile(r'"([^"\n]+)"|\u201c([^\u201c\u201d\n]+)\u201d')
+LINK_RE = re.compile(r"\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+TAG_RE = re.compile(r"[\[(]\s*source:\s*([^\])]+?)\s*[\])]", re.I)
+TICK_RE = re.compile(r"`([^`\s]+\.[A-Za-z0-9]{1,6})`")
+QUOTE_MARKS = str.maketrans({
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"', "\u2033": '"',
+    "\u00ab": '"', "\u00bb": '"',
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u2032": "'",
+    "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00a0": " ",
+})
+
+
+def normalize(text):
+    text = unicodedata.normalize("NFKC", text).translate(QUOTE_MARKS)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def json_strings(value, out):
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, dict):
+        for v in value.values():
+            json_strings(v, out)
+    elif isinstance(value, list):
+        for v in value:
+            json_strings(v, out)
+    return out
+
+
+def load_source(path):
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        raw = fh.read()
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".json":
+        try:
+            raw = "\n".join(json_strings(json.loads(raw), []))
+        except ValueError:
+            pass
+    elif ext in (".html", ".htm"):
+        raw = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", raw)
+        raw = html.unescape(re.sub(r"<[^>]+>", " ", raw))
+    return normalize(raw)
+
+
+def paragraphs(text):
+    """Yield (first line number, paragraph text) with code blanked out."""
+    lines, in_fence, start, buf = text.split("\n"), False, 0, []
+    for i, line in enumerate(lines, 1):
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            line = ""
+        elif in_fence:
+            line = ""
+        if line.strip():
+            if not buf:
+                start = i
+            buf.append(re.sub(r"`[^`]*`", lambda m: m.group(0) if TICK_RE.fullmatch(m.group(0)) else " ", line))
+        elif buf:
+            yield start, " ".join(buf)
+            buf = []
+    if buf:
+        yield start, " ".join(buf)
+
+
+def citations(span):
+    found = []
+    for rx in (LINK_RE, TAG_RE, TICK_RE):
+        for m in rx.finditer(span):
+            found.append((m.start(), m.group(1).strip()))
+    return [c for _, c in sorted(found)]
+
+
+def resolve(cite, sources, report_dir):
+    if re.match(r"^[a-z][a-z0-9+.-]*://", cite, re.I) or cite.startswith("#"):
+        return None
+    cite = cite.split("#", 1)[0]
+    roots = [sources, report_dir]
+    for root in roots:
+        cand = os.path.realpath(os.path.join(root, os.path.expanduser(cite)))
+        if cand.startswith(sources + os.sep) and os.path.isfile(cand):
+            return cand
+    # Named but not on disk: report the path it would have been.
+    return os.path.join(sources, cite) if cite else None
+
+
+def found_in(quote, source_text):
+    pieces = [p.strip(" .,;:") for p in re.split(r"\.\.\.|\u2026|\[\.\.\.\]", quote)]
+    pos = 0
+    for piece in (normalize(p) for p in pieces):
+        if not piece:
+            continue
+        at = source_text.find(piece, pos)
+        if at < 0:
+            return False
+        pos = at + len(piece)
+    return True
+
+
+def check(report, sources):
+    report_dir = os.path.dirname(os.path.abspath(report))
+    with open(report, encoding="utf-8") as fh:
+        text = fh.read()
+    cache, results = {}, []
+    for line_no, para in paragraphs(text):
+        quotes = list(QUOTE_RE.finditer(para))
+        for n, m in enumerate(quotes):
+            quote = m.group(1) or m.group(2)
+            if len(quote.split()) < MIN_WORDS:
+                continue
+            after_end = quotes[n + 1].start() if n + 1 < len(quotes) else len(para)
+            before_start = quotes[n - 1].end() if n else 0
+            cites = [c for c in citations(para[m.end():after_end])] or \
+                list(reversed(citations(para[before_start:m.start()])))
+            path = None
+            for c in cites:
+                path = resolve(c, sources, report_dir)
+                if path:
+                    break
+            short = quote if len(quote) <= 70 else quote[:67] + "..."
+            if not path:
+                results.append((False, line_no, short, "no saved source cited"))
+            elif not os.path.isfile(path):
+                results.append((False, line_no, short, f"source not on disk: {os.path.relpath(path, sources)}"))
+            else:
+                if path not in cache:
+                    cache[path] = load_source(path)
+                ok = found_in(quote, cache[path])
+                rel = os.path.relpath(path, sources)
+                results.append((ok, line_no, short, rel if ok else f"not found verbatim in {rel}"))
+    return results
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Fail any quote not found in its saved source.")
+    ap.add_argument("report", help="research markdown file")
+    ap.add_argument("sources", help="folder holding the saved sources")
+    ap.add_argument("-q", "--quiet", action="store_true", help="print failures only")
+    args = ap.parse_args()
+    if not os.path.isfile(args.report):
+        print(f"quote-check: no such report: {args.report}", file=sys.stderr)
+        return 2
+    if not os.path.isdir(args.sources):
+        print(f"quote-check: no such sources folder: {args.sources}", file=sys.stderr)
+        return 2
+    results = check(args.report, os.path.realpath(args.sources))
+    bad = [r for r in results if not r[0]]
+    for ok, line_no, quote, note in results:
+        if ok and args.quiet:
+            continue
+        print(f"{'ok  ' if ok else 'FAIL'}  {args.report}:{line_no}  \"{quote}\"  {note}")
+    print(f"{len(results) - len(bad)} of {len(results)} quotes found in their saved sources")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

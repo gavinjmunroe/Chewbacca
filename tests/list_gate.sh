@@ -25,15 +25,37 @@ printf '%s\nD1,Jane Roe,Partner,Company,jane@acme.com\n' "$H" > "$TMP/placeholde
 printf '%s\nE1,Jane Roe,Partner,Andreessen Horowitz,jane@a16z.com\nE2,Bob Poe,Partner,Andreessen Horowitz LLC,bob@a16z.com\n' "$H" > "$TMP/firm.csv"
 "$GATE" "$TMP/firm.csv" >/dev/null 2>&1 && no "same firm twice should fail" || ok "same firm under two spellings fails"
 
+# a Form D title that lists "Secretary" next to CEO is the CEO (Anvion Bio, 2026-10-26)
+printf 'record_id,full_name,title,organization,email\nK1,Larry Braga,"Executive Officer, Director, Chief Executive Officer and Secretary",Anvion Bio,larry@anvion.example\n' > "$TMP/ceosec.csv"
+"$GATE" "$TMP/ceosec.csv" >/dev/null 2>&1 && ok "a CEO who is also Secretary is not junior" || no "CEO and Secretary should pass"
+printf '%s\nK2,Jo Doe,Assistant to the President,Acme Ventures,jo@acme.com\n' "$H" > "$TMP/asst.csv"
+"$GATE" "$TMP/asst.csv" >/dev/null 2>&1 && no "assistant to the president should fail" || ok "assistant to the president is still junior"
+
+# SBIR rows printing the agency's program officer (OPTRA, 2026-10-26)
+printf '%s\nM1,Kevin Brown,Program Manager,Acme Robotics,kevin.m.brown240.civ@army.mil\n' "$H" > "$TMP/gov.csv"
+out="$("$GATE" "$TMP/gov.csv" 2>&1 || true)"
+case "$out" in *government*) ok "a .mil contact fails as an agency officer" ;; *) no ".mil contact should fail" ;; esac
+printf '%s\nM2,Ann Lee,Program Officer,Acme Bio,ann.lee@nih.gov\n' "$H" > "$TMP/gov2.csv"
+"$GATE" "$TMP/gov2.csv" >/dev/null 2>&1 && no ".gov contact should fail" || ok "a .gov contact fails"
+
 # same person on two lists: the 2,121 bug
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l1.csv"
 printf '%s\nF1,Jane Roe,Partner,Acme Ventures,jane@acme.com\n' "$H" > "$TMP/l2.csv"
 "$GATE" "$TMP/l1.csv" "$TMP/l2.csv" >/dev/null 2>&1 && no "cross-list duplicate should fail" || ok "cross-list duplicate fails"
+"$GATE" "$TMP/l1.csv" "$TMP/l2.csv" --per-sender >/dev/null 2>&1 && ok "per-sender lists share a person with a warning" || no "per-sender should pass a shared person"
+"$GATE" "$TMP/l1.csv" "$TMP/l2.csv" --per-sender 2>&1 | grep -q "ACROSS SENDERS" && ok "per-sender names the overlap" || no "per-sender should warn about the overlap"
 
 printf '%s\nG1,Jane Roe,Partner,Ficial Services Ltd,jane@acme.com\n' "$H" > "$TMP/nan.csv"
 "$GATE" "$TMP/nan.csv" >/dev/null 2>&1 && no "NaN corruption should fail" || ok "NaN-strip corruption fails"
 
 "$GATE" "$TMP/clean.csv" --expect sequoia >/dev/null 2>&1 && no "recall miss should fail" || ok "recall test fails when an expected firm is absent"
+
+# A "firm" column is the company (Zeutara's monday_wave.py, 2026-10-17): read
+# blind, every row looked like a placeholder company and the gate refused all 8 lists.
+printf 'email,full_name,title,firm\njane@acme.com,Jane Roe,Partner,Acme Ventures\n' > "$TMP/firmcol.csv"
+"$GATE" "$TMP/firmcol.csv" >/dev/null 2>&1 && ok "a firm column counts as the company" || no "a firm column should count as the company"
+printf 'email,full_name,title,firm\njane@acme.com,Jane Roe,Partner,Acme Ventures\nbob@acme.com,Bob Poe,Partner,Acme Ventures LLC\n' > "$TMP/firmdup.csv"
+"$GATE" "$TMP/firmdup.csv" >/dev/null 2>&1 && no "same firm twice in a firm column should fail" || ok "same firm twice in a firm column fails"
 
 : > "$TMP/empty.csv"
 "$GATE" "$TMP/empty.csv" >/dev/null 2>&1 && no "empty file should fail" || ok "empty file fails"

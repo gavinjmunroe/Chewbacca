@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""chewbacca x: read an X account's own posts over plain HTTP, with his signed-in session.
+
+  chewbacca x tweets <handle> [--limit N] [--json]   newest first; --limit 0 means every page X serves
+  chewbacca x login [--profile "Chrome/Profile 1"]    import his signed-in X session from Chrome
+
+Read-only. It uses the session `api-anything login x` imported from his Chrome
+(kept in ~/.chewbacca/sessions/x.json): the web app's public bearer, the ct0 cookie
+as the csrf header, and the cookies. The query template lives in
+library/api-sites/x-timeline.json, captured from x.com's own frontend.
+
+Why not an api-anything op: logged out, X serves no timeline at all, and
+signed in, the first page comes back as an empty cache-clear while the posts
+arrive on cursor pages. A one-request op can't follow a cursor, so this pages
+it. Taught 2026-10-10 for the dev-creator ingest.
+
+A page every 1.5 s, because a burst from his account is the fastest way to get
+it rate-limited or flagged. Guessed, never measured.
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+# His signed-in session lives here, NOT in api-anything's store: there it made
+# the logged-out getUser op send his cookies without a csrf header, and X
+# refused every lookup with 403 code 353 (2026-10-10). `chewbacca x login` puts it here.
+SESSION = pathlib.Path(os.environ.get("CHEWBACCA_X_SESSION", pathlib.Path.home() / ".chewbacca" / "sessions" / "x.json"))
+TEMPLATES = json.loads((ROOT / "library/api-sites/x-timeline.json").read_text())
+TEMPLATE = TEMPLATES["timeline"]
+# The x.com web app's own bearer: one public constant every visitor's browser sends.
+BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"  # secret-scan: allow (public web-app bearer)
+PAUSE = 1.5
+
+
+def die(msg):
+    sys.exit(f"chewbacca x: {msg}")
+
+
+def headers():
+    if SESSION.exists() and SESSION.stat().st_mode & 0o077:
+        os.chmod(SESSION, 0o600)
+    if not SESSION.exists():
+        die("no X session. Import it once: chewbacca x login")
+    jar = {c["name"]: c["value"] for c in json.loads(SESSION.read_text())["cookies"]}
+    if "auth_token" not in jar or "ct0" not in jar:
+        die("the X session isn't signed in. Re-import: chewbacca x login")
+    return {"authorization": "Bearer " + BEARER, "x-csrf-token": jar["ct0"],
+            "x-twitter-auth-type": "OAuth2Session", "x-twitter-active-user": "yes",
+            "cookie": "; ".join(f"{k}={v}" for k, v in jar.items()), "content-type": "application/json",
+            "referer": "https://x.com/",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}
+
+
+def get(url, h):
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 404):
+            die(f"X answered {e.code}: the query id or features rotated. Re-capture per library/api-sites/x-timeline.json")
+        if e.code in (401, 403):
+            die(f"X answered {e.code}: the session expired. Re-import: chewbacca x login")
+        if e.code == 429:
+            die("X rate-limited this account (429). Stop and try again later.")
+        die(f"X answered {e.code}")
+
+
+def user_id(handle, h):
+    u = TEMPLATES["user"]
+    q = {"variables": json.dumps(dict(u["variables"], screen_name=handle)), "features": json.dumps(u["features"])}
+    data = get(u["url"] + "?" + urllib.parse.urlencode(q), h)
+    rid = (((data.get("data") or {}).get("user") or {}).get("result") or {}).get("rest_id")
+    if not rid:
+        die(f"no X account @{handle}")
+    return rid
+
+
+def login(argv):
+    profile = argv[argv.index("--profile") + 1] if "--profile" in argv else "Chrome/Profile 1"
+    home = pathlib.Path(os.environ.get("API_ANYTHING_HOME", pathlib.Path.home() / ".api-anything"))
+    shared = home / "sessions" / "x.json"
+    r = subprocess.run(["api-anything", "login", "x", "--profile", profile], capture_output=True, text=True, timeout=120)
+    if not shared.exists() or '"loggedIn":true' not in r.stdout.replace(" ", ""):
+        die("import didn't sign in: " + (r.stdout + r.stderr).strip()[-200:])
+    # The session holds his auth_token. Create the file 0600 from the first
+    # byte (write-then-chmod leaves it world-readable for a moment) and tighten
+    # a directory that already existed, since mkdir's mode skips those.
+    SESSION.parent.mkdir(parents=True, exist_ok=True)
+    SESSION.parent.chmod(0o700)
+    fd = os.open(SESSION, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(shared.read_text())
+    os.chmod(SESSION, 0o600)
+    shared.unlink()  # keep the shared engine logged out, so getUser keeps working
+    print(f"X session saved from {profile}")
+
+
+def walk(node, out):
+    """Collect every tweet result anywhere in a timeline page, plus the bottom cursor."""
+    cursor = None
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, dict):
+            if n.get("cursorType") == "Bottom":
+                cursor = n.get("value")
+            leg = n.get("legacy")
+            if isinstance(leg, dict) and "full_text" in leg and n.get("rest_id"):
+                note = (((n.get("note_tweet") or {}).get("note_tweet_results") or {}).get("result") or {}).get("text")
+                out.setdefault(n["rest_id"], {
+                    "id": n["rest_id"], "created_at": leg.get("created_at"),
+                    "text": note or leg["full_text"], "likes": leg.get("favorite_count"),
+                    "reposts": leg.get("retweet_count"), "replies": leg.get("reply_count"),
+                    "views": (n.get("views") or {}).get("count"),
+                    "quoted_id": leg.get("quoted_status_id_str"), "conversation_id": leg.get("conversation_id_str"),
+                })
+            stack.extend(n.values())
+        elif isinstance(n, list):
+            stack.extend(n)
+    return cursor
+
+
+def tweets(handle, limit):
+    h = headers()
+    uid = user_id(handle, h)
+    found, cursor, pages, seen_cursors = {}, None, 0, set()
+    while True:
+        v = dict(TEMPLATE["variables"], userId=uid)
+        if cursor:
+            v["cursor"] = cursor
+        q = {"variables": json.dumps(v), "features": json.dumps(TEMPLATE["features"])}
+        if TEMPLATE.get("fieldToggles"):
+            q["fieldToggles"] = json.dumps(TEMPLATE["fieldToggles"])
+        before = len(found)
+        cursor = walk(get(TEMPLATE["url"] + "?" + urllib.parse.urlencode(q), h), found)
+        pages += 1
+        # The first page is often an empty cache-clear with a cursor; stop only
+        # when a page after it adds nothing, or the cursor repeats.
+        if not cursor or cursor in seen_cursors or (pages > 2 and len(found) == before):
+            break
+        seen_cursors.add(cursor)
+        if limit and len(found) >= limit:
+            break
+        time.sleep(PAUSE)
+    own = [t for t in found.values()]
+    own.sort(key=lambda t: int(t["id"]), reverse=True)
+    return own[:limit] if limit else own
+
+
+def main():
+    a = sys.argv[1:]
+    if a[:1] == ["login"]:
+        return login(a)
+    if len(a) < 2 or a[0] != "tweets":
+        sys.exit(__doc__)
+    limit = int(a[a.index("--limit") + 1]) if "--limit" in a else 40
+    rows = tweets(a[1].lstrip("@"), limit)
+    if "--json" in a:
+        print(json.dumps(rows, ensure_ascii=False))
+    else:
+        for t in rows:
+            print(f"{t['created_at'][:16] if t['created_at'] else ''}  {t['likes'] or 0:>6} likes  {t['text'][:110]!r}")
+        print(f"{len(rows)} posts from @{a[1].lstrip('@')}")
+
+
+if __name__ == "__main__":
+    main()

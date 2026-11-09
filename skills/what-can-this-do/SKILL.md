@@ -1,6 +1,8 @@
 ---
 name: what-can-this-do
-description: Propose things this kit could do here that the user has not thought to ask for. Use when the user asks what you can do, what they should automate, what they are missing, or says they do not know where to start. Also use on arriving in an unfamiliar repo, and when the user is stuck choosing what to work on.
+description: "Propose things this kit could do here that the user hasn't thought to ask for. Use for what can you do, what should I automate, where do I start, a new repo, or being stuck on what to work on."
+triggers: >-
+  Propose things this kit could do here that the user has not thought to ask for. Use when the user asks what you can do, what they should automate, what they are missing, or says they do not know where to start. Also use on arriving in an unfamiliar repo, and when the user is stuck choosing what to work on.
 ---
 
 # what-can-this-do
@@ -14,7 +16,7 @@ skills and a second brain in their head.
 Never answer this from the skill list alone. Read the ground:
 
 - The repo: what it is, what is half-finished, what has no tests.
-- `~/.claude/skills/` and `~/Chewbacca/skills/`: what is installed and what
+- `~/.claude/skills/` and the checkout's `skills/` (`chewbacca where` prints where the kit lives): what is installed and what
   is quietly unused.
 - The second brain, especially `NOW.md` for what is actually live and what is
   broken right now.

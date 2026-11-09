@@ -47,6 +47,13 @@ class BridgeTests(unittest.TestCase):
         self.assertIn("--json", argv)
         self.assertEqual(argv[argv.index("--url") + 1], "https://x.com/a")
 
+    def test_model_route_never_runs_or_writes_a_plan_through_the_bridge(self):
+        for args in (["accept", "/tmp/plan.md"], ["handoff", "/tmp/plan.md", "--out", "x"],
+                     ["handoff", "/tmp/plan.md", "--save"]):
+            with self.subTest(args=args), self.assertRaises(self.b.Refused):
+                self.b.REGISTRY["model-route"](args)
+        self.b.REGISTRY["model-route"](["check", "/tmp/plan.md"])
+
     def test_fixed_tools_take_no_args(self):
         with self.assertRaises(self.b.Refused):
             self.b.TOOLS["ping"](["; rm -rf ~"])
@@ -128,6 +135,71 @@ class BridgeTests(unittest.TestCase):
         self.assertIn("jev-browse", out)
         self.assertNotIn("bash", out.split())
 
+
+
+class OverlapTests(unittest.TestCase):
+    """Reengineer step 10: on a kit move the daemon starts the new bridge beside
+    the old one. Both loops glob one inbox, so each job must run exactly once."""
+
+    def test_two_serve_loops_run_each_job_once(self):
+        tmp = Path(tempfile.mkdtemp())
+        env = dict(os.environ, HOME=str(tmp), CHEWBACCA_BRIDGE_DIR=str(tmp / "q"))
+        loops = [subprocess.Popen([sys.executable, str(TOOL), "serve"], env=env,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for _ in range(2)]
+        try:
+            inbox = tmp / "q/in"
+            for _ in range(50):
+                if inbox.is_dir():
+                    break
+                time.sleep(0.1)
+            ids = [f"job{i:03d}" for i in range(60)]
+            for job_id in ids:
+                t = inbox / f".{job_id}.tmp"
+                t.write_text(json.dumps({"id": job_id, "tool": "ping", "args": []}))
+                t.rename(inbox / f"{job_id}.json")
+            log = tmp / ".chewbacca/bridge.log"
+            for _ in range(300):
+                if log.exists() and log.read_text().count(" done ") >= len(ids) and not list(inbox.glob("*.json")):
+                    break
+                time.sleep(0.1)
+            time.sleep(1.0)
+            done = [l.split()[2] for l in log.read_text().splitlines() if l.split()[1:2] == ["done"]]
+            twice = sorted({d for d in done if done.count(d) > 1})
+            self.assertEqual(twice, [], f"{len(twice)} jobs ran in both loops")
+            self.assertEqual(sorted(set(done)), ids)
+            for job_id in ids:
+                self.assertEqual(json.loads((tmp / "q/out" / f"{job_id}.json").read_text())["rc"], 0, job_id)
+        finally:
+            for p in loops:
+                p.terminate()
+                p.wait(timeout=5)
+
+    def test_a_job_whose_claimer_died_runs_again(self):
+        # The daemon stops the old bridge mid-job on a swap; the job it had
+        # claimed must not sit as a .claim file while its caller waits 700 s.
+        tmp = Path(tempfile.mkdtemp())
+        env = dict(os.environ, HOME=str(tmp), CHEWBACCA_BRIDGE_DIR=str(tmp / "q"))
+        inbox = tmp / "q/in"
+        inbox.mkdir(parents=True)
+        dead = subprocess.Popen(["/usr/bin/true"])
+        dead.wait()
+        (inbox / f".orphan1.{dead.pid}.claim").write_text(json.dumps({"id": "orphan1", "tool": "ping", "args": []}))
+        live = subprocess.Popen(["/bin/sleep", "30"])
+        (inbox / f".busy1.{live.pid}.claim").write_text(json.dumps({"id": "busy1", "tool": "ping", "args": []}))
+        loop = subprocess.Popen([sys.executable, str(TOOL), "serve"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            out = tmp / "q/out/orphan1.json"
+            for _ in range(100):
+                if out.exists():
+                    break
+                time.sleep(0.1)
+            self.assertEqual(json.loads(out.read_text())["rc"], 0)
+            # A claim whose owner is alive is that owner's to finish.
+            self.assertTrue((inbox / f".busy1.{live.pid}.claim").exists())
+            self.assertFalse((tmp / "q/out/busy1.json").exists())
+        finally:
+            loop.terminate(); loop.wait(timeout=5)
+            live.kill(); live.wait()
 
 if __name__ == "__main__":
     unittest.main()

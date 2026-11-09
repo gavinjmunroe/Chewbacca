@@ -1,0 +1,81 @@
+{
+  "brief": "a pricing page for a solo developer tool",
+  "intent": {
+    "purpose": "a place to compare plans and understand what it costs to use this tool as an individual developer",
+    "primary_action": "choose a plan",
+    "first_look": "the price",
+    "audience": "solo developers evaluating whether this tool is worth paying for"
+  },
+  "results": {
+    "dense-instrument": {
+      "gaps": [
+        {
+          "kind": "primary-action-wrong",
+          "where": "click subscribe on one of the paid plans",
+          "detail": "viewer read 'click subscribe on one of the paid plans' as the main action, intended 'choose a plan'"
+        },
+        {
+          "kind": "purpose-unclear",
+          "where": "the page as a whole",
+          "detail": "viewer read it as \"a pricing comparison page for a developer api or backend service called 'relay', letting users choose between four subscription tiers.\""
+        },
+        {
+          "kind": "friction",
+          "where": "The difference between 'Free' and 'Get started' vs 'Subscribe' labeling is slightly inconsistent and requires a beat to parse",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The toggle says '20% off' for Annual but there is no visible annual pricing shown \u2014 unclear whether the prices displayed are already annual or still monthly",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The label 'PLANS' above the table feels redundant and adds no information",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The subtitle taglines under each plan name (Evaluate, One developer, Power users, Up to 5 seats) are small and low contrast but technically readable at normal screen size",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The 'billed monthly' micro-copy under each price is small enough to miss",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The $49 Team plan price in the top-right column",
+        "look_order": [
+          "The four plan names and prices row: Free $0, Solo $9, Pro $19, Team $49",
+          "The Subscribe buttons under Solo, Pro, and Team (blue, prominent)",
+          "The 'Monthly / Annual 20% off' toggle in the top-right corner",
+          "The 'Requests / month' row showing 500, 5,000, 50,000, 250,000 in blue"
+        ],
+        "purpose": "A pricing comparison page for a developer API or backend service called 'relay', letting users choose between four subscription tiers.",
+        "primary_action": "Click Subscribe on one of the paid plans",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Monthly/Annual toggle",
+          "Get started button (Free plan)",
+          "Subscribe button (Solo)",
+          "Subscribe button (Pro)",
+          "Subscribe button (Team)",
+          "relay logo/wordmark (top-left, appears to be a nav link)"
+        ],
+        "friction": [
+          "The difference between 'Free' and 'Get started' vs 'Subscribe' labeling is slightly inconsistent and requires a beat to parse",
+          "The toggle says '20% off' for Annual but there is no visible annual pricing shown \u2014 unclear whether the prices displayed are already annual or still monthly",
+          "The label 'PLANS' above the table feels redundant and adds no information"
+        ],
+        "unreadable": [
+          "The subtitle taglines under each plan name (Evaluate, One developer, Power users, Up to 5 seats) are small and low contrast but technically readable at normal screen size",
+          "The 'billed monthly' micro-copy under each price is small enough to miss"
+        ],
+        "guess_at_audience": "Developers or small engineering teams evaluating an API relay or proxy service, likely comparing limits before committing to a paid tier"
+      },
+      "blocking": 0
+    }
+  }
+}

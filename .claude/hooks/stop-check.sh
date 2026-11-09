@@ -89,6 +89,7 @@ fi
 
 MINE_COUNT=0
 OTHERS_COUNT=0
+MINE_PATHS=""
 _SID=""
 if command -v jq >/dev/null 2>&1; then
   _SID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
@@ -133,16 +134,27 @@ if [ -n "$_SID" ] && [ -s "$_WLOG" ]; then
         if (weak[p, last]) {
           for (i = 1; i < last; i++)
             if (!weak[p, i] && sid[p, i] != who && ts[p, i] >= ts[p, last] - window) owner = sid[p, i]
+          # Two inferred rows cannot tell authors apart either: on 2026-10-09 an
+          # api tab and a todo tab both ran shell in this repo, the todo tab
+          # was credited with library/api-sites/usc-dining.json, and its Stop
+          # hook told it to commit a file it never wrote, every turn. A weak
+          # claim loses to a row from any other session, at any age: AGENTS.md
+          # was rewritten by another tab and credited here an hour later.
+          if (owner == "")
+            for (i = 1; i < last; i++)
+              if (sid[p, i] != who) owner = sid[p, i]
           if (owner != "") who = owner
           owner = ""
         }
-        print who
+        print who "\t" p
       }
     }' - "$_WLOG" 2>/dev/null)"
-  while IFS= read -r _author; do
+  while IFS=$'\t' read -r _author _path; do
     [ -n "$_author" ] || continue
     if [ "$_author" = "$_SID" ]; then
       MINE_COUNT=$((MINE_COUNT + 1))
+      MINE_PATHS="$MINE_PATHS${_path#"$REPO_ROOT"/}
+"
     else
       OTHERS_COUNT=$((OTHERS_COUNT + 1))
     fi
@@ -161,7 +173,10 @@ fi
 STATE_DIR="$HOME/.chewbacca/stop-check"
 STATE_FILE=""
 if mkdir -p "$STATE_DIR" 2>/dev/null; then
-  STATE_KEY="$(printf '%s' "$REPO_ROOT" | shasum 2>/dev/null | cut -d' ' -f1)"
+  # Per repo AND per session. Keyed by repo alone, every tab in the shared
+  # checkout overwrote the one fingerprint, so each tab's next turn saw a
+  # "change" and the same warning re-fired: 10+ times in one tab, 2026-10-09.
+  STATE_KEY="$(printf '%s|%s' "$REPO_ROOT" "$_SID" | shasum 2>/dev/null | cut -d' ' -f1)"
   [ -n "$STATE_KEY" ] && STATE_FILE="$STATE_DIR/$STATE_KEY"
 fi
 
@@ -184,7 +199,16 @@ if [ "$OTHERS_COUNT" -gt 0 ] && [ "$MINE_COUNT" -eq 0 ]; then
 fi
 
 if [ -n "$STATE_FILE" ]; then
-  FINGERPRINT="$(git status --porcelain 2>/dev/null | shasum 2>/dev/null | cut -d' ' -f1)|$AHEAD_COUNT|$NO_UPSTREAM|$MINE_COUNT|$OTHERS_COUNT"
+  # Only this session's files go in the fingerprint. Hashing the whole status,
+  # every other tab's edit moved it and the same warning re-fired: 4 times in a
+  # row on 2026-10-09 against one file that was already committed and pushed,
+  # while 15 other tabs kept the checkout changing.
+  # Paths and their status letters, never the file contents. With a content
+  # hash, a background agent appending to its audit files re-armed the warning
+  # on every turn and woke this tab 8 times in a row, 2026-10-11 ~7pm. A new
+  # file, a commit or a push still moves the fingerprint.
+  _MINE_STATUS="$(printf '%s' "$MINE_PATHS" | while IFS= read -r _mp; do [ -n "$_mp" ] || continue; git status --porcelain -- "$REPO_ROOT/$_mp" 2>/dev/null; done)"
+  FINGERPRINT="$(printf '%s' "$_MINE_STATUS" | shasum 2>/dev/null | cut -d' ' -f1)|$NO_UPSTREAM|$MINE_COUNT"
   [ "$(cat "$STATE_FILE" 2>/dev/null)" = "$FINGERPRINT" ] && exit 0
   printf '%s' "$FINGERPRINT" > "$STATE_FILE" 2>/dev/null || true
 fi
@@ -192,7 +216,7 @@ fi
 export DIRTY_COUNT AHEAD_COUNT NO_UPSTREAM MINE_COUNT OTHERS_COUNT
 export BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os
 
 dirty = int(os.environ.get("DIRTY_COUNT", "0"))

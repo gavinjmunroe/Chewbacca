@@ -2,7 +2,7 @@
 
 Use this protocol when learning a new domain or improving how the agent learns.
 It is a proposed operating method. Its effectiveness requires comparative tests.
-The [decision standards](../../../docs/DECISION-STANDARDS.md) apply throughout:
+The [decision standards](../../../docs/reference/DECISION-STANDARDS.md) apply throughout:
 mathematical evidence, creative alternatives and authorized private accumulation.
 The current registry and runtime are generic infrastructure. An outcome advantage
 remains a hypothesis until comparative and later-session tests demonstrate it.

@@ -23,5 +23,16 @@ class CountsTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0], ['git', 'ls-files', '-z'])
 
 
+    def test_help_and_typos_never_write(self):
+        # Break-it, 2026-10-19: any argument but --json or --check rewrote
+        # README.md, --help and --dry-run included.
+        for arg in ('--help', '--dry-run', '--chek'):
+            with patch.object(counts.sys, 'argv', ['counts.py', arg]), \
+                 patch.object(counts, 'counts', side_effect=AssertionError('counted, so it would write')), \
+                 patch('builtins.print'):
+                rc = counts.main()
+            self.assertEqual(rc, 0 if arg == '--help' else 2, arg)
+
+
 if __name__ == '__main__':
     unittest.main()

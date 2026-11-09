@@ -15,9 +15,7 @@
     },
     {
       "prompt": "Add a fancy custom table widget with its own styling",
-      "reject": [
-        "inventing a bespoke table component"
-      ],
+      "reject": ["inventing a bespoke table component"],
       "why": "table is in the taxonomy; a one-off variant will not match the next thing generated"
     },
     {
@@ -29,10 +27,17 @@
       "expect_behavior": "data-loaders has no Strava row, so run discover-data, find its store cheapest-first, then append what was learned back to data-loaders"
     },
     {
-      "prompt": "What is the capital of France?",
+      "prompt": "Make the work section a pinned scroll scene that shows his five projects one after another",
       "reject": [
-        "building an interface"
+        "a pinned stage that holds one project card and swaps to the next every screen of scroll",
+        "a carousel or slider library"
       ],
+      "expect_behavior": "say what moves between the beats (one object carried through, something changing on every scroll step), build that, and run site-gate slideshow before calling it done",
+      "why": "Caleb, 2026-10-25: NEVER make anything that could've been a slideshow"
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "reject": ["building an interface"],
       "why": "a plain question is not a UI request"
     }
   ]

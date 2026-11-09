@@ -24,6 +24,8 @@ public struct SurfaceView: View {
     /// A window sets its title in mono caps inside its strip and squares its
     /// diagram nodes; every other chrome keeps the rounded house type.
     @Environment(\.hudChrome) private var chrome
+    @Environment(\.hudKeyboardFocus) private var keyboardFocus
+    @Environment(\.hudEditingField) private var editingField
 
     public init(store: SurfaceStore, pendingTitle: String = "") {
         self.store = store
@@ -42,6 +44,13 @@ public struct SurfaceView: View {
         // animation finishes, and an ease restarts from zero velocity on each
         // one, which reads as stutter. A spring bends toward the new value.
         .animation(Motion.smooth(reduced: Motion.systemReduced), value: store.revision)
+        // Rows and the cards they open measure in this one space, so a card
+        // knows where its row is while the surface itself moves.
+        // The light that carries a row into its card, over everything in the
+        // surface so no child's slot can clip it (ContainerTransform.swift).
+        .overlay(alignment: .topLeading) { MorphLayer(surface: store.surfaceID ?? "") }
+        .coordinateSpace(name: RowAnchors.space)
+        .environment(\.hudSurfaceID, store.surfaceID ?? "")
     }
 
     /// `ancestors` is the path from the root, not everything already drawn.
@@ -54,8 +63,15 @@ public struct SurfaceView: View {
         guard let element = store.spec.elements[id],
               element.type != ComponentNode.pendingType
         else { return AnyView(PlaceholderView()) }
+        if Self.blank(element.type, store.resolved(element), in: chrome) { return AnyView(EmptyView()) }
         return AnyView(
-            render(element, ancestors: ancestors.union([id]))
+            A11yContract.decorate(
+                element.type, store.resolved(element),
+                render(element, ancestors: ancestors.union([id])))
+                .modifier(KeyboardRing(
+                    active: keyboardFocus?.component == id && keyboardFocus?.row == nil))
+                .environment(\.hudFocusedRow,
+                    keyboardFocus?.component == id ? keyboardFocus?.row : nil)
                 // Identity keyed on the *type*, so a component that becomes a
                 // different kind of component transitions instead of snapping.
                 //
@@ -70,6 +86,38 @@ public struct SurfaceView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.97)),
                     removal: .opacity.combined(with: .scale(scale: 1.02)))))
+    }
+
+    /// A part with nothing in it draws nothing.
+    ///
+    /// Caleb's 2026-10-11 screenshot of the meetings card: an opened meeting
+    /// with no notes drew "Granola had no notes", two empty grey circles (two
+    /// Buttons whose label was "", each a capsule around nothing), a
+    /// Transcript press and "No turns yet". A Button with no label and a
+    /// Metric with no value are blank on every chrome. On the glass any part
+    /// with no content is, because there is no card to hold the empty space
+    /// and say the panel is still a panel.
+    static func blank(_ type: String, _ p: [String: JSON], in chrome: Chrome) -> Bool {
+        func empty(_ key: String) -> Bool {
+            switch p[key] {
+            case nil, .null?: return true
+            case .string(let text)?: return text.trimmingCharacters(in: .whitespaces).isEmpty
+            case .array(let items)?: return items.isEmpty
+            default: return false
+            }
+        }
+        switch type {
+        case "Button": return empty("label")
+        case "Metric": return empty("value")
+        default: break
+        }
+        guard chrome.isGlass else { return false }
+        switch type {
+        case "Text": return empty("value")
+        case "Heading": return empty("text")
+        case "List", "Events", "Transcript": return empty("items")
+        default: return false
+        }
     }
 
     @ViewBuilder
@@ -119,9 +167,16 @@ public struct SurfaceView: View {
                     path: path,
                     editable: p["editable"] == .bool(true),
                     page: Int(p["page"]?.doubleValue ?? 1),
-                    onSave: { [store] body in
-                        store.saveFile(path: path, contents: body)
-                    }))
+                    line: Int(p["line"]?.doubleValue ?? 0),
+                    onSave: { [store] body, expecting, force in
+                        store.saveFile(path: path, contents: body, expecting: expecting, force: force)
+                    },
+                    onDirty: { [store] draft in store.markUnsaved(path: path, draft: draft) },
+                    tabs: FileView.FileTab.parse(p["tabs"]?.arrayValue ?? []),
+                    onTab: p["tabAction"]?.stringValue.map { name in { [store] id in store.fireRow(name, row: id) } },
+                    unsavedPaths: store.unsavedPaths,
+                    kept: { [store] path in store.keptEditors[path] },
+                    onKeep: { [store] kept in store.keepEditor(path: path, kept) }))
 
         case "Diagram":
             let parts = p["parts"]?.arrayValue ?? []
@@ -156,7 +211,8 @@ public struct SurfaceView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     // No title, no line: a launcher rail has nothing to
                     // name, and an empty Text still takes 14 of gap.
-                    if let title = p["title"]?.display, !title.isEmpty {
+                    // On the glass the content names itself: no title line.
+                    if !chrome.isGlass, let title = p["title"]?.display, !title.isEmpty {
                         Text(chrome == .window ? title.uppercased() : title)
                             .font(chrome == .window
                                 ? Typeface.pixel(11)
@@ -164,19 +220,43 @@ public struct SurfaceView: View {
                             // Nothing outside a window sets a design, so this
                             // only undoes the window's mono (`pixelFont`).
                             .fontDesign(nil)
-                            .kerning(chrome == .window ? 0.6 : 0.4)
+                            // Half a point is one pixel on a 2x screen, so the
+                            // pixel face stays on its grid.
+                            .kerning(chrome == .window ? 0.5 : 0.4)
+                            // The title strip is a fixed 37 points: a second
+                            // line would run under its rule (review of f89ddf3).
+                            .lineLimit(chrome == .window ? 1 : nil)
+                            .truncationMode(.tail)
                             .foregroundStyle(HUD.ink)
                             .modifier(Stagger(part: .title))
+                    } else if chrome == .window {
+                        // The strip is drawn whether or not there is a title,
+                        // so an untitled window keeps its line empty rather
+                        // than putting the first row under the rule.
+                        Color.clear.frame(height: SurfaceCard.titleLine)
                     }
                     ForEach(element.children, id: \.self) { child in
                         node(child, ancestors: ancestors)
                             .modifier(Stagger(part: isAction(child) ? .actions : .body))
                             .modifier(FoldFade())
                     }
-                })
+                }
+                .modifier(AskOnDoubleClick(ask: p["ask"]?.display, store: store)))
         }
 
         let gap = CGFloat(p["gap"]?.doubleValue ?? 2) * 4
+
+        // `from=@/pointer`: a card opened from a row. Drawn only while the
+        // pointer names a row, growing out of that row and shrinking back
+        // into it (ContainerTransform.swift).
+        if element.props["from"] != nil {
+            return AnyView(
+                CardSlot(surface: store.surfaceID ?? "", row: p["from"]?.display ?? "", card: element.id) {
+                    VStack(alignment: .leading, spacing: gap) {
+                        children(of: element, ancestors: ancestors)
+                    }
+                })
+        }
 
         // A grid, because a dashboard is not a column.
         //
@@ -242,6 +322,17 @@ public struct SurfaceView: View {
         switch element.type {
         case "Heading":
             let level = Int(p["level"]?.doubleValue ?? 2)
+            if chrome.isGlass {
+                // The open thing's name, set as the largest words on the
+                // glass after the counts: it is what the light carried in.
+                return AnyView(
+                    Text(p["text"]?.display ?? "")
+                        .font(.system(size: level == 1 ? 18 : 15, weight: .semibold))
+                        .foregroundStyle(HUD.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .accessibilityAddTraits(.isHeader))
+            }
             return AnyView(
                 CaptionLabel(
                     text: p["text"]?.display ?? "", size: level == 1 ? 14 : 11.5,
@@ -249,12 +340,38 @@ public struct SurfaceView: View {
                     .padding(.top, 2))
 
         case "Text":
-            let muted = p["tone"]?.stringValue == "muted"
+            let tone = p["tone"]?.stringValue
+            if tone == "idle" {
+                // A standing state that is nothing happening: a small dim
+                // dot and no word on the glass (2026-10-11, "Im not in a
+                // meeting?" at a lit "Listening"). The words are for
+                // VoiceOver only.
+                return AnyView(
+                    Circle().fill(HUD.ink.opacity(0.32)).frame(width: 5, height: 5)
+                        .frame(width: 12, height: 12)
+                        .accessibilityElement()
+                        .accessibilityLabel(p["value"]?.display ?? ""))
+            }
+            let muted = tone == "muted"
+            let meaning = HUD.meaning(tone)
             return AnyView(
-                Text(p["value"]?.display ?? "")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(muted ? HUD.faint : HUD.ink.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // A state line in a meaning's hue carries its dot too,
+                    // so the meaning never rests on colour alone.
+                    if let meaning {
+                        Circle().fill(meaning).frame(width: 6, height: 6)
+                            .shadow(color: meaning.opacity(0.6), radius: 3)
+                            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                            .transition(.opacity)
+                    }
+                    Text(p["value"]?.display ?? "")
+                        .font(.system(size: 12.5, weight: meaning == nil ? .regular : .medium))
+                        .foregroundStyle(meaning ?? (muted ? HUD.faint : HUD.ink.opacity(0.9)))
+                        // A line that changes says so in place: the old words
+                        // fade as the new ones come (motion rule 12).
+                        .contentTransition(.opacity)
+                        .fixedSize(horizontal: false, vertical: true)
+                })
 
         default:
             let items = p["items"]?.arrayValue ?? []
@@ -278,6 +395,12 @@ public struct SurfaceView: View {
         case "Metric":
             let value = p["value"]?.display ?? ""
             let tone = Self.threshold(p, value: p["value"]?.doubleValue, in: chrome)
+            if chrome.isGlass {
+                return AnyView(
+                    GlassMetric(label: p["label"]?.display ?? "", value: value,
+                                tone: tone, number: p["value"]?.doubleValue)
+                        .animation(Motion.gentle(reduced: Motion.systemReduced), value: value))
+            }
             return AnyView(
                 MetricView(
                     label: p["label"]?.display ?? "",
@@ -363,6 +486,9 @@ public struct SurfaceView: View {
                     tone: Self.threshold(p, value: fraction, in: chrome) ?? tone))
 
         default:
+            if chrome.isGlass {
+                return AnyView(GlassRail(items: p["items"]?.arrayValue ?? [], rowAction: rowAction(p, id)))
+            }
             return AnyView(
                 EventsView(
                     caption: p["caption"]?.display ?? "",
@@ -434,14 +560,26 @@ public struct SurfaceView: View {
             var payload: [String: JSON] = [:]
             if let collection = p["collection"] { payload["collection"] = collection }
             let primary = p["variant"]?.stringValue == "primary"
+            if chrome.isGlass {
+                return AnyView(GlassWord(label: p["label"]?.display ?? "") {
+                    store.fire(action, from: element.id, payload: payload)
+                })
+            }
             return AnyView(
                 Button {
                     store.fire(action, from: element.id, payload: payload)
                 } label: {
-                    Text(p["label"]?.display ?? "")
-                        .font(.system(size: 12, weight: .medium))
+                    if chrome == .window {
+                        Text(p["label"]?.display ?? "")
+                            .textCase(.uppercase)
+                            .pixelFont(11)
+                            .kerning(0.5)
+                    } else {
+                        Text(p["label"]?.display ?? "")
+                            .font(.system(size: 12, weight: .medium))
+                    }
                 }
-                .buttonStyle(HUDButtonStyle(primary: primary)))
+                .buttonStyle(HUDButtonStyle(primary: primary, window: chrome == .window)))
 
         case "Checkbox":
             let pointer = boundPointer(element)
@@ -457,13 +595,14 @@ public struct SurfaceView: View {
                     Text(p["label"]?.display ?? "").font(.system(size: 12))
                 }
                 .toggleStyle(.checkbox)
+                .accessibilityLabel(A11yContract.name("Checkbox", p) ?? "")
                 .disabled(pointer == nil))
 
         case "Select":
             let pointer = boundPointer(element)
             let options = (p["options"]?.arrayValue ?? []).map(\.display)
             return AnyView(
-                LabeledControl(label: p["label"]?.display ?? "") {
+                LabeledControl(label: p["label"]?.display ?? "", window: chrome == .window) {
                     // A menu with a drawn label rather than a Picker: the
                     // system pop-up is 22 points tall and cannot be made
                     // taller, and the whole 44-point label opens this one.
@@ -486,12 +625,16 @@ public struct SurfaceView: View {
                         }
                         .padding(.horizontal, 10)
                         .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
-                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                        .modifier(InputBox(window: chrome == .window, focused: false))
                         .contentShape(Rectangle())
                     }
                     .menuStyle(.button)
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
+                    // Named by its label, valued by the choice: it read as
+                    // "Choose, pop up button" before (bd_2026-Code-apw).
+                    .accessibilityLabel(A11yContract.name("Select", p) ?? "")
+                    .accessibilityValue((p["value"]?.display).flatMap { $0.isEmpty ? nil : $0 } ?? "None")
                     .disabled(pointer == nil)
                 })
 
@@ -499,9 +642,11 @@ public struct SurfaceView: View {
             let pointer = boundPointer(element)
             let numeric = p["kind"]?.stringValue == "number"
             return AnyView(
-                LabeledControl(label: p["label"]?.display ?? "") {
+                LabeledControl(label: p["label"]?.display ?? "", window: chrome == .window) {
                     HUDField(
                         placeholder: p["placeholder"]?.display ?? "",
+                        takeFocus: editingField && keyboardFocus?.component == element.id,
+                        window: chrome == .window,
                         text: Binding(
                             get: { p["value"]?.display ?? "" },
                             set: { next in
@@ -512,6 +657,7 @@ public struct SurfaceView: View {
                                     pointer,
                                     numeric ? .number(Double(next) ?? 0) : .string(next))
                             }))
+                    .accessibilityLabel(A11yContract.name("Field", p) ?? "")
                     .disabled(pointer == nil)
                 })
 
@@ -551,6 +697,27 @@ public struct SurfaceView: View {
                     image: p["image"]?.stringValue,
                     size: CGFloat(min(max(p["size"]?.doubleValue ?? 24, 16), 48))))
 
+        case "Tiles":
+            let action = p["action"]?.stringValue
+            var counts: [String: Int] = [:]
+            for (key, value) in p["counts"]?.objectValue ?? [:] {
+                if let n = value.doubleValue { counts[key] = Int(n) }
+            }
+            return AnyView(
+                AgentTilesView(
+                    tiles: AgentTile.parse(p["items"]?.arrayValue ?? []),
+                    counts: counts,
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Chips":
+            let chips = AgentChip.parse(p["options"]?.arrayValue ?? [])
+            return AnyView(
+                AgentChipsView(
+                    chips: chips,
+                    selected: p["value"]?.display ?? chips.first?.id ?? "",
+                    dots: p["dots"] != .bool(false),
+                    onPick: segmentedPick(element, p)))
+
         case "Transcript":
             let action = p["action"]?.stringValue
             return AnyView(
@@ -559,7 +726,35 @@ public struct SurfaceView: View {
                     onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Diff":
-            return AnyView(DiffView(text: p["text"]?.display ?? ""))
+            let keep = p["keepAction"]?.stringValue
+            let reject = p["rejectAction"]?.stringValue
+            return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? "",
+                                    plain: p["plain"] == .bool(true),
+                                    hunks: DiffView.HunkVerbs.parse(p["hunks"]?.arrayValue ?? []),
+                                    onKeep: keep.map { name in { [store] id in store.fireRow(name, row: id) } },
+                                    onReject: reject.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Web":
+            return AnyView(WebPaneView(url: p["url"]?.display ?? ""))
+
+        case "App":
+            let height = p["h"]?.doubleValue.map { CGFloat($0) }
+            return AnyView(AppPaneView(url: p["url"]?.display ?? "", height: height))
+
+        case "Hits":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                HitsView(
+                    caption: p["caption"]?.display ?? "",
+                    rows: HitRow.parse(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Tree":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                TreeView(
+                    rows: TreeView.rows(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Rail":
             return AnyView(
@@ -640,6 +835,9 @@ struct Column: Hashable {
 /// focuses the field rather than only a click on the line of text.
 struct HUDField: View {
     let placeholder: String
+    /// Keyboard mode pressed this field: it takes the keys (bd_2026-Code-yw6).
+    var takeFocus = false
+    var window = false
     @Binding var text: String
     @FocusState private var focused: Bool
 
@@ -650,26 +848,59 @@ struct HUDField: View {
             .focused($focused)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(focused ? HUD.accent.opacity(0.7) : .white.opacity(0.12))
-            }
+            .modifier(InputBox(window: window, focused: focused))
             .contentShape(Rectangle())
             .onTapGesture { focused = true }
+            .onChange(of: takeFocus) { _, next in focused = next }
+    }
+}
+
+/// The box a Field or a Select sits in. A card's is rounded with the accent on
+/// focus; a window's is square, black under a white rim, and focus brightens
+/// the rim, because a window keeps colour for the tones.
+struct InputBox: ViewModifier {
+    let window: Bool
+    let focused: Bool
+
+    func body(content: Content) -> some View {
+        if window {
+            content
+                .background(Color.black.opacity(0.45), in: Rectangle())
+                .overlay { Rectangle().strokeBorder(.white.opacity(focused ? 0.85 : 0.3), lineWidth: 1) }
+        } else {
+            content
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9)
+                        .strokeBorder(focused ? HUD.accent.opacity(0.7) : .white.opacity(0.12))
+                }
+        }
     }
 }
 
 /// A label above its control, so a narrow panel does not squeeze the input.
 struct LabeledControl<Content: View>: View {
     let label: String
+    var window = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: window ? 5 : 3) {
+            if window {
+                Text(label)
+                    .textCase(.uppercase)
+                    .pixelFont(11)
+                    .kerning(0.5)
+                    .foregroundStyle(HUD.faint)
+                    // The control carries this as its own name; read here as
+                    // well, every field would be announced twice.
+                    .accessibilityHidden(true)
+            } else {
+                Text(label)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             content
         }
     }
@@ -677,8 +908,30 @@ struct LabeledControl<Content: View>: View {
 
 struct HUDButtonStyle: ButtonStyle {
     let primary: Bool
+    var window = false
 
     func makeBody(configuration: Configuration) -> some View {
+        if window {
+            // TypeSafe's window button: a square, a one-point rim and the hard
+            // drop the window has. Primary is inverted, white with black type,
+            // the way `fill:true` marks the one node that matters.
+            configuration.label
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(primary ? AnyShapeStyle(HUD.ink.opacity(0.96)) : AnyShapeStyle(Color.black.opacity(0.5)),
+                            in: Rectangle())
+                .overlay { Rectangle().strokeBorder(.white.opacity(primary ? 1 : 0.34), lineWidth: 1) }
+                .background { Rectangle().fill(Color.black.opacity(0.6)).offset(x: 2, y: 2) }
+                .foregroundStyle(primary ? Color.black : HUD.ink)
+                .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
+                .contentShape(Rectangle())
+                .modifier(PressScale(pressed: configuration.isPressed))
+        } else {
+            card(configuration)
+        }
+    }
+
+    private func card(_ configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -747,7 +1000,11 @@ struct ListView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(rows) { row in
                 HStack(alignment: rowAction == nil ? .top : .center, spacing: 7) {
-                    if chrome == .window && !ordered {
+                    if chrome.isGlass && !ordered {
+                        // No bullet on the glass: the indent under the name
+                        // already says these lines belong to it.
+                        EmptyView()
+                    } else if chrome == .window && !ordered {
                         // A square bullet in ink, the window's one shape.
                         // 6 of top pad centres it on a 12.5-point first line.
                         Rectangle()
@@ -759,6 +1016,9 @@ struct ListView: View {
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(
                                 chrome == .window ? HUD.ink.opacity(0.9) : HUD.accent.opacity(0.8))
+                            // The bullet was read as "black right-pointing
+                            // small triangle" before every item.
+                            .accessibilityHidden(!ordered)
                     }
                     Text(row.text)
                         .font(.system(size: 12.5))
@@ -769,6 +1029,7 @@ struct ListView: View {
                         RowActionButton(action: rowAction, row: row.row)
                     }
                 }
+                .rowAnchor(row.row)
                 .transition(RowKeys.transition(reduced: reduceMotion))
             }
         }
@@ -841,7 +1102,8 @@ struct MetricView: View {
                         .foregroundStyle(HUD.faint)
                 }
             }
-            Text(label.uppercased())
+            Text(label)
+                .textCase(.uppercase)
                 .font(.system(
                     size: 9, weight: .semibold, design: chrome == .window ? .monospaced : .default))
                 .kerning(0.9)
@@ -877,7 +1139,8 @@ struct TableView: View {
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                     GridRow {
                         ForEach(columns, id: \.self) { column in
-                            Text(column.label.uppercased())
+                            Text(column.label)
+                                .textCase(.uppercase)
                                 .font(.system(size: 8.5, weight: .semibold))
                                 .kerning(0.9)
                                 .foregroundStyle(
@@ -923,11 +1186,15 @@ struct StatusView: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(tint).frame(width: 6, height: 6)
-            Text(message).font(.system(size: 12))
+        // No message, nothing drawn: a lone dot under a panel read as a stray
+        // mark on the agents panel (screenshot, 2026-10-10).
+        if !message.isEmpty {
+            HStack(spacing: 6) {
+                Circle().fill(tint).frame(width: 6, height: 6)
+                Text(message).font(.system(size: 12))
+            }
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -989,5 +1256,25 @@ struct LoadingView: View {
             .trimmingCharacters(in: .whitespaces)
         guard let first = words.first else { return "" }
         return first.uppercased() + words.dropFirst()
+    }
+}
+
+/// `ask="<request>"` on a Screen: a double-click anywhere on the card takes the
+/// request into the conversation panel. Only a count-2 gesture is added, so a
+/// single click, a row's press and the card's X behave as before. No `ask`,
+/// no gesture.
+struct AskOnDoubleClick: ViewModifier {
+    let ask: String?
+    let store: SurfaceStore
+
+    func body(content: Content) -> some View {
+        if let ask, !ask.isEmpty {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { store.ask(ask) }
+                .accessibilityAction(named: "Talk about it") { store.ask(ask) }
+        } else {
+            content
+        }
     }
 }

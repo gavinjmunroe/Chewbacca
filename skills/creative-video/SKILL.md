@@ -1,6 +1,8 @@
 ---
 name: creative-video
-description: Make a short vertical video for Instagram Reels, YouTube Shorts or TikTok, or a YouTube creative, from a brief written against the craft, with the pixels drawn in code, rendered headless in Blender, or generated through Higgsfield. Use when asked to make a reel, a short, a TikTok, an Instagram video, a YouTube video, a social clip, an ad creative, a 3D animation, a Blender render, a Higgsfield or Seedance video, or content for a page. Also use when a video already made is getting no views, feels boring, or got cut off by the app's buttons. Not for a product demo of an app, which is the demo skill.
+description: "Short vertical video for Reels, Shorts or TikTok, or a YouTube creative: code, Blender or Higgsfield. Use for a reel, short, ad creative, 3D render, or a video getting no views. Not product demos."
+triggers: >-
+  Make a short vertical video for Instagram Reels, YouTube Shorts or TikTok, or a YouTube creative, from a brief written against the craft, with the pixels drawn in code, rendered headless in Blender, or generated through Higgsfield. Use when asked to make a reel, a short, a TikTok, an Instagram video, a YouTube video, a social clip, an ad creative, a 3D animation, a Blender render, a Higgsfield or Seedance video, or content for a page. Also use when a video already made is getting no views, feels boring, or got cut off by the app's buttons. Not for a product demo of an app, which is the demo skill.
 ---
 
 # Make a short vertical video that follows the craft
@@ -32,6 +34,8 @@ else. Every rule below points back to it.
    For a montage of footage cut to a song, measure three references with
    `edit-dna` and cut with `edit-cut`, following
    [references/cutting-to-music.md](references/cutting-to-music.md).
+   For any cut of his footage (trimming speech, a new version, a shot that
+   continues a clip), follow [references/editing.md](references/editing.md).
 3. **Stage one, keyframe sheet.** Render five to seven stills across the
    timeline at half size, tile them, and look. The first frame is judged
    hardest.
@@ -73,6 +77,34 @@ else. Every rule below points back to it.
 - **Never repost footage they did not make**, and never export with another
   app's watermark. Instagram stops recommending both.
 - **Never open Blender's window.** Headless only; the user works on this Mac.
+- **Never wire a generated clip in before checking its physics frame by frame.**
+  Dough page, 2026-10-29: Seedance sliced a loaf with the blade's flat face to
+  camera (a front-to-back cut) and the halves fell apart left and right. Caleb:
+  "Bro why would it split the opposite direction of the knife lol fix chewbs
+  logic engine". Pull a contact strip (`ffmpeg -vf fps=1.4,tile=7x1`), and for
+  each action name the cause and the effect it forces: a cut parts the object
+  along the blade's plane, a push moves it away from the pusher, a pour falls.
+  Write the prompt so the cause fixes the effect ("blade seen edge-on, coming
+  straight down, the halves part left and right where it went"), and reject
+  any clip where they disagree before it costs a page build.
+- **Never crossfade where the brief says one thing becomes another.** On the
+  Dough page the dough faded into a separate loaf photo behind an oven glow, and
+  Caleb: "you didn't even try to make the dough become the final bread". A
+  transformation is one continuous shot with both ends fixed (a first and last
+  frame video, or a morph), and a loop returns through the same object to its
+  own first frame ("one of the pieces go back into being dough").
+- **Never hand-sculpt an organic hero object when it has to look real.** A
+  deformed UV sphere read as "a video game" and "a perfect sphere" (same night).
+  Real food, skin or fabric comes from a photo-real source: a scan, Nalana's
+  modeler, or an image model edited from the scene's own render so camera and
+  light match. Price the run first and check the balance can cover a redo.
+- **Never ask to spend credit before splitting the shots into free and paid.**
+  Dough page, 2026-10-30: the ask was "~$2.70 for 3 clips" and Caleb answered
+  "Bro can't you do it for free on nalana". Go shot by shot: a rigid action
+  (a blade coming down, halves sliding, a camera move) renders free in Nalana or
+  headless Cycles, so only the soft shape changes (dough rising into a loaf,
+  bread slumping back to dough) need a paid video model. Price only those, and
+  name which shots run free and why.
 
 ## Worked example: the domino reveal, 2026-09-27
 

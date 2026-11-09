@@ -21,10 +21,11 @@ PRE-DEPLOY
 [ ] No .env files staged in git
 [ ] No hardcoded localhost URLs (grep -r "localhost" src/)
 [ ] No console.log in critical paths (grep -r "console.log" src/)
-[ ] All env vars set in Vercel dashboard
+[ ] All env vars set on the Railway service (never Vercel, 2026-10-10)
 [ ] NEXT_PUBLIC_APP_URL points to production domain
 
 UI CHECK
+[ ] site-gate research <repo> exits 0 (every source page inventoried, kit tools named, STEAL.md, COPY.md)
 [ ] site-gate check <every page url> exits 0 (dead links, states, 390 overflow, console, reduced motion)
 [ ] Hero section renders correctly on mobile (375px width)
 [ ] No layout overflow on any screen size
@@ -41,8 +42,9 @@ PERFORMANCE
 POST-DEPLOY
 [ ] Open production URL and verify it loads
 [ ] Test primary user flow end-to-end
-[ ] Check Vercel Function logs for runtime errors
-[ ] Check Vercel Speed Insights (first day)
+[ ] Check Railway deploy logs for runtime errors
+[ ] Railpack static site (plain index.html): a root Caddyfile sends Cache-Control no-cache, and a fresh fetch of the main script shows the new code. Without it browsers kept the old main.js after the microbots redeploy, 2026-10-20
+[ ] Load the live URL on a phone and a laptop (first day)
 ```
 
 ---

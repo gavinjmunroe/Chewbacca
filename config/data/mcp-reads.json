@@ -1,0 +1,1157 @@
+{
+  "_about": "The reads any MCP agent may run through chewbacca-mcp's kit_read tool. Each entry is a fixed argv; only the listed params are appended, typed and checked. The server writes too, but never from this file: writes live in mcp-writes.json, where each one carries an undo or sends only after kit_confirm.",
+  "reads": [
+    {
+      "id": "coursework.today",
+      "tool": "coursework",
+      "argv": [
+        "today"
+      ],
+      "about": "Today's classes and today's deadlines from the syllabus ledger.",
+      "asks": "classes today"
+    },
+    {
+      "id": "coursework.week",
+      "tool": "coursework",
+      "argv": [
+        "week"
+      ],
+      "about": "The days ahead, one block each, classes and deadlines.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      },
+      "asks": "this week schedule plan"
+    },
+    {
+      "id": "coursework.due",
+      "tool": "coursework",
+      "argv": [
+        "due"
+      ],
+      "about": "What is due, soonest first, with the source of each date.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      },
+      "asks": "due this week deadlines what do I have am I behind"
+    },
+    {
+      "id": "coursework.grade",
+      "tool": "coursework",
+      "argv": [
+        "grade"
+      ],
+      "about": "Where a course grade stands and what score is needed.",
+      "params": {
+        "course": {
+          "type": "string"
+        }
+      },
+      "asks": "grade standing score need"
+    },
+    {
+      "id": "coursework.attendance",
+      "tool": "coursework",
+      "argv": [
+        "attendance"
+      ],
+      "about": "Absences used against each course's budget.",
+      "params": {
+        "course": {
+          "type": "string"
+        }
+      },
+      "asks": "can I miss class skip absences left"
+    },
+    {
+      "id": "people.search",
+      "tool": "people",
+      "argv": [
+        "search"
+      ],
+      "about": "Who the person knows: search their relationship store for people at a company, school, city or role.",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "asks": "who do I know at company school city role"
+    },
+    {
+      "id": "people.show",
+      "tool": "people",
+      "argv": [
+        "show"
+      ],
+      "about": "Everything recorded about one person.",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.reconnect",
+      "tool": "people",
+      "argv": [
+        "reconnect"
+      ],
+      "about": "People past their own contact cadence, worst first.",
+      "params": {
+        "limit": {
+          "type": "number",
+          "flag": "--limit"
+        }
+      },
+      "asks": "haven't talked to in a while lost touch reach out neglecting overdue"
+    },
+    {
+      "id": "agents.list",
+      "tool": "kyber-sessions",
+      "argv": [],
+      "about": "Every coding agent session on this Mac (Claude Code, Codex, runs started from the HUD), what needs the person first."
+    },
+    {
+      "id": "agents.needs",
+      "tool": "kyber-sessions",
+      "argv": [
+        "needs"
+      ],
+      "about": "Only the agent sessions waiting on the person or failed.",
+      "asks": "which agents need me waiting blocked"
+    },
+    {
+      "id": "tabs.list",
+      "tool": "tabs",
+      "argv": [
+        "list"
+      ],
+      "about": "The shared board of live agent tabs and what each is doing."
+    },
+    {
+      "id": "dead_tabs",
+      "tool": "tab-rescue",
+      "argv": [
+        "--hours",
+        "12"
+      ],
+      "about": "Agent tabs that died on a usage limit in the last 12 hours, with a resume prompt for each.",
+      "asks": "tabs died crashed usage limit"
+    },
+    {
+      "id": "meetings.recorder",
+      "tool": "meeting-autopilot",
+      "argv": [
+        "status"
+      ],
+      "about": "Whether a meeting is recording right now, and which call app holds the mic.",
+      "private": "meetings",
+      "asks": "am I recording mic call"
+    },
+    {
+      "id": "glass.walk",
+      "tool": "kyber-surfaces",
+      "argv": [
+        "walk"
+      ],
+      "about": "A HUD surface's rows as text: needs-you, missing, today, tasks, conversations, people, meetings.",
+      "params": {
+        "kind": {
+          "type": "choice",
+          "choices": [
+            "needs-you",
+            "missing",
+            "today",
+            "tasks",
+            "conversations",
+            "people",
+            "meetings",
+            "files",
+            "music"
+          ],
+          "required": true
+        }
+      },
+      "private": "meetings",
+      "asks": "hud panel needs you today"
+    },
+    {
+      "id": "ledger.open",
+      "tool": "work-ledger",
+      "argv": [
+        "list",
+        "--scope",
+        "~"
+      ],
+      "about": "The person's open commitments and todos from the work ledger.",
+      "private": "meetings",
+      "asks": "todos commitments open tasks"
+    },
+    {
+      "id": "screen_time",
+      "tool": "screen-time",
+      "argv": [],
+      "about": "Mac Screen Time by app from the Mac's own database.",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      },
+      "asks": "how much time on my mac apps usage hours"
+    },
+    {
+      "id": "coursework.policy",
+      "tool": "coursework",
+      "argv": [
+        "policy"
+      ],
+      "about": "A course's rules: late work, attendance, exams, grading.",
+      "asks": "late penalty attendance rule exam rules grading breakdown",
+      "params": {
+        "course": {
+          "type": "string",
+          "required": true
+        },
+        "key": {
+          "type": "choice",
+          "choices": [
+            "ai",
+            "late",
+            "attendance",
+            "exams",
+            "grading"
+          ]
+        }
+      }
+    },
+    {
+      "id": "coursework.check",
+      "tool": "coursework",
+      "argv": [
+        "check"
+      ],
+      "about": "Validate the syllabus ledger: dates missing a source, broken entries.",
+      "asks": "is my class ledger valid"
+    },
+    {
+      "id": "brightspace.due",
+      "tool": "brightspace",
+      "argv": [
+        "due"
+      ],
+      "about": "Every Brightspace dropbox due in the window, straight from USC's Brightspace, with submitted or not.",
+      "asks": "assignments submitted dropbox",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "brightspace.courses",
+      "tool": "brightspace-sync",
+      "argv": [
+        "courses"
+      ],
+      "about": "The person's Brightspace courses.",
+      "asks": "classes enrolled"
+    },
+    {
+      "id": "people.owed",
+      "tool": "people",
+      "argv": [
+        "texts",
+        "owed"
+      ],
+      "about": "Who is waiting on a reply from the person, across iMessage, WhatsApp, Slack and email.",
+      "asks": "owe people reply unanswered texts left on read who is waiting on me",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.promises",
+      "tool": "people",
+      "argv": [
+        "tasks"
+      ],
+      "about": "Open promises made to specific people (send her the book, intro him to X), with due dates.",
+      "asks": "promised commitments to people follow ups"
+    },
+    {
+      "id": "people.loans",
+      "tool": "people",
+      "argv": [
+        "loans"
+      ],
+      "about": "Things lent and borrowed, and to whom.",
+      "asks": "lent borrowed book money"
+    },
+    {
+      "id": "people.today",
+      "tool": "people",
+      "argv": [
+        "today"
+      ],
+      "about": "Today's birthdays and who is slipping out of touch.",
+      "asks": "relationships today"
+    },
+    {
+      "id": "people.birthdays",
+      "tool": "people",
+      "argv": [
+        "birthdays"
+      ],
+      "about": "Upcoming birthdays and important dates.",
+      "asks": "birthday anniversary coming up",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.who",
+      "tool": "people",
+      "argv": [
+        "who"
+      ],
+      "about": "Answer 'who do I know who...' as a sentence: founders at YC, people in Austin, investors in fintech.",
+      "asks": "who do I know at company works in city investors founders",
+      "params": {
+        "question": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.intro",
+      "tool": "people",
+      "argv": [
+        "intro"
+      ],
+      "about": "Who could introduce the person to a company: contacts at it and the people who know them.",
+      "asks": "warm intro introduce me connection path",
+      "params": {
+        "company": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.ask",
+      "tool": "people",
+      "argv": [
+        "ask"
+      ],
+      "about": "What the person still doesn't know about someone (family, food, goals).",
+      "asks": "missing facts unknown about someone",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.history",
+      "tool": "people",
+      "argv": [
+        "history"
+      ],
+      "about": "How one relationship changed over time.",
+      "asks": "relationship over time closer drifting",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.trend",
+      "tool": "people",
+      "argv": [
+        "trend"
+      ],
+      "about": "Who is warming up and who is cooling off.",
+      "asks": "drifting apart losing touch warming",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.rank",
+      "tool": "people",
+      "argv": [
+        "rank"
+      ],
+      "about": "The closest relationships, ranked.",
+      "asks": "closest friends top people",
+      "params": {
+        "limit": {
+          "type": "number",
+          "flag": "--limit"
+        }
+      }
+    },
+    {
+      "id": "people.thread",
+      "tool": "people",
+      "argv": [
+        "texts",
+        "log"
+      ],
+      "about": "One person's message thread, newest first, across every app.",
+      "asks": "what did they text me conversation messages with",
+      "params": {
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.texts_search",
+      "tool": "people",
+      "argv": [
+        "texts",
+        "search"
+      ],
+      "about": "Full-text search over every message the person has sent or received.",
+      "asks": "find the text where messages mentioning said",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "people.calls",
+      "tool": "people",
+      "argv": [
+        "calls"
+      ],
+      "about": "Phone and FaceTime calls filed on person cards.",
+      "asks": "phone calls facetime who called",
+      "params": {
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        }
+      }
+    },
+    {
+      "id": "people.events",
+      "tool": "people",
+      "argv": [
+        "events",
+        "list"
+      ],
+      "about": "Dated life events logged from the person's texts (moves, new jobs, trips).",
+      "asks": "what happened timeline life events"
+    },
+    {
+      "id": "people.circles",
+      "tool": "people",
+      "argv": [
+        "circles"
+      ],
+      "about": "The person's circles (groups of people) and who is in each.",
+      "asks": "groups friend groups"
+    },
+    {
+      "id": "people.duplicates",
+      "tool": "people",
+      "argv": [
+        "dedupe"
+      ],
+      "about": "Likely duplicate person records in the relationship store.",
+      "asks": "duplicate contacts"
+    },
+    {
+      "id": "people.orgs",
+      "tool": "people",
+      "argv": [
+        "orgs"
+      ],
+      "about": "Companies and organizations in the relationship store, by how many people work there.",
+      "asks": "companies employers organizations"
+    },
+    {
+      "id": "people.stats",
+      "tool": "people",
+      "argv": [
+        "stats"
+      ],
+      "about": "Counts: people, circles, observations, messages.",
+      "asks": "how many contacts"
+    },
+    {
+      "id": "agents.board",
+      "tool": "agents",
+      "argv": [],
+      "about": "Claude Code sessions from the terminal hook: waiting first, then running, then done.",
+      "asks": "claude sessions running waiting"
+    },
+    {
+      "id": "tabs.leases",
+      "tool": "tabs",
+      "argv": [
+        "leases"
+      ],
+      "about": "Files live agent tabs are editing right now.",
+      "asks": "which files are being edited"
+    },
+    {
+      "id": "jobs.list",
+      "tool": "chewbacca-jobs",
+      "argv": [
+        "list"
+      ],
+      "about": "Long and heavy jobs on the Mac's queue: queued, running, paused, done.",
+      "asks": "background jobs running builds renders queue"
+    },
+    {
+      "id": "jobs.orphans",
+      "tool": "orphan-reap",
+      "argv": [],
+      "about": "Jobs a dead agent tab left running (lists only, stops nothing).",
+      "asks": "orphan processes leftover stuck slow mac"
+    },
+    {
+      "id": "mac.front",
+      "tool": "hud-context",
+      "argv": [],
+      "about": "The frontmost app, window title and selection right now.",
+      "asks": "what am I looking at on screen front window",
+      "private": "meetings"
+    },
+    {
+      "id": "mac.stores",
+      "tool": "mac-db",
+      "argv": [
+        "stores"
+      ],
+      "about": "Every database macOS keeps about the person: found, readable, rows, newest entry.",
+      "asks": "mac databases what can you read"
+    },
+    {
+      "id": "mac.data",
+      "tool": "mac-db",
+      "argv": [],
+      "private": "meetings",
+      "about": "Read one Mac store directly: messages, calls, contacts, mail, notes, calendar, reminders, Safari or Chrome history, photos, voice memos, podcasts, downloads.",
+      "asks": "apple notes reminders browser history voice memos photos contacts mail",
+      "params": {
+        "store": {
+          "type": "choice",
+          "choices": [
+            "messages",
+            "calls",
+            "contacts",
+            "mail",
+            "notes",
+            "calendar",
+            "reminders",
+            "safari",
+            "chrome",
+            "photos",
+            "voicememos",
+            "podcasts",
+            "downloads",
+            "interactions",
+            "screentime",
+            "knowledge"
+          ],
+          "required": true
+        },
+        "days": {
+          "type": "number",
+          "flag": "--days"
+        },
+        "search": {
+          "type": "string",
+          "flag": "--search"
+        },
+        "limit": {
+          "type": "number",
+          "flag": "--limit"
+        }
+      }
+    },
+    {
+      "id": "calendar.today",
+      "tool": "mac-db",
+      "argv": [
+        "calendar",
+        "--days",
+        "1",
+        "--ahead",
+        "1"
+      ],
+      "private": "meetings",
+      "about": "Calendar events from yesterday through tomorrow, from the Mac's calendar.",
+      "asks": "calendar today schedule meetings events tomorrow"
+    },
+    {
+      "id": "calendar.upcoming",
+      "tool": "mac-db",
+      "argv": [
+        "calendar",
+        "--days",
+        "1"
+      ],
+      "private": "meetings",
+      "about": "Calendar events over the next N days.",
+      "asks": "calendar this week schedule upcoming events",
+      "params": {
+        "ahead": {
+          "type": "number",
+          "flag": "--ahead"
+        }
+      }
+    },
+    {
+      "id": "screen_time.dev",
+      "tool": "screen-time",
+      "argv": [
+        "--only",
+        "dev"
+      ],
+      "about": "Screen Time for just the dev and AI apps (VS Code, Claude, Codex).",
+      "asks": "coding hours claude vs code dev apps"
+    },
+    {
+      "id": "permissions.plan",
+      "tool": "chewbacca-permissions",
+      "argv": [
+        "plan"
+      ],
+      "about": "Every macOS permission the kit needs and which are missing.",
+      "asks": "permissions accessibility full disk access missing grants"
+    },
+    {
+      "id": "ci.main",
+      "tool": "main-ci",
+      "argv": [
+        "status"
+      ],
+      "about": "Whether Chewbacca's main branch is green, and the range a red run came from.",
+      "asks": "tests ci red green main broken"
+    },
+    {
+      "id": "meetings.recent",
+      "tool": "kyber-surfaces",
+      "argv": [
+        "walk",
+        "meetings"
+      ],
+      "private": "meetings",
+      "about": "Recent meetings and calls with their summaries, decisions and action items.",
+      "asks": "last call meeting what did we decide action items notes summary"
+    },
+    {
+      "id": "meetings.capture",
+      "tool": "room-capture",
+      "argv": [
+        "status"
+      ],
+      "private": "meetings",
+      "about": "In-room capture: recording or not, what was heard, the last meeting.",
+      "asks": "room recording in person meeting"
+    },
+    {
+      "id": "meetings.granola",
+      "tool": "granola-import",
+      "argv": [
+        "status"
+      ],
+      "private": "meetings",
+      "about": "Granola meeting-notes import: connected, how many imported, last run.",
+      "asks": "granola notes import"
+    },
+    {
+      "id": "calls.live",
+      "tool": "call-pill",
+      "argv": [
+        "status"
+      ],
+      "about": "Whether a FaceTime or phone call is live right now.",
+      "asks": "on a call facetime right now"
+    },
+    {
+      "id": "backlog.now",
+      "tool": "backlog",
+      "argv": [],
+      "about": "What the kit decided to do next: the Now block of the backlog.",
+      "asks": "backlog priorities roadmap next up"
+    },
+    {
+      "id": "backlog.all",
+      "tool": "backlog",
+      "argv": [
+        "all"
+      ],
+      "about": "Every backlog item."
+    },
+    {
+      "id": "backlog.done",
+      "tool": "backlog",
+      "argv": [
+        "done"
+      ],
+      "about": "What shipped, from the backlog.",
+      "asks": "shipped finished"
+    },
+    {
+      "id": "backlog.dead",
+      "tool": "backlog",
+      "argv": [
+        "dead"
+      ],
+      "about": "What was killed, and why.",
+      "asks": "killed abandoned dropped"
+    },
+    {
+      "id": "backlog.inbox",
+      "tool": "backlog",
+      "argv": [
+        "inbox"
+      ],
+      "about": "What was asked for and is not a backlog item yet."
+    },
+    {
+      "id": "backlog.search",
+      "tool": "backlog",
+      "argv": [],
+      "about": "Backlog rows matching words.",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "team.board",
+      "tool": "team",
+      "argv": [
+        "--offline",
+        "board"
+      ],
+      "about": "The team's task board: who owns what, status, due dates.",
+      "asks": "team tasks board who is working on what assigned gavin jake"
+    },
+    {
+      "id": "team.mine",
+      "tool": "team",
+      "argv": [
+        "--offline",
+        "mine"
+      ],
+      "about": "Team tasks assigned to the person.",
+      "asks": "my tasks assigned to me"
+    },
+    {
+      "id": "team.inbox",
+      "tool": "team",
+      "argv": [
+        "--offline",
+        "inbox"
+      ],
+      "about": "Team tasks not triaged yet."
+    },
+    {
+      "id": "team.feed",
+      "tool": "team",
+      "argv": [
+        "--offline",
+        "feed"
+      ],
+      "about": "Recent activity on the team board."
+    },
+    {
+      "id": "team.show",
+      "tool": "team",
+      "argv": [
+        "--offline",
+        "show"
+      ],
+      "about": "One team task by id (CHW-12).",
+      "params": {
+        "id": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "decisions.recent",
+      "tool": "decisions",
+      "argv": [],
+      "about": "The kit's last 20 automated decisions (routing, classification) and what happened after."
+    },
+    {
+      "id": "decisions.stats",
+      "tool": "decisions",
+      "argv": [
+        "stats"
+      ],
+      "about": "How often the kit's automated decisions were right, by confidence."
+    },
+    {
+      "id": "voice.recent",
+      "tool": "superassistant",
+      "argv": [
+        "recent"
+      ],
+      "about": "The last questions the person asked the voice assistant, with its answers.",
+      "asks": "asked the voice assistant hud listen",
+      "params": {
+        "count": {
+          "type": "number"
+        }
+      },
+      "private": "meetings"
+    },
+    {
+      "id": "voice.today",
+      "tool": "superassistant",
+      "argv": [
+        "today"
+      ],
+      "about": "Today's questions to the voice assistant.",
+      "private": "meetings"
+    },
+    {
+      "id": "voice.search",
+      "tool": "superassistant",
+      "argv": [
+        "search"
+      ],
+      "about": "Questions or answers to the voice assistant containing some text.",
+      "params": {
+        "text": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "private": "meetings"
+    },
+    {
+      "id": "history.search",
+      "tool": "agent-history",
+      "argv": [
+        "search"
+      ],
+      "about": "Search every past coding agent conversation (Claude Code, Codex), newest first, secrets redacted.",
+      "asks": "past session transcript when did we talk about earlier conversation",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "private": "meetings"
+    },
+    {
+      "id": "glass.spaces",
+      "tool": "kyber-surfaces",
+      "argv": [
+        "spaces"
+      ],
+      "about": "The HUD spaces (school, amber, chewbacca, personal) and what each opens."
+    },
+    {
+      "id": "glass.list",
+      "tool": "kyber-surfaces",
+      "argv": [
+        "list"
+      ],
+      "about": "HUD surfaces: what exists, what is open, where."
+    },
+    {
+      "id": "gtm.overdue",
+      "tool": "gtm-memory",
+      "argv": [
+        "overdue"
+      ],
+      "about": "GTM commitments past due for a client.",
+      "asks": "client follow ups overdue zeutara",
+      "params": {
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.timeline",
+      "tool": "gtm-memory",
+      "argv": [
+        "timeline"
+      ],
+      "about": "A client's GTM timeline, or one account's or contact's.",
+      "asks": "client history what happened",
+      "params": {
+        "who": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.account",
+      "tool": "gtm-memory",
+      "argv": [
+        "account"
+      ],
+      "about": "Everything on one GTM account.",
+      "params": {
+        "who": {
+          "type": "string",
+          "required": true
+        },
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.contact",
+      "tool": "gtm-memory",
+      "argv": [
+        "contact"
+      ],
+      "about": "Everything on one GTM contact.",
+      "params": {
+        "who": {
+          "type": "string",
+          "required": true
+        },
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.why",
+      "tool": "gtm-memory",
+      "argv": [
+        "why"
+      ],
+      "about": "Why an account or contact is on a list: the evidence chain.",
+      "params": {
+        "who": {
+          "type": "string",
+          "required": true
+        },
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.credits",
+      "tool": "gtm-memory",
+      "argv": [
+        "credits"
+      ],
+      "about": "Clay credit spend by table, from GTM memory (no live Clay call).",
+      "asks": "credits spent cost",
+      "params": {
+        "by": {
+          "type": "choice",
+          "choices": [
+            "column",
+            "table",
+            "client"
+          ],
+          "flag": "--by"
+        },
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.experiments",
+      "tool": "gtm-memory",
+      "argv": [
+        "experiments"
+      ],
+      "about": "Outbound experiments, hypotheses and verdicts.",
+      "params": {
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtm.warm",
+      "tool": "gtm-memory",
+      "argv": [
+        "warm"
+      ],
+      "about": "Warm paths into a client's target accounts.",
+      "params": {
+        "client": {
+          "type": "string",
+          "flag": "--client"
+        }
+      }
+    },
+    {
+      "id": "gtme.rules",
+      "tool": "gtme-rules",
+      "argv": [
+        "audit"
+      ],
+      "about": "Which client rulings run as code and which are still prose.",
+      "asks": "client rulings decisions"
+    },
+    {
+      "id": "gtme.library",
+      "tool": "gtme-library",
+      "argv": [
+        "search"
+      ],
+      "about": "Search the GTM playbook library (agency write-ups, cold email research).",
+      "asks": "cold email playbook how do agencies",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "docs.find",
+      "tool": "chewbacca-docs",
+      "argv": [
+        "find"
+      ],
+      "about": "Word, Excel and PowerPoint files on the Mac whose name has the words.",
+      "params": {
+        "words": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "google.find",
+      "tool": "chewbacca-google",
+      "argv": [
+        "find"
+      ],
+      "about": "Google Docs, Sheets and Slides whose name or text matches.",
+      "asks": "google doc sheet slides drive",
+      "params": {
+        "words": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "google.recent",
+      "tool": "chewbacca-google",
+      "argv": [
+        "recent"
+      ],
+      "about": "The most recently edited Google Docs, Sheets and Slides.",
+      "params": {
+        "count": {
+          "type": "number"
+        }
+      }
+    },
+    {
+      "id": "reddit.search",
+      "tool": "reddit",
+      "argv": [
+        "search"
+      ],
+      "about": "Search Reddit posts (public, read only).",
+      "params": {
+        "query": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "discovery.usage",
+      "tool": "discovery",
+      "argv": [
+        "--help"
+      ],
+      "about": "Discovery for an AI engagement: readiness, measured baseline, ROI range and build order.",
+      "asks": "readiness assessment roi for an ai engagement discovery"
+    },
+    {
+      "id": "case-study.usage",
+      "tool": "case-study",
+      "argv": [
+        "--help"
+      ],
+      "about": "Build a client case study where every number carries its source and the math is computed.",
+      "asks": "write a client case study with sourced numbers"
+    },
+    {
+      "id": "rfp-extract.usage",
+      "tool": "rfp-extract",
+      "argv": [
+        "--help"
+      ],
+      "about": "Turn an RFP into a compliance matrix of every requirement, deadline and scoring rule.",
+      "asks": "rfp requirements compliance matrix"
+    },
+    {
+      "id": "llms-txt.usage",
+      "tool": "llms-txt",
+      "argv": [
+        "--help"
+      ],
+      "about": "Make a static site readable by AI agents: llms.txt plus a markdown twin of every page.",
+      "asks": "llms.txt make a site readable by ai agents"
+    }
+  ]
+}

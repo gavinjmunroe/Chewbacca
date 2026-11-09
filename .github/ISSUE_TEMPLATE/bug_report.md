@@ -10,7 +10,7 @@ assignees: ""
 A clear description of the bug.
 
 **Which file is affected?**
-e.g. `.claude/commands/push.md`, `setup.sh`, `CLAUDE.md`
+e.g. `.claude/commands/ship.md`, `setup.sh`, `CLAUDE.md`
 
 **Steps to reproduce**
 

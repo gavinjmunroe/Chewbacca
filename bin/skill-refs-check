@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""skill-refs-check: find dangling paths, dead commands and bad frontmatter in skills.
+
+A skill that names a file that is not there, or a command that does not exist,
+sends the agent reading it down a dead end, and nothing fails when it happens:
+the agent just improvises. This reads every skills/*/SKILL.md and reports
+
+  path      a repo-relative path (bin/x, docs/y.md, references/z.md) that
+            resolves to nothing, from the skill directory or the repo root
+  command   a command the skill tells the agent to run that is not in bin/,
+            mac/bin/, apps/*/bin/, installed by setup.sh, or a standard tool;
+            and `chewbacca <verb>` where the verb is not in bin/chewbacca's table
+  frontmatter  unparseable YAML (tools/frontmatter.py's checks), a missing
+            description, or a name that does not match the directory
+
+Deterministic, no network, no PATH lookups: the same tree gives the same answer
+on every machine, which is what makes it usable as a test.
+
+    skill-refs-check                 check the repo's skills
+    skill-refs-check path/to/skills  check another directory of skills
+                                     (paths resolve against the repo root it
+                                     sits in, or against itself)
+
+Prints file:line: category: problem, and exits 1 on any finding.
+"""
+import importlib.util
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+
+# Standard tools a skill may tell the agent to run without the kit installing
+# them: the shell itself, POSIX and macOS userland, and the language runtimes
+# every install already needs (setup.sh refuses to run without git and python3).
+STANDARD = set("""
+alias awk base64 basename bash brew break cat cd chmod chown clear cmp command
+comm cp crontab curl cut date dd defaults df diff dig dirname ditto du echo env
+eval exec exit export false file find for git grep gunzip gzip head hdiutil
+history host if jq kill killall launchctl less ln log ls lsof make man mdfind
+mdls mkdir mktemp mv nc nohup npm npx node open openssl osascript pbcopy
+pbpaste pgrep pip pip3 pkill plutil printf ps pwd python python3 read readlink
+realpath rm rmdir rsync say scp screencapture sed seq set sh shasum shift
+sfltool sips sleep sort source sqlite3 ssh stat sudo swift swiftc tail tar tccutil tee
+test time timeout tmutil touch tr trap true type ulimit umask uname uniq unset
+unzip uptime vm_stat wait wc which while whoami xargs xattr xcodebuild xcrun
+yes zip zsh do done then else fi case esac in function local return export
+codesign spctl pmset caffeinate system_profiler sw_vers networksetup scutil
+nice sdef shortcuts ioreg mdutil
+""".split())
+
+# External tools a skill legitimately names, each installed or required by the
+# kit's own setup, or by the skill's own documented install step. Every entry
+# says where it comes from, so a reader can check the claim.
+EXTERNAL = {
+    # setup.sh installs these directly (brew, npm, a built binary, or a link).
+    "wacrawl": "setup.sh: brew install openclaw/tap/wacrawl",
+    "wacli": "setup.sh: brew install openclaw/tap/wacli",
+    "slacrawl": "setup.sh: brew install openclaw/tap/slacrawl",
+    "agent-desktop": "setup.sh: npm install -g agent-desktop",
+    "claude": "setup.sh: installs Claude Code to ~/.local/bin/claude",
+    "gh": "setup.sh: required for GitHub work, checked by doctor.sh",
+    "cf": "Cloudflare's CLI, npm install -g cf; chewbacca platforms reports it missing with the fix",
+    "wrangler": "Cloudflare Workers CLI, npm install -g wrangler; chewbacca platforms reports it",
+    "uv": "setup.sh: uv is the Python env manager the kit installs with",
+    "uvx": "ships with uv, which setup.sh installs",
+    "ollama": "setup.sh and doctor.sh: local embedding and model backend",
+    "api-anything": "chewbacca api install builds it (bin/chewbacca-api); the Clay front door pins its commit",
+    # Named in a skill's own install section, not by setup.sh.
+    "manim": "skills/manim: its install step (uv pip install manim)",
+    "manimgl": "skills/manim: named only to say it is the other engine",
+    "whisper": "skills/video-edit and call-coach: openai-whisper, their install step",
+    "whisper-cli": "whisper.cpp, built by bin/hud-voice setup and doctor.sh",
+    "ffmpeg": "skills/video-edit: brew install ffmpeg, its install step",
+    "ffprobe": "ships with ffmpeg",
+    "vercel": "skills/shipping: Vercel CLI, the deploy target it documents",
+    "openspec": "skills/openspec: npm install -g @fission-ai/openspec, its install step",
+    "codex": "agent runtime the kit adapts to (config/runtimes/profiles.json)",
+    "blender": "skills/nalana: Blender is the app Nalana drives",
+    "playwright": "skills that crawl pages: npx playwright, its install step",
+    "pdftotext": "poppler, brew install poppler, named in study skills",
+    "pnpm": "skills/repo-health: the fallback only runs in a pnpm project, which has it",
+}
+
+
+def load_frontmatter_checker():
+    spec = importlib.util.spec_from_file_location("frontmatter", REPO / "tools" / "frontmatter.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.problems
+
+
+def chewbacca_verbs():
+    """The help table plus every case arm, since some verbs (welcome, connect,
+    slack) dispatch without a help line."""
+    text = (REPO / "bin" / "chewbacca").read_text(encoding="utf-8")
+    verbs = set(re.findall(r'^\s+"([a-z][a-z0-9-]*)\|', text, re.M))
+    for arm in re.findall(r'^\s*([a-z][a-z0-9-]*(?:\|[a-z][a-z0-9-]*)*)\)', text, re.M):
+        verbs.update(arm.split("|"))
+    return verbs
+
+
+def kit_commands():
+    names = set()
+    for d in [REPO / "bin", REPO / "mac" / "bin", *sorted((REPO / "apps").glob("*/bin"))]:
+        if d.is_dir():
+            names.update(p.name for p in d.iterdir() if p.is_file() or p.is_symlink())
+    toolkit = REPO / "config" / "settings" / "toolkit.json"
+    if toolkit.exists():
+        data = json.loads(toolkit.read_text(encoding="utf-8"))
+        for entry in data.get("cli", []):
+            names.add(entry.get("display", "").lower())
+    return names
+
+
+TOP_LEVEL = None
+SKILL_LOCAL = {"references", "scripts", "evals", "assets", "templates", "examples"}
+PLACEHOLDER = re.compile(r"[<>{}*$]|\.\.\.|\bNNN\b|\bXXX\b|\bfoo\b|\bwhatever\b")
+PATH_TOKEN = re.compile(r"^(?:\./)?[A-Za-z0-9_.@-]+(?:/[A-Za-z0-9_.@-]*)+$")
+REPO_ALIASES = ("~/Chewbacca/", "~/code/chewbacca/")
+SHELL_FENCES = {"bash", "sh", "shell", "zsh", "console"}
+
+
+def top_level():
+    global TOP_LEVEL
+    if TOP_LEVEL is None:
+        TOP_LEVEL = {p.name for p in REPO.iterdir() if not p.name.startswith(".git") or p.name == ".githooks"}
+        TOP_LEVEL.add(".claude")
+    return TOP_LEVEL
+
+
+def check_path(token, skill_dir, root):
+    """Return a problem string if token is a repo path that resolves to nothing."""
+    raw = token
+    for alias in REPO_ALIASES:
+        if token.startswith(alias):
+            token = token[len(alias):]
+            break
+    else:
+        if token.startswith(("~", "/", "http", "//")):
+            return None
+    token = re.sub(r"[#?].*$", "", token)
+    token = re.sub(r":\d+(-\d+)?$", "", token).rstrip(".,;:)")
+    if not token or PLACEHOLDER.search(token) or not PATH_TOKEN.match(token):
+        return None
+    first = token.lstrip("./").split("/", 1)[0]
+    local_first = (skill_dir / first).exists() or first in SKILL_LOCAL
+    if first not in top_level() and not local_first and raw == token:
+        return None
+    # A bare extension-less two-word token like "and/or" is prose, not a path.
+    if "/" not in token.strip("/"):
+        if first not in top_level() and first not in SKILL_LOCAL:
+            return None
+    for base in (skill_dir, root, REPO):
+        if (base / token).exists():
+            return None
+    # A gitignored path is generated at run time (a cache, a venv), so its
+    # absence from a clean checkout is expected, not a dead reference.
+    if ignored(skill_dir / token) or ignored(REPO / token):
+        return None
+    return f"path: {raw} does not exist (looked in {skill_dir.name}/ and the repo root)"
+
+
+def ignored(path):
+    try:
+        return subprocess.run(["git", "-C", str(REPO), "check-ignore", "-q", str(path)],
+                              capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def unquote(line, quote):
+    """Blank out quoted text, carrying an open quote across lines, so a pipe or
+    a SQL keyword inside a multi-line string is never read as a command."""
+    out = []
+    for ch in line:
+        if quote:
+            if ch == quote:
+                quote = None
+                out.append("''")
+        elif ch in "'\"":
+            quote = ch
+        else:
+            out.append(ch)
+    return "".join(out), quote
+
+
+def shell_segments(line):
+    line = re.sub(r"^\s*\$\s+", "", line)
+    line = re.sub(r"(^|\s)#.*$", "", line)
+    parts = re.split(r"(&&|\|\||[|;]|\$\(|`|\()", line)
+    prev = None
+    for part in parts:
+        if part in ("&&", "||", "|", ";", "$(", "`", "("):
+            prev = part
+            continue
+        seg = part.strip()
+        # `status  idle | busy | absent` is a usage line listing values, not a
+        # pipeline: a bare single word after a pipe is an alternative.
+        if prev == "|" and re.fullmatch(r"[a-z]+", seg):
+            continue
+        yield seg
+
+
+def first_word(seg):
+    words = seg.split()
+    while words and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]) or words[0] in ("sudo", "exec", "time", "nohup", "!", "then", "do", "else")):
+        words = words[1:]
+    return words[0] if words else ""
+
+
+def check_command(name, commands):
+    if not re.match(r"^[a-z][a-z0-9._-]*$", name):
+        return None
+    if name in commands or name in STANDARD or name in EXTERNAL:
+        return None
+    return f"command: {name} is not in bin/, mac/bin/, apps/*/bin/, setup.sh or the allowlist"
+
+
+def check_chewbacca(text, verbs):
+    out = []
+    for m in re.finditer(r"\bchewbacca\s+([a-z][a-z0-9-]*)", text):
+        if m.group(1) not in verbs:
+            out.append(f"command: chewbacca {m.group(1)} is not a verb in bin/chewbacca")
+    return out
+
+
+def check_file(path, root, commands, verbs, fm_problems):
+    findings = []
+    skill_dir = path.parent
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    for p in fm_problems(path, text):
+        findings.append((1, f"frontmatter: {p}"))
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    if m:
+        name = re.search(r"^name:\s*['\"]?([^'\"\n]+?)['\"]?\s*$", m.group(1), re.M)
+        if name and name.group(1) != skill_dir.name:
+            findings.append((1, f"frontmatter: name '{name.group(1)}' does not match directory '{skill_dir.name}'"))
+        desc = re.search(r"^description:\s*(.*)$", m.group(1), re.M)
+        if desc and not desc.group(1).strip().strip("\"'>|-"):
+            nxt = m.group(1)[desc.end():].lstrip("\n")
+            if not nxt.startswith((" ", "\t")):
+                findings.append((1, "frontmatter: description is empty"))
+
+    fence = None
+    heredoc = None
+    continued = False
+    quote = None
+    for n, line in enumerate(text.split("\n"), 1):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            fence = None if fence is not None else stripped.lstrip("`~").strip().split(" ")[0].lower()
+            continued = False
+            heredoc = None
+            quote = None
+            continue
+        if fence is not None:
+            if fence not in SHELL_FENCES:
+                continue
+            if heredoc:
+                if stripped == heredoc:
+                    heredoc = None
+                continue
+            hd = re.search(r"<<-?\s*['\"]?([A-Za-z_]+)['\"]?", line)
+            was_quoted = quote is not None
+            bare, quote = unquote(line, quote)
+            if not continued and not was_quoted and stripped and not stripped.startswith("#"):
+                for seg in shell_segments(bare):
+                    w = first_word(seg)
+                    prob = check_command(w, commands)
+                    if prob:
+                        findings.append((n, prob))
+                for prob in check_chewbacca(line, verbs):
+                    findings.append((n, prob))
+            if hd:
+                heredoc = hd.group(1)
+            continued = stripped.endswith("\\")
+            continue
+
+        # Prose line: inline code spans and markdown link targets.
+        for span in re.findall(r"`([^`\n]+)`", line):
+            span = span.strip()
+            words = span.split()
+            if len(words) == 1:
+                prob = check_path(span, skill_dir, root)
+                if prob:
+                    findings.append((n, prob))
+            # Only a hyphenated first word reads as a command in prose. A plain
+            # word followed by a flag (`owed --json`, `press <i> --yes`) is
+            # almost always a subcommand of the tool the sentence is about.
+            elif re.match(r"^[a-z][a-z0-9_]*(-[a-z0-9_]+)+$", words[0]):
+                prob = check_command(words[0], commands)
+                if prob:
+                    findings.append((n, prob))
+            for prob in check_chewbacca(span, verbs):
+                findings.append((n, prob))
+        prose = re.sub(r"`[^`\n]+`", "", line)
+        for target in re.findall(r"\]\(([^)\s]+)\)", prose):
+            prob = check_path(target, skill_dir, root)
+            if prob:
+                findings.append((n, prob))
+    return findings
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
+    skills_root = Path(args[0]).resolve() if args else REPO / "skills"
+    root = skills_root.parent
+    commands = kit_commands()
+    verbs = chewbacca_verbs()
+    fm_problems = load_frontmatter_checker()
+
+    total = 0
+    files = sorted(skills_root.glob("*/SKILL.md"))
+    counts = {"path": 0, "command": 0, "frontmatter": 0}
+    for path in files:
+        try:
+            rel = path.relative_to(REPO)
+        except ValueError:
+            rel = path
+        seen = set()
+        for n, prob in check_file(path, root, commands, verbs, fm_problems):
+            if (n, prob) in seen:
+                continue
+            seen.add((n, prob))
+            total += 1
+            counts[prob.split(":", 1)[0]] += 1
+            print(f"{rel}:{n}: {prob}")
+    if total:
+        print(f"\n{total} finding(s) in {len(files)} skill(s): "
+              f"{counts['path']} path, {counts['command']} command, {counts['frontmatter']} frontmatter")
+        return 1
+    print(f"ok  {len(files)} skill(s), no dangling paths, commands or frontmatter")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

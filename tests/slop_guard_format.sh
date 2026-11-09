@@ -37,12 +37,40 @@ else
   echo "FAIL  voice-remind did not surface or clear the pending flag"; fail=1
 fi
 
+# Realm is Carlton's agent engine; six replies naming it were refused on
+# 2026-10-10. The proper noun passes, the figure of speech still does not.
+printf 'Realm runs the agents. The realm origin-guard server restarted.\n' >"$TMP/realm-name.md"
+printf 'This is in the realm of possibility.\n' >"$TMP/realm-figure.md"
+# Captured first: prose-check exits 1 when it flags, and pipefail would turn
+# a found flag into a failed pipe.
+name_out=$(prose-check "$TMP/realm-name.md" 2>&1 || true)
+figure_out=$(prose-check "$TMP/realm-figure.md" 2>&1 || true)
+if ! grep -q banned-word <<<"$name_out" && grep -q banned-word <<<"$figure_out"; then
+  echo "ok    Realm the product passes, realm the figure of speech is still banned"
+else
+  echo "FAIL  Realm handling in prose-check"; fail=1
+fi
+
+# 2026-10-11: three replies naming bin/realm-engine and realm-morning-report.md
+# were refused, and a paste-ready prompt in a code block too, so Caleb saw each
+# reply twice. Paths, identifiers and code are not prose.
+printf 'Read ~/.chewbacca/overnight/realm-morning-report.md and bin/realm-engine.\n\n```\nDo NOT touch bin/realm-engine. Then do the em \xe2\x80\x94 dash thing.\n```\n\nAlso `realm_ui start`.\n' >"$TMP/realm-paths.md"
+paths_out=$(prose-check --chat "$TMP/realm-paths.md" 2>&1 || true)
+if grep -q clean <<<"$paths_out"; then
+  echo "ok    paths, identifiers and code blocks are never flagged as prose"
+else
+  echo "FAIL  prose-check flagged code or a path: $paths_out"; fail=1
+fi
+
+# 2026-10-11: a refusal after the reply is on screen only adds a second copy
+# ("You're repeating yourself the same message?"). Hard bans queue too now.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
 EM=$(printf 'Prayer. Amen.\n\nThis is wrong \xe2\x80\x94 very wrong.')
 code=$(run "$EM" p2)
-if [ "$code" = 2 ]; then
-  echo "ok    an em dash still refuses"
+if [ "$code" = 0 ] && grep -q em-dash "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    an em dash queues for the next reply instead of duplicating this one"
 else
-  echo "FAIL  em dash exited $code, expected 2"; fail=1
+  echo "FAIL  em dash exited $code, expected 0 and a pending em-dash flag"; fail=1
 fi
 # The exact reply refused on 2026-09-29 and re-sent as a reworded duplicate.
 rm -f "$CHEWBACCA_HOME/voice-flags.pending"
@@ -54,11 +82,12 @@ else
   echo "FAIL  style flags exited $code, expected 0 and a pending file"; fail=1
 fi
 
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
 code=$(run $'Prayer. Amen.\n\nLet us delve into the syllabus.' p4)
-if [ "$code" = 2 ]; then
-  echo "ok    a banned word still refuses"
+if [ "$code" = 0 ] && grep -q banned-word "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    a banned word queues for the next reply instead of duplicating this one"
 else
-  echo "FAIL  banned word exited $code, expected 2"; fail=1
+  echo "FAIL  banned word exited $code, expected 0 and a pending banned-word flag"; fail=1
 fi
 # 2026-10-06: "Skipped the suggested gtm-engineering skill bc..." got
 # "Never tell me what skills ur using or not using". It queues for next turn.
@@ -68,5 +97,14 @@ if [ "$code" = 0 ] && grep -q plumbing-narration "$CHEWBACCA_HOME/voice-flags.pe
   echo "ok    skill narration is flagged for the next turn"
 else
   echo "FAIL  skill narration exited $code, expected 0 and a pending plumbing flag"; fail=1
+fi
+# 2026-10-09: "These are #82 to #84 in your drafts ... The longer versions are
+# deleted." got "what's the point of saying that bruh". Same queue as plumbing.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
+code=$(run $'Prayer. Amen.\n\nTy for the file scopes!!\n\nThese are #82 to #84 in your drafts. The longer versions are deleted.' p6)
+if [ "$code" = 0 ] && grep -q backstage-bookkeeping "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    draft-number bookkeeping is flagged for the next turn"
+else
+  echo "FAIL  bookkeeping exited $code, expected 0 and a pending backstage flag"; fail=1
 fi
 exit $fail

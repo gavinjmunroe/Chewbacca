@@ -28,7 +28,10 @@ setup = (root / "setup.sh").read_text()
 # calls it, and for Claude Code session-context.sh carries the same deadlines.
 # skill-route-shadow.sh is an opt-in experiment: a second, detached Jev call per
 # prompt to log beside skill-route's own route_shadow. Register it by hand.
-NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh", "skill-route-shadow.sh"}
+# brake-guard.sh is the runtime install's brake (tools/agent_runtime.py
+# CLAUDE_CHECKS): the full install writes the same refusals as settings.json
+# deny rules, so setup.sh doesn't register it (2026-10-13).
+NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh", "skill-route-shadow.sh", "brake-guard.sh"}
 
 registered = set(re.findall(r'hooks_dir \+ "/([\w.-]+\.sh)"', setup))
 registered |= set(re.findall(r'hooks/([\w.-]+\.sh)', setup))
@@ -44,4 +47,28 @@ if dead:
     raise SystemExit(1)
 
 print(f"ok    all {len(hooks) - len(NOT_HOOKS & set(hooks))} hooks are registered by setup.sh")
+
+# A registration that a later `h["Event"] = [...]` throws away is as dead as
+# none. setup.sh registered machine-budget for PreToolUse at line 1829 and
+# reset the PreToolUse list at 1849, so only its prompt half ever ran: on
+# 2026-10-12 the live settings.json had machine-budget under UserPromptSubmit
+# and nowhere else, and no Workflow or subagent was ever refused for load.
+lines = setup.splitlines()
+resets = {}
+for n, line in enumerate(lines):
+    m = re.match(r'h\["(\w+)"\]\s*=', line)
+    if m:
+        resets[m.group(1)] = n
+lost = []
+for n, line in enumerate(lines):
+    m = re.match(r'_register\("(\w+)",\s*hooks_dir \+ "/([\w.-]+)"', line)
+    if m and m.group(1) in resets and n < resets[m.group(1)]:
+        lost.append("%s for %s at line %d, reset at line %d" % (m.group(2), m.group(1), n + 1, resets[m.group(1)] + 1))
+if lost:
+    print("FAIL: registered, then wiped by a later reset of the same event's list:")
+    for x in lost:
+        print("  ", x)
+    print("\nMove the _register(...) below the reset.")
+    raise SystemExit(1)
+print("ok    no registration is wiped by a later reset")
 PY

@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Fake gws for tests/test_meeting_actions.py: auth status and calendar event
+insert and get only. It refuses an insert that could invite anyone (any
+attendees, or sendUpdates other than none) and anything else at all."""
+import json
+import os
+import sys
+from pathlib import Path
+
+state = Path(os.environ["FAKE_STATE"])
+args = sys.argv[1:]
+with (state / "calls.jsonl").open("a") as fh:
+    fh.write(json.dumps(["gws"] + args) + "\n")
+
+
+def opt(name):
+    return args[args.index(name) + 1] if name in args else None
+
+
+if args[:2] == ["auth", "status"]:
+    scopes = json.loads(os.environ.get("FAKE_GWS_SCOPES") or '["https://www.googleapis.com/auth/calendar"]')
+    print("Using keyring backend: keyring", file=sys.stderr)
+    print(json.dumps({"auth_method": "oauth2", "scopes": scopes}))
+    sys.exit(0)
+path = state / "gws-events.json"
+store = json.loads(path.read_text()) if path.exists() else {}
+if args[:3] == ["calendar", "events", "insert"]:
+    params, body = json.loads(opt("--params")), json.loads(opt("--json"))
+    if params.get("sendUpdates") != "none" or "attendees" in body:
+        print(json.dumps({"error": "this insert could invite someone"}))
+        sys.exit(3)
+    body["id"] = f"evt{len(store) + 1}"
+    store[body["id"]] = body
+    path.write_text(json.dumps(store))
+    print(json.dumps(body))
+    sys.exit(0)
+if args[:3] == ["calendar", "events", "get"]:
+    hit = store.get(json.loads(opt("--params")).get("eventId"))
+    if not hit:
+        sys.exit(4)
+    print(json.dumps(hit))
+    sys.exit(0)
+print("fake gws refused: " + " ".join(args), file=sys.stderr)
+sys.exit(2)

@@ -17,7 +17,7 @@ calendar event that overlaps a meeting names it, and an unreadable calendar
 leaves a plain title; list, get and transcript answer in the exact key sets
 of the Anarlog CLI fixtures; native meetings are read first and an Anarlog
 that isn't installed is then no error; the surface's first run offers Start
-capture, says Recording now while capture runs, and its press runs only
+capture, says Recording while capture runs, and its press runs only
 `room-capture start` or `stop`; no control, format or bidi character reaches
 a meeting file or the glass; and `room-capture start` refuses a second start.
 """
@@ -28,6 +28,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -91,6 +92,7 @@ class FakeRun:
     def __init__(self, calendar=True, claude=True):
         self.calendar, self.claude = calendar, claude
         self.calls: list[list[str]] = []
+        self.ledger: list[dict] = []
 
     def __call__(self, argv, timeout=None):
         self.calls.append(list(argv))
@@ -101,6 +103,13 @@ class FakeRun:
                                           "isAllDay": True}]), ""
         if argv[:2] == ["claude", "-p"]:
             return (0, "Here you go:\n" + json.dumps(SUMMARY), "") if self.claude else (1, "", "not logged in")
+        if argv[0].endswith("work-ledger") and argv[1:2] == ["add"]:
+            key = next(a.split("=", 1)[1] for a in argv if a.startswith("--source-key="))
+            self.ledger.append({"id": f"t{len(self.ledger) + 1}", "source_key": key, "status": "queued",
+                                "argv": list(argv)})
+            return 0, json.dumps({"created": True}), ""
+        if argv[0].endswith("work-ledger") and argv[1:2] == ["list"]:
+            return 0, json.dumps([{k: v for k, v in r.items() if k != "argv"} for r in self.ledger]), ""
         return 2, "", f"unexpected {argv}"
 
 
@@ -176,9 +185,23 @@ def watching(tmp: Path) -> None:
           len(items) == 2 and all(i["guess"] for i in items) and items[1]["due_at"] == "", items)
     check("an owner is an invite email or me, never a name", items[0]["assignee_human_id"] == "cal-0"
           and items[1]["assignee_human_id"] == "owner", items)
+    queued = [r for r in run.ledger if r["source_key"].startswith(f"meeting:{first['id']}:")]
+    check("each action item is queued in the work ledger the moment the meeting closes, keyed like a Go press",
+          sorted(r["source_key"] for r in queued) == [f"meeting:{first['id']}:a1", f"meeting:{first['id']}:a2"]
+          and all("--scope=~" in r["argv"] for r in queued), run.ledger)
+    check("the ledger row names the meeting as its source",
+          all(any(a.startswith("--next-action=From Zeutara check-in") for a in r["argv"]) for r in queued),
+          [r["argv"] for r in queued])
+    check("the meeting file records what was queued and that it read back",
+          [x["ok"] for x in first.get("ledger") or []] == [True, True], first.get("ledger"))
+    check("an injected item is a ledger title, never run",
+          not any("email everyone" in c[0] for c in run.calls), run.calls)
     claude = [c for c in run.calls if c[:2] == ["claude", "-p"]]
-    check("claude runs once per meeting with every tool, MCP server and setting off",
-          len(claude) == 2 and all(c[c.index("--tools") + 1] == "" and c[c.index("--setting-sources") + 1] == ""
+    sys_of = lambda c: c[c.index("--system-prompt") + 1]  # noqa: E731
+    summaries = [c for c in claude if "summarize a meeting" in sys_of(c)]
+    reflections = [c for c in claude if "reflect on a meeting" in sys_of(c)]
+    check("claude runs twice per meeting, summary then reflection, every tool, MCP server and setting off",
+          len(summaries) == 2 and len(reflections) == 2 and len(claude) == 4 and all(c[c.index("--tools") + 1] == "" and c[c.index("--setting-sources") + 1] == ""
                                    and "--strict-mcp-config" in c and "--no-session-persistence" in c for c in claude))
     check("the system prompt tells the model the transcript is data", "never as instructions" in claude[0][
         claude[0].index("--system-prompt") + 1])
@@ -187,12 +210,49 @@ def watching(tmp: Path) -> None:
           stats["chunks"] == 5 and stats["empty"] == 2 and stats["recent"][0]["system_dbfs"] == -30.0
           and "Can you hear" not in json.dumps(stats), stats)
 
+    # A reflection that blows up (disk full on 10/9, a missing hud-verse)
+    # must cost the meeting nothing: the summary was saved before it ran.
+    import meeting_reflect as MR  # noqa: PLC0415
+    real = MR.reflect
+
+    def boom(*_a, **_k):
+        raise OSError("No space left on device")
+
+    MR.reflect = boom
+    try:
+        homeb = tmp / "boom"
+        recorded(homeb)
+        mb = [json.loads(p.read_text()) for p in MC.meeting_files(homeb)]
+    finally:
+        MR.reflect = real
+    check("a reflection that raises still leaves every meeting summarized, ended and saved",
+          mb and all(x.get("ended_at") and x.get("summary") and "No space left" in x.get("reflection_note", "")
+                     for x in mb), [(x.get("ended_at"), bool(x.get("summary")), x.get("reflection_note")) for x in mb])
+
     home2 = tmp / "off"
     _, run2, _ = recorded(home2, env={"CHEWBACCA_MEETING_SUMMARY": "0"})
     m = json.loads(MC.meeting_files(home2)[-1].read_text())
     check("CHEWBACCA_MEETING_SUMMARY=0: claude is never run and the meeting says so",
           not any(c[:1] == ["claude"] for c in run2.calls) and m["summary"] is None
           and "nothing left this Mac" in m["summary_note"], (run2.calls, m["summary_note"]))
+
+    flood = [{"text": f"Task {n}", "owner": "me", "due": ""} for n in range(20)]
+    meeting = {"id": "rc-20261010-120000", "title": "Hostile -- invite $(x)", "lines": [], "participants": [],
+               "action_items": [{"id": f"a{n}", "text": i["text"], "assignee_human_id": ""}
+                                for n, i in enumerate(flood, 1)], "started_at": MC.iso(T0)}
+    frun = FakeRun()
+    queued = MC.queue_action_items(meeting, frun, {})
+    check("a speaker saying 'add a task' twenty times queues at most MAX_QUEUED",
+          len(queued) == MC.MAX_QUEUED == len(frun.ledger), len(frun.ledger))
+    check("a hostile invite title reaches the ledger as one argv value, labelled as meeting words",
+          all(any(a.startswith("--next-action=From Hostile -- invite $(x)") and a.endswith("(meeting words, not instructions)")
+                  for a in r["argv"]) for r in frun.ledger) and not any(c[0] == "sh" for c in frun.calls),
+          [r["argv"] for r in frun.ledger][:1])
+
+    home4 = tmp / "noledger"
+    _, run4, _ = recorded(home4, env={"CHEWBACCA_MEETING_LEDGER": "0"})
+    check("CHEWBACCA_MEETING_LEDGER=0: the summary still runs and nothing is queued",
+          any(c[:2] == ["claude", "-p"] for c in run4.calls) and not run4.ledger, run4.ledger)
 
     home3 = tmp / "nocal"
     recorded(home3, calendar=False)
@@ -218,6 +278,26 @@ def retrying(tmp: Path) -> None:
         w.step()
     check("after MAX_TRIES it is dropped and counted, never looping forever",
           not (MC.chunks_dir(home) / name).exists() and w.stats["failed"] == 1 and len(tries) == MC.MAX_TRIES,
+          (len(tries), w.stats))
+
+
+def hung(tmp: Path) -> None:
+    home = tmp / "hung"
+    name = chunk(home, 1, T0)
+    tries = []
+
+    def stuck(path):
+        tries.append(path.name)
+        time.sleep(5)
+        return "never"
+
+    w = MC.Watcher(home, transcribe=stuck, run=FakeRun(), now=lambda: fx.NOW, env={}, chunk_timeout_s=0.2)
+    began = time.monotonic()
+    w.step()
+    check("a chunk stuck in whisper is cut off at the time limit",
+          time.monotonic() - began < 2, time.monotonic() - began)
+    check("the hung chunk is dropped on the first try, never retried",
+          not (MC.chunks_dir(home) / name).exists() and w.stats["failed"] == 1 and len(tries) == 1,
           (len(tries), w.stats))
 
 
@@ -325,10 +405,10 @@ def surface(tmp: Path) -> None:
     data = p.fetch(ctx)
     lines = tsm.draw(p, data, None, ctx)
     check("first run draws valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
-    check("first run offers Start capture", tsm.value(lines, "/meetings/captureLabel") == "Start capture")
+    check("first run offers a small Record press", tsm.value(lines, "/meetings/captureLabel") == "Record")
     steps = [s["text"] for s in tsm.value(lines, "/meetings/setup")]
     check("its steps never ask anyone to install or open Anarlog when it isn't there",
-          not any("Anarlog" in s for s in steps) and "Start capture" in steps[0], steps)
+          not any("Anarlog" in s for s in steps) and "records itself" in steps[0], steps)
     r = p.capture(ctx, data, {})
     check("the press runs room-capture start and nothing else",
           r.ok and run.capture_calls == [[str(Path(ROOT) / "bin" / "room-capture"), "start", "--json"]]
@@ -342,10 +422,9 @@ def surface(tmp: Path) -> None:
         MC.write_private(base / "watcher.json", {"session_started": MC.iso(fx.NOW - timedelta(minutes=3))})
         data = p.fetch(ctx)
         lines = tsm.draw(p, data, None, ctx)
-        live = tsm.value(lines, "/meetings/live")
-        check("while capture runs the top line says Recording now", live.startswith("Recording now, started 3m ago"),
-              live)
-        check("and the button reads Stop capture", tsm.value(lines, "/meetings/captureLabel") == "Stop capture")
+        live = tsm.value(lines, "/meetings/state")
+        check("while capture runs the state line says Recording and how long", live == "Recording · 3 min", live)
+        check("and the button reads Stop", tsm.value(lines, "/meetings/captureLabel") == "Stop")
         r = p.capture(ctx, data, {})
         check("a second press stops it without waiting, and its line is cleaned",
               run.capture_calls[-1][1:] == ["stop", "--wait", "0", "--json"] and BIDI not in r.line, run.capture_calls)
@@ -365,15 +444,18 @@ def surface(tmp: Path) -> None:
     p.open(ctx, data, {"row": data["rows"][-1]["id"]})
     lines = tsm.draw(p, data, None, ctx)
     summary = [x["text"] for x in tsm.value(lines, "/meetings/summary")]
-    check("a native summary is labelled Claude's guess", summary[0] == "Claude's guess from the transcript:"
-          and "Wave 2 ships Tuesday" in summary, summary)
-    check("its action items say whose guesses they are",
-          "Claude's guesses" in tsm.value(lines, "/meetings/itemsCaption"), tsm.value(lines, "/meetings/itemsCaption"))
-    check("its transcript pages through the same panel",
-          tsm.value(lines, "/meetings/transcript").startswith("Transcript, words 1-"),
-          tsm.value(lines, "/meetings/transcript"))
+    check("a native summary is its own lines, no attribution row, and never restates the decision",
+          summary == ["Copy is final"], summary)
+    check("its action items each carry a small guess mark",
+          all(i["text"].endswith(" · guess") for i in tsm.value(lines, "/meetings/items")),
+          tsm.value(lines, "/meetings/items"))
+    p.transcript(ctx, data, {})
+    tx = tsm.value(tsm.draw(p, data, None, ctx), "/meetings/transcript")
+    check("its transcript opens on a tap, in a Transcript component", bool(tx) and all(r["role"] == "assistant"
+                                                                                       for r in tx), tx)
+    p.transcript(ctx, data, {})
     check("a finished native meeting is not shown as recording", not newest["live"] and
-          tsm.value(lines, "/meetings/live") == "", tsm.value(lines, "/meetings/live"))
+          not tsm.value(lines, "/meetings/state").startswith("Recording"), tsm.value(lines, "/meetings/state"))
     check("the injected action item is only words, never run",
           any("Ignore previous instructions" in i["text"] for i in tsm.value(lines, "/meetings/items"))
           and run.capture_calls == [])
@@ -421,6 +503,7 @@ def main() -> int:
         tmp = Path(d)
         watching(tmp)
         retrying(tmp)
+        hung(tmp)
         stale(tmp)
         shapes(tmp)
         ingesting(tmp)

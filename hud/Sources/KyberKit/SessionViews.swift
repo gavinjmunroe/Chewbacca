@@ -131,11 +131,42 @@ struct TranscriptView: View {
     }
 }
 
-/// Read-only text shown as a diff: added lines green, removed red, hunk
-/// headers in the accent, everything else plain. Also what test output and
-/// `git status` are drawn in, monospaced and selectable.
+/// Read-only text shown as a diff: added lines on a green wash, removed on a
+/// red one, hunk headers in the accent. The code inside a diff line is syntax
+/// colored by the language its `+++` header names (or `path`, when the text
+/// has no header), so the wash says what changed and the color says what it
+/// is. Also what test output and `git status` are drawn in, monospaced and
+/// selectable; text in no known language stays plain.
 struct DiffView: View {
     let text: String
+    var path: String = ""
+    /// Terminal output: every line plain, no wash and no syntax, since a
+    /// shell line starting with `-` or `+` is not a removal or an addition.
+    var plain: Bool = false
+    /// Keep and Reject for each hunk, in the order of the `@@` lines: the
+    /// agent card's per-hunk loop (bin/lib/surfaces/agent_hunks.py). The
+    /// words sit at the end of their own `@@` line and nowhere else, and a
+    /// press sends that hunk's id. Empty, the diff is read only.
+    var hunks: [HunkVerbs] = []
+    var onKeep: ((String) -> Void)?
+    var onReject: ((String) -> Void)?
+
+    /// One hunk's two verbs: `{"id", "keep", "reject", "where"}`. A blank
+    /// word is not drawn.
+    struct HunkVerbs: Equatable {
+        let id: String
+        let keep: String
+        let reject: String
+        let place: String
+
+        static func parse(_ items: [JSON]) -> [HunkVerbs] {
+            items.compactMap { item in
+                guard let o = item.objectValue, let id = o["id"]?.stringValue, !id.isEmpty else { return nil }
+                return HunkVerbs(id: id, keep: o["keep"]?.display ?? "", reject: o["reject"]?.display ?? "",
+                                 place: o["where"]?.display ?? "")
+            }
+        }
+    }
 
     /// Drawn lines are capped: a 20,000-line diff is not read on a HUD, and
     /// laying it out stalls the glass. The tail is kept, where a test run's
@@ -143,6 +174,15 @@ struct DiffView: View {
     static let maxLines = 600
 
     enum Kind: Equatable { case added, removed, hunk, header, plain }
+
+    struct Line: Identifiable {
+        let id: Int
+        let kind: Kind
+        let body: AttributedString
+        /// Which `@@` line of the whole text this is (0 for the first),
+        /// counted before the drawn lines are cut, nil for any other line.
+        var hunk: Int? = nil
+    }
 
     static func kind(_ line: Substring) -> Kind {
         if line.hasPrefix("+++") || line.hasPrefix("---") { return .header }
@@ -152,23 +192,76 @@ struct DiffView: View {
         return .plain
     }
 
-    private var lines: [(Int, Substring)] {
+    /// The file a header line names: `+++ b/x.swift`, `--- path`, or
+    /// `diff --git a/x b/x`. Nil for any other line.
+    static func headerPath(_ line: Substring) -> String? {
+        if line.hasPrefix("diff --git ") {
+            return line.split(separator: " ").last.map(String.init)
+        }
+        guard line.hasPrefix("+++ ") || line.hasPrefix("--- ") else { return nil }
+        let rest = line.dropFirst(4).split(separator: "\t").first.map(String.init) ?? ""
+        return rest == "/dev/null" ? nil : rest
+    }
+
+    /// Every drawn line with its color worked out once. A line of code in a
+    /// known language becomes its marker (`+`, `-`, or the context space)
+    /// followed by syntax-colored tokens.
+    static func lines(_ text: String, path: String, plain: Bool = false) -> [Line] {
         let all = text.split(separator: "\n", omittingEmptySubsequences: false)
-        return Array(all.suffix(Self.maxLines).enumerated())
+        if plain {
+            let start = max(0, all.count - maxLines)
+            return all.enumerated().dropFirst(start).map { index, line in
+                var body = AttributedString(line.isEmpty ? " " : String(line))
+                body.foregroundColor = color(.plain)
+                return Line(id: index, kind: .plain, body: body)
+            }
+        }
+        var language = Syntax.language(forPath: path)
+        var state = Syntax.State()
+        var out: [Line] = []
+        let start = max(0, all.count - maxLines)
+        var hunks = 0
+        for (index, line) in all.enumerated() {
+            let kind = Self.kind(line)
+            let ordinal: Int? = kind == .hunk ? hunks : nil
+            if kind == .hunk { hunks += 1 }
+            if let named = headerPath(line) {
+                language = Syntax.language(forPath: named) ?? language
+                state = Syntax.State()
+            }
+            if kind == .hunk { state = Syntax.State() }
+            // Scanned even when not drawn, so a block comment opened above
+            // the cut still closes in the right place.
+            var body: AttributedString
+            if let language, kind == .added || kind == .removed || (kind == .plain && line.hasPrefix(" ")) {
+                let code = String(line.dropFirst())
+                var marker = AttributedString(String(line.prefix(1)))
+                marker.foregroundColor = kind == .added ? HUD.good : kind == .removed ? HUD.bad : HUD.faint
+                body = marker + Syntax.attributed(Syntax.tokens(code, language, state: &state))
+            } else {
+                body = AttributedString(line.isEmpty ? " " : String(line))
+                body.foregroundColor = color(kind)
+            }
+            if index >= start { out.append(Line(id: index, kind: kind, body: body, hunk: ordinal)) }
+        }
+        return out
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(lines, id: \.0) { _, line in
-                let kind = Self.kind(line)
-                Text(line.isEmpty ? " " : String(line))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(color(kind))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 6)
-                    .background(background(kind))
+            ForEach(Self.lines(text, path: path, plain: plain)) { line in
+                HStack(spacing: 10) {
+                    Text(line.body)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let n = line.hunk, n < hunks.count {
+                        verbs(hunks[n])
+                    }
+                }
+                .padding(.horizontal, 6)
+                .background(Self.background(line.kind))
             }
         }
         .textSelection(.enabled)
@@ -176,7 +269,23 @@ struct DiffView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func color(_ kind: Kind) -> Color {
+    /// Keep lit in Realm's accent ink, Reject in the quieter ink: the
+    /// one that throws work away is never the loud one (hud/CLAUDE.md,
+    /// Carlton's language: a destructive verb says its cost first, and the
+    /// caption above the diff says it).
+    @ViewBuilder
+    private func verbs(_ h: HunkVerbs) -> some View {
+        if !h.keep.isEmpty, let onKeep {
+            HunkWord(text: h.keep, ink: Realm.accentInk) { onKeep(h.id) }
+                .accessibilityLabel("\(h.keep) \(h.place)")
+        }
+        if !h.reject.isEmpty, let onReject {
+            HunkWord(text: h.reject, ink: Realm.ink2) { onReject(h.id) }
+                .accessibilityLabel("\(h.reject) \(h.place)")
+        }
+    }
+
+    static func color(_ kind: Kind) -> Color {
         switch kind {
         case .added: return HUD.good
         case .removed: return HUD.bad
@@ -186,11 +295,151 @@ struct DiffView: View {
         }
     }
 
-    private func background(_ kind: Kind) -> Color {
+    static func background(_ kind: Kind) -> Color {
         switch kind {
-        case .added: return HUD.good.opacity(0.12)
-        case .removed: return HUD.bad.opacity(0.12)
+        case .added: return HUD.good.opacity(0.14)
+        case .removed: return HUD.bad.opacity(0.14)
         default: return .clear
+        }
+    }
+}
+
+/// A verb drawn as a word on a diff line: no capsule, a light overlay while
+/// the pointer is on it that arrives at once and leaves over Realm's hover
+/// duration, and a 44-point-tall invisible target kept around the word.
+struct HunkWord: View {
+    let text: String
+    let ink: Color
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(Realm.font(Realm.Size.tiny, Realm.Weight.medium))
+                .tracking(Realm.tracking(Realm.Size.tiny))
+                .foregroundStyle(ink)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(hovering ? Realm.hoverFill : .clear,
+                            in: RoundedRectangle(cornerRadius: Realm.Radius.chip, style: .continuous))
+                .contentShape(Rectangle().inset(by: -6))
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in
+            withAnimation(inside ? nil : Realm.fade(Realm.Duration.hover)) { hovering = inside }
+        }
+    }
+}
+
+/// The tree beside a session card: what the session touched plus one level
+/// of context, never the whole repo (docs/plans/NO-APPS.md, "The HUD IDE").
+///
+/// `items` are `{"id","name","depth","dir"}` with optional `"mark"` (git's
+/// status letters, or `edited` / `read` from the transcript), `"collapsed"`
+/// on a folder drawn shut, and `"note"` on the closing "N more" line. A file
+/// row is a press that sends `e action <action> row=<id>`; folders and the
+/// note are not pressable. Names came from a repo and a transcript, so they
+/// are drawn as plain text and nothing else.
+struct TreeView: View {
+    struct Row: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let depth: Int
+        let isDir: Bool
+        let mark: String
+        let collapsed: Bool
+        let note: Bool
+    }
+
+    let rows: [Row]
+    let onOpen: ((String) -> Void)?
+
+    /// Indent per level. Twelve points keeps eight levels inside a 320-point
+    /// panel with the name still readable. Guessed, never measured.
+    static let indent: CGFloat = 12
+
+    static func rows(_ json: [JSON]) -> [Row] {
+        json.compactMap { entry in
+            guard let o = entry.objectValue, let id = o["id"]?.display, !id.isEmpty else { return nil }
+            return Row(
+                id: id,
+                name: String((o["name"]?.display ?? "").prefix(120)),
+                depth: min(max(Int(o["depth"]?.doubleValue ?? 0), 0), 16),
+                isDir: o["dir"] == .bool(true),
+                mark: String((o["mark"]?.display ?? "").prefix(8)),
+                collapsed: o["collapsed"] == .bool(true),
+                note: o["note"] == .bool(true))
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if rows.isEmpty {
+                Text("Nothing touched yet")
+                    .font(.system(size: 12))
+                    .foregroundStyle(HUD.faint)
+            }
+            ForEach(rows) { row in
+                if row.isDir || row.note || onOpen == nil {
+                    label(row)
+                } else if let onOpen {
+                    Button { onOpen(row.id) } label: { label(row).contentShape(Rectangle()) }
+                        .buttonStyle(RowButtonStyle())
+                        .accessibilityLabel("Open \(row.name)\(row.mark.isEmpty ? "" : ", \(Self.markWords(row.mark))")")
+                }
+            }
+        }
+    }
+
+    private func label(_ row: Row) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: row.note ? "ellipsis" : row.isDir ? (row.collapsed ? "folder" : "folder.fill") : "doc.text")
+                .font(.system(size: 9.5))
+                .foregroundStyle(row.isDir ? HUD.accent.opacity(0.8) : HUD.faint)
+                .frame(width: 13)
+            Text(row.name + (row.isDir ? "/" : ""))
+                .font(.system(size: 11.5, design: .monospaced))
+                .foregroundStyle(row.note ? HUD.faint : row.mark.isEmpty ? HUD.dim : HUD.ink)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            if !row.mark.isEmpty {
+                Text(Self.markLabel(row.mark))
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Self.markColor(row.mark))
+            }
+        }
+        .padding(.leading, CGFloat(row.depth) * Self.indent)
+        .padding(.vertical, 3)
+        .frame(minHeight: 22)
+    }
+
+    static func markLabel(_ mark: String) -> String {
+        switch mark {
+        case "edited": return "edit"
+        case "read": return "read"
+        default: return mark
+        }
+    }
+
+    static func markWords(_ mark: String) -> String {
+        switch mark {
+        case "edited": return "edited by the session"
+        case "read": return "read by the session"
+        case "?", "??", "A": return "new"
+        case "D": return "deleted"
+        default: return "changed"
+        }
+    }
+
+    static func markColor(_ mark: String) -> Color {
+        switch mark {
+        case "read": return HUD.faint
+        case "edited": return HUD.accent
+        case "?", "??", "A": return HUD.good
+        case "D": return HUD.bad
+        default: return HUD.warn
         }
     }
 }

@@ -11,7 +11,7 @@ claude-code`, `codex`, or `both` installs the chosen adapters. Shared skills liv
 under `~/.chewbacca/skills`; native discovery links point at that library. Existing
 conflicting skills and unrelated configuration are preserved and reported.
 `config/runtimes/profiles.json` records runtime and platform requirements, with sources.
-See `docs/RUNTIMES.md` for setup, migration, model selection and capability limits.
+See `docs/reference/RUNTIMES.md` for setup, migration, model selection and capability limits.
 
 Claude Code uses its native JSON hooks, tools and skill extensions. Codex uses
 its own lifecycle adapter, including multi-file patch translation and private
@@ -54,6 +54,31 @@ UI; deploy-gate before deployment. Their path metadata and Claude-only instructi
 are not executable hooks in other agents. Use supported tools, and explain missing
 capabilities instead of claiming an unsupported slash command or hook ran.
 
+## Spend effort on the requested outcome
+
+For substantial or urgent work, identify the observable finish condition, the
+next blocking dependency and a proportionate time/tool budget before expanding
+scope. Keep this lightweight. Routine actions need a direct check.
+
+Complete the smallest safe end-to-end result first. Separate immediate recovery
+from broader improvements, even when both are authorized. Keep the broader work
+open; do not make it a prerequisite unless it actually blocks the requested result.
+Before a tooling repair or refactor, name that dependency and the smallest repair
+that removes it. A useful improvement alone does not justify delaying recovery.
+
+After a failed attempt, new blocker or material budget overrun, reconsider the
+next action against the original outcome. After two failures of the same kind,
+diagnose the repeated failure before another attempt. Retain review context and
+completed evidence instead of restarting an unchanged review. Preserve required
+checks and permissions; time pressure never establishes correctness or authority.
+
+When work waits on capacity or an external service, save its exact next action
+and use the existing queue or wakeup. Do independent necessary work meanwhile;
+avoid repeated polling, duplicate jobs and speculative additions. Respect the
+user's attention and machine budget. Report the actual delivered result and what
+still blocks it. Commits, test counts and activity are supporting evidence, not
+completion of a client outcome.
+
 ## Working standards
 
 Shared standards currently retain their historical `.claude/rules/` paths.
@@ -68,6 +93,18 @@ checks that touch real apps or models. Normal doctor never spends model quota.
 Use `ai-scan` and `slop-check` for prose and `code-slop` for code when installed.
 Read back generated files and verify the edit landed. Report observed outcomes,
 failures, and skipped checks accurately.
+
+Attack before done is step one of finishing. Caleb, 2026-10-16: "When they build
+something and say it's done, chewbs should attack it from every angle trying to
+break it before it concludes anything". Before saying done, landed, shipped or
+complete, record attacks with `chewbacca break-it attack -m "<what>" -- <command>`:
+the real example behind the work, garbage and empty input, the failure path, and a
+second client or config if it claims to be reusable. Then `chewbacca break-it run
+--transcript <path>` (Codex: `--ask "<prompt>"`) checks the ask clause by clause,
+reruns touched tests (on origin/main too once landed), probes touched commands,
+matches each claim to what ran, greps the diff and writes a receipt bound to HEAD.
+Fix what broke and name what stays open. The break-it Stop hook refuses a done claim
+over a change it can still break.
 
 Own routine code review without requiring the user to inspect diffs. Before
 claiming a code change complete, use reviewing-changes and an independent reviewer,
@@ -87,6 +124,11 @@ the user's cancellation or a documented scope decision. The ledger does not spaw
 workers. Dispatch dependency-ready jobs within the host's actual concurrency and
 resource limits, and retain waiting jobs for later waves.
 
+"Save to todo" or "add to my todo" means `work-ledger add --scope ~`, which every
+tab reads at startup. Never file it in Things, Todoist or Reminders, and call it
+the work ledger in the reply, never a todo app or todo list (Caleb, 2026-10-14:
+"I don't use a todo app!").
+
 Other agent tabs may be live on this machine in any runtime. `tabs context` shows
 each one's runtime, repository, latest ask and recently written files; Claude Code
 and Codex hooks inject it automatically. A runtime without hooks joins with
@@ -105,8 +147,19 @@ verified evidence and reusable procedures; public tools and untested ideas are n
 an exclusive advantage. **Coachable:** treat corrections as evidence, check their
 source and scope, update the owning procedure, then verify retrieval and changed
 behavior on a later untouched task. Saving a lesson alone is not learning. Read
-`docs/DECISION-STANDARDS.md` for substantial decisions.
+`docs/reference/DECISION-STANDARDS.md` for substantial decisions.
 Routine deterministic actions use a direct check, without a new essay or model call.
+
+Before any job that repeats a step more than about a hundred times (an export, a
+scrape, a sync, a bulk fetch), pick the fastest route first and say it in one
+line: time one unit, split where the seconds go (startup, network, the remote
+answer), multiply out the total, and name the cheaper shape if one exists: one
+long-lived process or a batch mode in place of a process per call, bulk
+endpoints over one-by-one, the most valuable data first when access can end. On
+2026-10-26 a Clay export ran a fresh process per read, ~3 s of startup against
+~0.3 s of Clay's answer, and Caleb asked "Ru sure there's not a more efficient
+way to do this?" before anyone had measured. Then: "Fix chewbs to always think
+through the most efficient way to doing smth".
 
 After each substantial phase, compare evidence with the baseline and acceptance
 limits; choose continue, revise or stop. Preserve failures and provenance, test
@@ -129,7 +182,7 @@ Test unfamiliar tasks and retention before claiming transfer or durable expertis
 relative improvement alone does not establish an acceptable success rate.
 
 For UI learning, `chewbacca ux-learning` validates versioned navigation maps and
-records explicitly supplied private evidence. Read `docs/UX-LEARNING-FORMAT.md`
+records explicitly supplied private evidence. Read `docs/reference/UX-LEARNING-FORMAT.md`
 and the relevant map before reuse; routes are suggestions, not current-screen
 observations. Retain failures and recovery evidence privately; share only sanitized
 recipes with tested scope. Verified once does not mean mastered. Build reusable
@@ -157,8 +210,20 @@ failure conditions into shared packages. Verified once does not mean mastered;
 recheck stale UI observations and test transfer on heldout tasks. Use the offline
 `gtme-math`, `gtme-graph`, `gtme-learning`, `gtme-library`, `task-graph`,
 `clay-fixture-check`, and `ux-learning` commands through `chewbacca` or directly.
-See `docs/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
+See `docs/reference/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
 These methods grant no sending, publication, spending, or hook permissions.
+
+## Team memory
+
+Memory about Amber, Chewbacca and Firm Foundation is shared by everyone building
+them. It lives in `team/memory/` in this repo, one fact per file with the same
+frontmatter as private memory, indexed one line per file in
+`team/memory/MEMORY.md`. Write a lesson, decision or project fact about those three
+there, not in a private memory directory, and add its index line in the same edit.
+Everything else (health, family, school, voice, personal plans, private opinions
+of teammates) stays private. Before saving, ask whether every teammate with repo
+access should read it; when unsure, keep it private. No secrets, phone numbers or
+personal emails in team memory.
 
 ## Private context and second brain
 
@@ -179,6 +244,22 @@ satisfy a startup convention. Follow relevant index links for deeper context.
 The adapter translates multi-file patches and reply-check feedback to Codex's
 event formats. Private-repository syncs, commits, and pushes require their own
 authorized workflow outside the adapter.
+
+## School
+
+"I need to lock in on school", "pull my slides" or "what's due" from a student
+runs the coursework skill. For a USC student the first command is
+`chewbacca usc lockin`: their courses from their own Brightspace enrollment,
+what's due first, and the lecture files to pull, read from the session already
+in Chrome. Run it before searching the disk, and never open a browser tab for it.
+
+## Outside platforms
+
+`chewbacca platforms` shows every outside account (Cloudflare, Railway, Vercel, Supabase,
+GitHub, Google Workspace, Porkbun, Clay, Twilio, WhatsApp) as connected or not, with the fix;
+`chewbacca platforms show <name>` gives sign-in and common jobs. Buy domains on Cloudflare and
+set up a cold-email sending domain with `chewbacca platforms sending-domain plan|apply|check`.
+The `platforms` skill has the full recipe. Secrets stay in each CLI's store or the keychain.
 
 ## Machine and browser operations
 

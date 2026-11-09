@@ -1,0 +1,165 @@
+{
+  "about": "Tier 1 of kyber-genui's composer (docs/reference/GENUI.md, Tiers). An archetype is the question's shape; a source is a query from the vocabulary. Jev picks one of each from these descriptions, code fills the arguments, and bin/lib/genui_tiers.py picks the concrete components from the shape of the data the query actually returned. Nothing here holds data, and every layout still goes through the validator and policy. `connections` is listed so Jev can say a request wants a drawing; no query returns relationships yet, so it always goes to the model.",
+  "thresholds": {
+    "source": 0.5,
+    "why": "Guessed at 0.5, then checked on the frozen 20 only (2026-10-10), never on the sealed set: every source Jev picked at or above it was one a person would accept, and the one request it put under it (#20, a note field, 0.48 for none) belonged with the model. There is no archetype threshold: the archetype only steers which components the math step prefers, so a weak archetype costs a worse arrangement, never a wrong number."
+  },
+  "archetypes": {
+    "count": {
+      "jev": "one number: how many, how much, an average or a total, possibly with a trend",
+      "glance": true,
+      "components": "Metric for the number; Sparkline under it if there is a series, else Bars when the parts differ"
+    },
+    "compare": {
+      "jev": "compare the same measure across several things: which class, which day, which person is highest or lowest",
+      "glance": true,
+      "components": "Bars for one magnitude per thing, Table when each thing has several fields, Ring only for a real proportion"
+    },
+    "timeline": {
+      "jev": "what is coming up or what happened, in time order: deadlines, exams, events, what is next or overdue",
+      "glance": true,
+      "components": "Events, soonest first; a Metric count above when more than six"
+    },
+    "act": {
+      "jev": "a list of things to act on: replies owed, promises to keep, people to contact",
+      "glance": true,
+      "components": "Table of the fields that differ, or Bars when ranked by days; a Metric count when the list is cut off"
+    },
+    "entity": {
+      "jev": "one specific thing in detail: a single class, a single campaign or client, a single person",
+      "glance": true,
+      "components": "a Metric count and Events for that one thing"
+    },
+    "plan": {
+      "jev": "a schedule or plan for a day or a few days: classes, deadlines and events laid out by time",
+      "glance": true,
+      "components": "Events for one day; Bars per day for how loaded several days are"
+    },
+    "breakdown": {
+      "jev": "how a total splits into parts or a proportion: load per class or per day, share done",
+      "glance": true,
+      "components": "a Metric total and Bars per part, or a Ring for a share of a real ceiling"
+    },
+    "before-after": {
+      "jev": "what has to happen before a milestone such as an exam or midterm",
+      "glance": true,
+      "components": "a Metric count and Events with the milestone first (before-exam does this)"
+    },
+    "connections": {
+      "jev": "how something works or connects: a process, a system, a flow, an explanation that is a drawing",
+      "glance": true,
+      "components": "a Diagram: a sequence left to right along y=0.5, a hierarchy top down"
+    },
+    "none": {
+      "jev": "none of these: the request is not for one of these shapes, or is too vague to tell",
+      "glance": true,
+      "components": "a Status naming what has no source, or the closest query's note"
+    }
+  },
+  "sources": {
+    "due": {
+      "jev": "coursework deadlines coming up: assignments, labs, readings, what is due or left to turn in",
+      "arg": "days",
+      "default": 14,
+      "title": "DUE",
+      "label": "Due",
+      "companions": ["overdue"]
+    },
+    "overdue": {
+      "jev": "coursework that is past due or late, being behind or caught up on school",
+      "title": "OVERDUE",
+      "label": "Overdue",
+      "tone": "bad"
+    },
+    "exams": {
+      "jev": "exams, midterms, finals and tests ahead",
+      "arg": "days",
+      "default": 90,
+      "title": "EXAMS",
+      "label": "Exams"
+    },
+    "before-exam": {
+      "jev": "the next exam or midterm and everything due before it",
+      "arg": "course?",
+      "title": "BEFORE THE EXAM",
+      "label": "Due before it"
+    },
+    "course": {
+      "jev": "one named class's deadlines, such as ACAD 185 or BISC 101",
+      "arg": "course",
+      "title": "{course}",
+      "label": "Items"
+    },
+    "grades": {
+      "jev": "grades, standing or average in classes",
+      "title": "GRADES",
+      "label": "Courses",
+      "scalars": ["average"]
+    },
+    "week": {
+      "jev": "the week or several days ahead: classes, deadlines and calendar events across days",
+      "arg": "days",
+      "default": 7,
+      "max": 14,
+      "title": "NEXT {days} DAYS",
+      "label": "Items"
+    },
+    "day": {
+      "jev": "one day's schedule: today, tonight, tomorrow or a named weekday",
+      "arg": "day",
+      "default": "today",
+      "title": "{day}",
+      "label": "Items"
+    },
+    "calendar": {
+      "jev": "calendar events and meetings",
+      "arg": "days",
+      "default": 7,
+      "max": 30,
+      "title": "CALENDAR",
+      "label": "Events"
+    },
+    "reconnect": {
+      "jev": "people not talked to in a while, who to reach out to or text",
+      "title": "REACH OUT",
+      "label": "Past their cadence"
+    },
+    "tasks": {
+      "jev": "promises or commitments made to people, things said they would do for someone",
+      "title": "PROMISES",
+      "label": "Open"
+    },
+    "unreplied": {
+      "jev": "texts and mail waiting on a reply, who is waiting to hear back",
+      "arg": "days",
+      "default": 7,
+      "title": "WAITING ON YOU",
+      "label": "Threads"
+    },
+    "needs": {
+      "jev": "everything waiting on you at once, school and people together: texts, mail, classes, the backlog",
+      "title": "NEEDS YOU",
+      "label": "Waiting"
+    },
+    "person": {
+      "jev": "one named person: their threads, mail and what you owe them",
+      "arg": "name",
+      "title": "{name}",
+      "label": "Open"
+    },
+    "conversations": {
+      "jev": "this week's message threads and mail to act on",
+      "title": "CONVERSATIONS",
+      "label": "Threads"
+    },
+    "campaign": {
+      "jev": "outbound or email campaign numbers for a named client",
+      "arg": "name",
+      "title": "{name} CAMPAIGN",
+      "label": "Metrics"
+    },
+    "none": {
+      "jev": "none of these sources: weather, money, stocks, news, how a system works, or anything else"
+    }
+  }
+}

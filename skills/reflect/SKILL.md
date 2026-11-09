@@ -1,6 +1,8 @@
 ---
 name: reflect
-description: Review a finished, stalled or failed work session, read what the user said back to you, and propose evidence-backed edits to the instructions that steered it. Use when the user says reflect, retro, postmortem a session, "what went wrong", "what should we do differently next time", or asks to improve a skill or CLAUDE.md from how a session went. For a single correction just made, use skill-training instead. For an executed before-and-after test of a change, use rsi.
+description: "Review a finished, stalled or failed session and propose evidence-backed edits to the instructions that steered it. Use for reflect, retro, what went wrong, or improving a skill or CLAUDE.md from a session."
+triggers: >-
+  Review a finished, stalled or failed work session, read what the user said back to you, and propose evidence-backed edits to the instructions that steered it. Use when the user says reflect, retro, postmortem a session, "what went wrong", "what should we do differently next time", or asks to improve a skill or CLAUDE.md from how a session went. For a single correction just made, use skill-training instead. For an executed before-and-after test of a change, use rsi.
 ---
 
 # reflect

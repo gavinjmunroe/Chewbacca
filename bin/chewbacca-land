@@ -1,0 +1,474 @@
+#!/usr/bin/env python3
+"""chewbacca land: put your work on origin/main without touching anyone else's.
+
+    chewbacca land --paths bin/x tests/x.sh -m "fix: ..."   # files as they are on disk now
+    chewbacca land <sha> [<sha>...]                          # commits you already made
+    chewbacca land --dry-run ...                             # everything but the push
+    chewbacca land --paths team/memory/note.md --add-line team/memory/MEMORY.md "- note: hook" -m "..."
+                                                             # one new line on main's copy of a shared file
+
+It builds the change on a fresh detached worktree of origin/main, so other
+tabs' uncommitted files, half-merged state and unpushed commits in the shared
+checkout never ride along. It regenerates the manifest files the pre-push gate
+checks (SHA256SUMS.txt, README counts) when the repo has those tools, then
+pushes. A push that loses the race fetches, rebases, regenerates and tries
+again. A lock under ~/.chewbacca makes local tabs take turns instead of
+racing each other.
+
+Why it exists: on 2026-10-09 and 10-10, with 10+ tabs on one checkout, every
+tab hand-rolled the same dance (temp worktree, cherry-pick, checksums, retry)
+and got it wrong in a new way each time: a pull that aborted on someone
+else's dirty files, a stale manifest, a rebase that lost the race four times,
+a bare commit that swallowed another tab's staged work. One command, one
+correct path.
+"""
+import argparse
+from collections import Counter
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+# Six tries covered every race seen on 10/9-10/10 (the worst was four losses
+# in a row with ten tabs pushing); past that something else is wrong.
+MAX_TRIES = 6
+# A lock older than this belongs to a tab that died mid-land.
+STALE_LOCK_S = 600
+
+
+def run(args, cwd, check=True, quiet=False):
+    p = subprocess.run(args, cwd=cwd, text=True, capture_output=True)
+    if check and p.returncode != 0:
+        raise SystemExit(f"land: {' '.join(args[:3])} failed:\n{(p.stderr or p.stdout).strip()[-1200:]}")
+    if not quiet and p.stdout.strip() and os.environ.get("LAND_VERBOSE"):
+        print(p.stdout.strip())
+    return p
+
+
+def repo_root(start):
+    return run(["git", "rev-parse", "--show-toplevel"], start).stdout.strip()
+
+
+def git_common_dir(root):
+    d = run(["git", "rev-parse", "--git-common-dir"], root).stdout.strip()
+    return d if os.path.isabs(d) else os.path.join(root, d)
+
+
+class Lock:
+    def __init__(self, root):
+        base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-locks")
+        os.makedirs(base, exist_ok=True)
+        key = os.path.realpath(git_common_dir(root)).replace("/", "_")[-120:]
+        self.path = os.path.join(base, key + ".lock")
+
+    def __enter__(self):
+        waited = 0
+        while True:
+            try:
+                os.mkdir(self.path)
+                with open(os.path.join(self.path, "pid"), "w") as f:
+                    f.write(str(os.getpid()))
+                return self
+            except FileExistsError:
+                try:
+                    age = time.time() - os.path.getmtime(self.path)
+                except FileNotFoundError:
+                    continue
+                if age > STALE_LOCK_S:
+                    shutil.rmtree(self.path, ignore_errors=True)
+                    continue
+                if waited == 0:
+                    print("land: another tab is landing; waiting your turn", file=sys.stderr)
+                time.sleep(2)
+                waited += 2
+                if waited > STALE_LOCK_S:
+                    raise SystemExit("land: waited 10 minutes for the landing lock; giving up")
+
+    def __exit__(self, *a):
+        shutil.rmtree(self.path, ignore_errors=True)
+
+
+def regenerate(wt, quiet=True):
+    """Rebuild the files the pre-push gate compares, and fold them into HEAD."""
+    changed = False
+    # The README line count includes SHA256SUMS.txt, and the manifest hashes
+    # the README, so: manifest, count, manifest. Counting first left the count
+    # short by the lines a new file added to the manifest, and pre-push
+    # refused the claude-jobs land three times on 2026-11-02.
+    for tool in (["tools/checksums.py"], ["tools/counts.py"], ["tools/checksums.py"]):
+        if os.path.exists(os.path.join(wt, tool[0])):
+            run(["python3", "-I", *tool], wt, check=False, quiet=quiet)
+    # The worktree is land's own and was clean, so anything dirty now is
+    # what the tools just rewrote.
+    if run(["git", "status", "--porcelain"], wt).stdout.strip():
+        run(["git", "add", "-A"], wt)
+        run(["git", "commit", "-q", "--amend", "--no-edit", "--no-verify"], wt)
+        changed = True
+    return changed
+
+
+def blob(repo, rev, path):
+    """The file's bytes at rev, or None when rev is empty or lacks it."""
+    if not rev:
+        return None
+    p = subprocess.run(["git", "show", f"{rev}:{path}"], cwd=repo, capture_output=True)
+    return p.stdout if p.returncode == 0 else None
+
+
+def merge_into(wt, path, disk, dest, old):
+    """Write the disk copy over main's, keeping lines main gained meanwhile.
+
+    A plain copy reverted other tabs' work: on 2026-10-10 a tab whose
+    team/memory/MEMORY.md predated three index lines landed it with --paths,
+    and the lines vanished from main (ledger d72fce61). So the copy is a
+    three-way merge: base is the file where this checkout forked from main,
+    ours is the disk, theirs is main now. False means a real clash.
+    """
+    with open(disk, "rb") as f:
+        mine = f.read()
+    theirs = None
+    if os.path.exists(dest):
+        with open(dest, "rb") as f:
+            theirs = f.read()
+    if theirs is None or theirs == old or theirs == mine:
+        with open(dest, "wb") as f:
+            f.write(mine)
+        return True
+    if old == mine:
+        return True  # unchanged here; main's newer copy stays
+    union = run(["git", "check-attr", "merge", "--", path], wt).stdout.strip().endswith(": union")
+    with tempfile.TemporaryDirectory() as d:
+        b = os.path.join(d, "base")
+        with open(b, "wb") as f:
+            f.write(old or b"")
+        m = os.path.join(d, "mine")
+        with open(m, "wb") as f:
+            f.write(mine)
+        r = subprocess.run(["git", "merge-file", "-p", *(["--union"] if union else []), m, b, dest],
+                           capture_output=True)
+    if r.returncode != 0:
+        return False
+    with open(dest, "wb") as f:
+        f.write(r.stdout)
+    return True
+
+
+def keep_exec_bit(disk, dest):
+    """Give the landed copy the disk copy's executable bit.
+
+    merge_into writes bytes, so a new file came out 0644: on 2026-10-16
+    bin/hud-verse landed 100644 from a chmod +x copy, and running it from
+    PATH said permission denied until a second land fixed the mode.
+    """
+    if os.path.exists(dest):
+        want = os.stat(disk).st_mode & 0o111
+        os.chmod(dest, (os.stat(dest).st_mode & ~0o111) | want)
+
+
+def landed_record(root):
+    """Where this working tree remembers the bytes it last landed verbatim, per path.
+
+    Keyed by the working tree, not the shared .git: a sibling worktree holds
+    other files, so its record would be the wrong base here.
+    """
+    base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-landed")
+    # A hash of the tree path plus its own git dir: the old truncated, mangled
+    # path could map two trees to one record (security review, 10/18).
+    tree_git = run(["git", "rev-parse", "--absolute-git-dir"], root).stdout.strip()
+    key = hashlib.sha256(f"{os.path.realpath(root)}\0{os.path.realpath(tree_git)}".encode()).hexdigest()
+    return os.path.join(base, key + ".json")
+
+
+def own_landed_base(src, target, path, record):
+    """The copy this checkout last landed of path, if main's history still has it.
+
+    The merge base is the checkout's stale HEAD, which lacks the tab's own
+    earlier land, so a second edit next to the first read as a clash: seen 3x
+    on 10/10 (ledger e9e4cdf9) and again 10/18 on tools/work_ledger.py, each
+    time worked around by hand with a temp worktree. Only verbatim lands are
+    recorded, so this base never holds another tab's merged-in lines.
+    """
+    sha = record.get(path)
+    if not sha:
+        return None
+    revs = run(["git", "rev-list", "-n", "200", target, "--", path], src, check=False).stdout.split()
+    for rev in revs:
+        if run(["git", "rev-parse", "-q", "--verify", f"{rev}:{path}"], src, check=False).stdout.strip() == sha:
+            return subprocess.run(["git", "cat-file", "blob", sha], cwd=src, capture_output=True).stdout
+    return None
+
+
+def derived_from(disk, own, old):
+    """True when the disk copy matches its own land: lines it added, none it removed.
+
+    Merging against the landed copy as base reads any of those lines missing
+    from disk as a deletion. A disk copy that never had them (an older file,
+    another tree) would then strip them from main, so it gets the clash.
+    """
+    with open(disk, "rb") as f:
+        have = Counter(f.read().splitlines())
+    before = Counter((old or b"").splitlines())
+    after = Counter(own.splitlines())
+    added, removed = after - before, before - after
+    # Both ways: a copy still holding lines the land removed would put them back.
+    return not (added - have) and not (removed & have)
+
+
+def queue_product_sync(wt, pre):
+    """After a land on main, queue `chewbacca products pull` if it touched a shared file.
+
+    Caleb, 2026-10-28, on Anchored and USC OS: "they all stay up to date as
+    something changes". The pull clones each product, tests it and pushes only
+    on green, so it goes on the machine queue and the land returns right away.
+    Which files are shared comes from the cache the last products run wrote;
+    with no cache the pull is queued anyway, since an in-step product costs one
+    clone. Tests and scratch runs set CHEWBACCA_NO_RUNTIME or
+    CHEWBACCA_NO_PRODUCT_SYNC, and never queue a real job.
+    """
+    if os.environ.get("CHEWBACCA_NO_PRODUCT_SYNC") or os.environ.get("CHEWBACCA_NO_RUNTIME"):
+        return
+    if not os.path.exists(os.path.join(wt, "config", "products.json")):
+        return
+    changed = run(["git", "diff", "--name-only", pre, "HEAD"], wt, check=False).stdout.split()
+    cache = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "products-shared.json")
+    try:
+        with open(cache) as f:
+            shared = {p for paths in json.load(f).values() for p in paths}
+    except (OSError, ValueError):
+        shared = None
+    hit = sorted(set(changed) & shared) if shared is not None else changed
+    if not hit:
+        return
+    chew = shutil.which("chewbacca")
+    if not chew:
+        print("land: touched files shared w products, but `chewbacca` isn't on PATH to queue the pull")
+        return
+    q = subprocess.run([chew, "jobs", "submit", "--net", "--once", "--title", "products pull after land",
+                        "--", chew, "products", "pull"], text=True, capture_output=True)
+    if q.returncode == 0:
+        print(f"land: queued a product pull for {len(hit)} shared file(s), `chewbacca jobs list` shows it")
+    else:
+        print(f"land: could not queue the product pull: {(q.stderr or q.stdout).strip()[:200]}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
+    ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
+    ap.add_argument("--paths", nargs="+", help="land these files as they are on disk now")
+    ap.add_argument("-m", "--message", help="commit message for --paths")
+    # A shared index on disk holds other tabs' lines, and this checkout may be far
+    # behind main. On 2026-11-05 a hand-built commit for one index line, in zsh,
+    # read `$BASE:team/...` as the :t modifier, got nothing from git show and
+    # replaced 536 lines with 1. Pre-push refused it. This appends to main's copy,
+    # never reads the disk's, and needs no shell.
+    ap.add_argument("--add-line", nargs=2, action="append", default=[], metavar=("FILE", "LINE"),
+                    help="with --paths: append LINE to FILE as it is on main, ignoring the disk copy")
+    ap.add_argument("--remote", default="origin")
+    ap.add_argument("--branch", default="main")
+    ap.add_argument("--dry-run", action="store_true", help="build and check, never push")
+    a = ap.parse_args()
+    if bool(a.commits) == bool(a.paths):
+        ap.error("give either commits or --paths, not both")
+    # zsh doesn't word-split an unquoted $F, so `land --paths $F` hands over
+    # every path as one argument with spaces in it. On 2026-11-02 that printed
+    # "not found anywhere" for 24 files that were all there. A path that
+    # doesn't exist but whose space-separated pieces all do is that list.
+    if a.paths:
+        split = []
+        for p in a.paths:
+            pieces = p.split()
+            if len(pieces) > 1 and not os.path.exists(p) and all(os.path.exists(x) for x in pieces):
+                split.extend(pieces)
+            else:
+                split.append(p)
+        a.paths = split
+    if a.paths and not a.message:
+        ap.error("--paths needs -m")
+    if a.add_line and not a.paths:
+        ap.error("--add-line goes with --paths: the note the line points at")
+
+    src = repo_root(os.getcwd())
+    target = f"{a.remote}/{a.branch}"
+    # Resolve refs here, in the caller's checkout. Inside the temp worktree
+    # HEAD is origin/main, so on 2026-10-16 `land HEAD` cherry-picked main onto
+    # itself and failed as an empty pick.
+    resolved = []
+    for c in a.commits:
+        p = run(["git", "rev-parse", "--verify", "--quiet", f"{c}^{{commit}}"], src, check=False)
+        if p.returncode != 0 or not p.stdout.strip():
+            raise SystemExit(f"land: {c} isn't a commit in {src}")
+        resolved.append(p.stdout.strip())
+    a.commits = resolved
+    with Lock(src):
+        run(["git", "fetch", "-q", a.remote, a.branch], src)
+        tmp = tempfile.mkdtemp(prefix="land-")
+        wt = os.path.join(tmp, "wt")
+        run(["git", "worktree", "add", "-q", "--detach", wt, target], src)
+        try:
+            if a.paths:
+                missing, clashes, verbatim, unseen = [], [], {}, []
+                try:
+                    with open(landed_record(src)) as f:
+                        record = json.load(f)
+                except (OSError, ValueError):
+                    record = {}
+                base = run(["git", "merge-base", "HEAD", target], src, check=False).stdout.strip()
+                for p in a.paths:
+                    s = os.path.join(src, p)
+                    d = os.path.join(wt, p)
+                    old = blob(src, base, p)
+                    if os.path.exists(s):
+                        os.makedirs(os.path.dirname(d) or wt, exist_ok=True)
+                        merged = merge_into(wt, p, s, d, old)
+                        if not merged:
+                            own = own_landed_base(src, target, p, record)
+                            merged = own is not None and derived_from(s, own, old) and merge_into(wt, p, s, d, own)
+                        if not merged:
+                            clashes.append(p)
+                        else:
+                            keep_exec_bit(s, d)
+                            with open(s, "rb") as f1, open(d, "rb") as f2:
+                                if f1.read() == f2.read():
+                                    verbatim[p] = run(["git", "hash-object", "--", d], wt).stdout.strip()
+                    elif os.path.exists(d):
+                        # Deleted on disk: land the deletion, unless someone
+                        # changed the file on main since this checkout saw it.
+                        # A file this checkout never had (not in the merge
+                        # base) isn't a deletion, it's another tab's new file:
+                        # a stale clone landing a typo path deleted one from
+                        # main and printed success (break-it, 2026-10-19).
+                        if old is None:
+                            unseen.append(p)
+                            continue
+                        with open(d, "rb") as f:
+                            if f.read() != old:
+                                clashes.append(p)
+                            else:
+                                os.remove(d)
+                    else:
+                        missing.append(p)
+                if missing:
+                    raise SystemExit(f"land: not found anywhere: {', '.join(missing)}")
+                if unseen:
+                    raise SystemExit(f"land: {', '.join(unseen)} is on {target} but this checkout never had it, "
+                                     f"so landing it would delete another tab's file; check the path")
+                if clashes:
+                    raise SystemExit(f"land: {', '.join(clashes)} changed on {target} in the same lines as your copy; "
+                                     f"pull those lines in and run land again")
+                for f, line in a.add_line:
+                    d = os.path.join(wt, f)
+                    if not os.path.exists(d):
+                        raise SystemExit(f"land: --add-line: {f} isn't on {target}")
+                    with open(d) as fh:
+                        have = fh.read()
+                    if line not in have.splitlines():
+                        with open(d, "w") as fh:
+                            fh.write(have + ("" if have.endswith("\n") or not have else "\n") + line + "\n")
+                    a.paths.append(f)
+                run(["git", "add", "-A", "--", *a.paths], wt)
+                if not run(["git", "diff", "--cached", "--name-only"], wt).stdout.strip():
+                    print("land: nothing to land, origin already has these files")
+                    return 0
+                # --no-verify skips pre-commit's stale-index check, which a
+                # fresh worktree can't fail, and with it commit-msg. That one
+                # judges the message and staged files (AI attribution, a fix
+                # with no test), so it runs here by hand.
+                hook = os.path.join(wt, ".githooks", "commit-msg")
+                if os.access(hook, os.X_OK):
+                    with tempfile.NamedTemporaryFile("w", suffix=".msg", delete=False) as mf:
+                        mf.write(a.message)
+                    try:
+                        h = subprocess.run([hook, mf.name], cwd=wt, text=True, capture_output=True)
+                    finally:
+                        os.unlink(mf.name)
+                    if h.returncode != 0:
+                        raise SystemExit(f"land: {(h.stderr or h.stdout).strip()}")
+                p = subprocess.run(["git", "commit", "-q", "--no-verify", "-F", "-", "--", *a.paths], cwd=wt, input=a.message, text=True, capture_output=True)
+                if p.returncode != 0:
+                    raise SystemExit(f"land: commit failed: {(p.stderr or p.stdout).strip()}")
+            else:
+                # On 2026-10-10 an amend meant to replace a "wip:" commit was
+                # refused by pre-commit, the next command in the chain landed
+                # the commit anyway, and main got a paused WIP (930f716c).
+                for c in a.commits:
+                    subj = run(["git", "log", "-1", "--format=%s", c], src).stdout.strip()
+                    if subj.lower().startswith(("wip", "fixup!", "squash!")) and not os.environ.get("LAND_WIP_OK"):
+                        raise SystemExit(f"land: {c[:8]} is \"{subj}\"; reword it before landing "
+                                         f"(LAND_WIP_OK=1 if it really is finished)")
+                for c in a.commits:
+                    p = run(["git", "cherry-pick", "--allow-empty", c], wt, check=False)
+                    if p.returncode != 0:
+                        run(["git", "cherry-pick", "--abort"], wt, check=False)
+                        raise SystemExit(f"land: {c} doesn't apply on {target}; rebase it on main first:\n{p.stderr.strip()[-600:]}")
+                    # A commit made with --no-verify, or where hooksPath isn't
+                    # set, never met commit-msg. Its attribution half runs on
+                    # every carried commit; the fix half ran when it was made.
+                    hook = os.path.join(wt, ".githooks", "commit-msg")
+                    if os.access(hook, os.X_OK):
+                        with tempfile.NamedTemporaryFile("w", suffix=".msg", delete=False) as mf:
+                            mf.write(run(["git", "log", "-1", "--format=%B", "HEAD"], wt).stdout)
+                        try:
+                            h = subprocess.run([hook, mf.name], cwd=wt, text=True, capture_output=True,
+                                               env=dict(os.environ, COMMIT_MSG_CHECKS="attribution"))
+                        finally:
+                            os.unlink(mf.name)
+                        if h.returncode != 0:
+                            raise SystemExit(f"land: {c[:8]}: {(h.stderr or h.stdout).strip()}")
+            regenerate(wt)
+            if a.dry_run:
+                print(f"land: dry run ok, would push {run(['git', 'rev-parse', '--short', 'HEAD'], wt).stdout.strip()}")
+                return 0
+            for attempt in range(1, MAX_TRIES + 1):
+                pre = run(["git", "rev-parse", target], wt).stdout.strip()
+                p = run(["git", "push", "-q", a.remote, f"HEAD:{a.branch}"], wt, check=False)
+                if p.returncode == 0:
+                    sha = run(["git", "rev-parse", "--short", "HEAD"], wt).stdout.strip()
+                    subj = run(["git", "log", "-1", "--format=%s"], wt).stdout.strip()
+                    print(f"land: {sha} {subj}")
+                    if a.branch == "main":
+                        queue_product_sync(wt, pre)
+                    if a.paths:
+                        record.update(verbatim)
+                        for p in set(a.paths) - set(verbatim):
+                            record.pop(p, None)
+                        os.makedirs(os.path.dirname(landed_record(src)), exist_ok=True)
+                        with open(landed_record(src), "w") as f:
+                            json.dump(record, f)
+                    return 0
+                err = (p.stderr or "") + (p.stdout or "")
+                raced = any(k in err for k in ("non-fast-forward", "fetch first", "cannot lock ref"))
+                if not raced:
+                    raise SystemExit(f"land: push refused by a gate, fix this and run land again:\n{err.strip()[-1500:]}")
+                run(["git", "fetch", "-q", a.remote, a.branch], wt)
+                r = run(["git", "rebase", "-q", target], wt, check=False)
+                if r.returncode != 0:
+                    # A manifest conflict is ours to regenerate; anything else is real.
+                    conflicted = run(["git", "diff", "--name-only", "--diff-filter=U"], wt).stdout.split()
+                    # Only the pure manifest is safe to take from upstream; a
+                    # README conflict may hold a real edit and stays a conflict.
+                    regen = {"SHA256SUMS.txt"}
+                    if conflicted and set(conflicted) <= regen:
+                        for f in conflicted:
+                            run(["git", "checkout", "--ours", "--", f], wt)  # upstream's; regenerated below
+                            run(["git", "add", "--", f], wt)
+                        e = subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"], cwd=wt, text=True, capture_output=True)
+                        if e.returncode != 0:
+                            run(["git", "rebase", "--abort"], wt, check=False)
+                            raise SystemExit(f"land: rebase onto {target} failed:\n{e.stderr.strip()[-600:]}")
+                    else:
+                        run(["git", "rebase", "--abort"], wt, check=False)
+                        raise SystemExit(f"land: your change conflicts with {target} in {', '.join(conflicted) or 'some file'}; merge by hand")
+                regenerate(wt)
+                time.sleep(min(2 * attempt, 8))
+            raise SystemExit(f"land: lost the push race {MAX_TRIES} times; try again in a minute")
+        finally:
+            run(["git", "worktree", "remove", "--force", wt], src, check=False)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

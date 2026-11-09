@@ -3,7 +3,7 @@
 Caleb, 2026-10-09: Chewbacca needs "perfect memory of diff client's tables
 replies meetings and the whole gtm life cycle". Memory files went stale within a
 day on Zeutara, so client state is synced from the systems that hold it and
-answered from the graph (bin/lib/gtm_query.py), never from notes.
+answered from the graph (Dough's engine/bin/lib/gtm_query.py), never from notes.
 
 THREE SOURCES, each its own snapshot (`Graph.apply` replaces what that source
 wrote last time, so a lead that left a campaign loses its edge):
@@ -53,6 +53,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
@@ -111,7 +112,21 @@ RECORD_BATCH = 100
 # own retryAfter.
 WORKERS = 4
 MAX_TRIES = 6
+# Activity searches spaced to stay under 60 a minute a workspace. Unpaced, four
+# workers hit the limit within the first ~60 searches of a ~350-search Zeutara
+# sync on 2026-10-16, three runs in a row, and each skipped the snapshot.
+SEARCH_GAP_S = 1.1
+# A day's "Email sent" ids are reused from the last full sync only when that
+# day ended at least this many UTC days ago and Clay's daily count for it is
+# unchanged. On 2026-10-16 the Zeutara sync made ~400 searches for 38
+# campaigns (one per campaign per sent day), stayed rate limited and skipped
+# the whole snapshot, so the Friday report read 117-hour-old numbers. Two days
+# leaves a full day for late activity writes; never measured how late they land.
+SENT_FINAL_DAYS = 2
 SNIPPET = 280
+# Own words only. The longest of 87 real Zeutara replies cleaned to under
+# 1,500 characters (2026-10-11); 2,000 keeps all of them whole.
+REPLY_TEXT = 2000
 # C0 controls (ESC starts a terminal escape), DEL, the C1 block (U+009B is a
 # one-character CSI that terminals honour in UTF-8 mode, so a reply body could
 # still repaint the screen after ESC was stripped: security review 2026-10-09),
@@ -230,6 +245,13 @@ def clip(text, limit: int) -> str:
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
+def reply_text(text, limit: int = REPLY_TEXT) -> str:
+    """A reply body for reading and drafting: control characters gone, line
+    breaks kept, clipped."""
+    text = CONTROL.sub(" ", str(text or "")).strip()
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -259,6 +281,8 @@ class ClayCLI:
         self.runner = runner or _subprocess_runner
         self.sleep = sleep
         self.calls = 0
+        self._pace = threading.Lock()
+        self._next_search = 0.0
         self.workspace: dict | None = None
         # The workspace every answer must name while a fetch runs. The clay
         # CLI has no per-command workspace flag (it runs against `workspaces
@@ -276,6 +300,16 @@ class ClayCLI:
                 raise ReadOnlyViolation(f"clay {' '.join(args[:3])} carries {a[:40]!r}, not a read flag")
         wait = 2.0
         for _ in range(MAX_TRIES):
+            if args[:3] == ["audiences", "records", "search-ids"]:
+                # One search slot per SEARCH_GAP_S across every worker, so the
+                # four threads stay under the activities budget instead of
+                # burning their retries on it.
+                with self._pace:
+                    now = time.monotonic()
+                    delay = self._next_search - now
+                    self._next_search = max(now, self._next_search) + SEARCH_GAP_S
+                if delay > 0:
+                    self.sleep(delay)
             self.calls += 1
             code, out, err = self.runner([self.binary, *args])
             if code == 0:
@@ -297,6 +331,13 @@ class ClayCLI:
                 if ws_id:
                     self.workspace = {"id": ws_id, "name": clip(ws.get("name"), 120)}
                 return body
+            # A server_error is retried like a rate limit: one on a single
+            # analytics read skipped the whole Zeutara snapshot on 2026-10-16,
+            # and the next run read the same campaign fine.
+            if code == 1 and '"server_error"' in (err or ""):
+                self.sleep(min(wait, 60.0))
+                wait = min(wait * 2, 60.0)
+                continue
             if code == 4:  # rate_limited: back off on Clay's own number
                 try:
                     detail = json.loads(err or "{}")["error"].get("details") or {}
@@ -418,7 +459,23 @@ def activity_query(campaign_id: str, kind: str, title: str, day: str | None = No
     return f"select from people where activities.exists({cond})"
 
 
-def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
+def sent_cache_path(workspace_id: str) -> Path:
+    base = os.environ.get("CHEWBACCA_STATE") or os.path.expanduser("~/.chewbacca/state")
+    return Path(base) / "gtm" / f"sent-ids-{workspace_id}.json"
+
+
+def load_sent_cache(path: Path | None) -> dict:
+    if not path:
+        return {}
+    try:
+        body = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS,
+               cache_path: Path | None = None, today: date | None = None) -> dict:
     """Everything the clay snapshot needs, read through `cli`. Raises
     SourceUnavailable on a refused read, or when the CLI is signed in to a
     different workspace than the one asked for (writing client A's campaigns
@@ -431,13 +488,38 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
     (security review, 2026-10-09)."""
     cli.workspace = None
     cli.expect = str(workspace_id)
+    cache = load_sent_cache(cache_path)
+    next_cache: dict = {}
+    done = False
     try:
-        return _fetch_clay(cli, str(workspace_id), workers)
+        raw = _fetch_clay(cli, str(workspace_id), workers, cache, today or datetime.now(timezone.utc).date(),
+                          next_cache)
+        done = True
     finally:
         cli.expect = None
+        # A finished day's ids are final whether or not the rest of this fetch
+        # lands, and each entry carries the day count it was read at, so a
+        # rate-limited sync still saves the days it got and the retry starts
+        # further along. The snapshot itself stays all-or-nothing.
+        if cache_path:
+            read = {k: v for k, v in next_cache.items() if v.get("ids")}
+            keep = read if done else {**cache, **read}
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = cache_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(keep))
+                os.replace(tmp, cache_path)
+            except OSError:
+                pass  # the cache only saves calls
+    return raw
 
 
-def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
+def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int, cache: dict | None = None,
+                today: date | None = None, next_cache: dict | None = None) -> dict:
+    cache = cache or {}
+    final_before = (today or datetime.now(timezone.utc).date()) - timedelta(days=SENT_FINAL_DAYS - 1)
+    next_cache = next_cache if next_cache is not None else {}
+    reused = 0
     campaigns = cli.paged(["campaigns", "list", "--with-analytics", "--limit", "100"])
     for c in campaigns:
         if not isinstance(c, dict) or not SAFE_ID.match(str(c.get("id") or "")):
@@ -457,9 +539,9 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
         if not (a.get("leads") or a.get("sent")):
             continue
         cid = c["id"]
-        jobs.append((cid, "joined", None, activity_query(cid, "campaign_status", STATUS_JOINED)))
-        jobs.append((cid, "replied", None, activity_query(cid, "email", REPLIED_TITLE)))
-        jobs.append((cid, "bounced", None, activity_query(cid, "email", BOUNCED_TITLE)))
+        jobs.append((cid, "joined", None, activity_query(cid, "campaign_status", STATUS_JOINED), None))
+        jobs.append((cid, "replied", None, activity_query(cid, "email", REPLIED_TITLE), None))
+        jobs.append((cid, "bounced", None, activity_query(cid, "email", BOUNCED_TITLE), None))
         daily = (stats[cid].get("stats") or {}).get("daily")
         sent_total = a.get("sent") or ((stats[cid].get("stats") or {}).get("totals") or {}).get("sent") or 0
         if sent_total and not isinstance(daily, list):
@@ -470,21 +552,34 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
         for d in daily or []:
             if d.get("sent"):
                 try:
-                    date.fromisoformat(str(d.get("date")))
+                    day = date.fromisoformat(str(d.get("date")))
                 except ValueError as e:
                     raise SourceUnavailable(f"clay analytics for {cid} has a malformed day {clip(d.get('date'), 30)!r}") from e
-                jobs.append((cid, "sent", d["date"], activity_query(cid, "email", SENT_TITLE, d["date"])))
+                query = activity_query(cid, "email", SENT_TITLE, d["date"])
+                hit = cache.get(query)
+                if (day < final_before and isinstance(hit, dict) and hit.get("sent") == d["sent"]
+                        and isinstance(hit.get("ids"), list) and hit["ids"]
+                        and all(isinstance(i, int) for i in hit["ids"])):
+                    jobs.append((cid, "sent", d["date"], None, hit["ids"]))
+                    reused += 1
+                else:
+                    jobs.append((cid, "sent", d["date"], query, None))
+                if day < final_before:
+                    next_cache[query] = {"sent": d["sent"]}
 
     def search(job):
-        cid, kind, day, query = job
-        return cid, kind, day, cli.ids(query)
+        cid, kind, day, query, known = job
+        return cid, kind, day, query, known if known is not None else cli.ids(query)
 
     activity: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for cid, kind, day, found in pool.map(search, jobs):
+        for cid, kind, day, query, found in pool.map(search, jobs):
             slot = activity.setdefault(cid, {"joined": [], "replied": [], "bounced": [], "sent": {}})
             if kind == "sent":
                 slot["sent"][day] = found
+                key = query or activity_query(cid, "email", SENT_TITLE, day)
+                if key in next_cache:
+                    next_cache[key]["ids"] = found
             else:
                 slot[kind] = found
 
@@ -517,7 +612,7 @@ def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
     return {"workspace": cli.workspace,
             "campaigns": campaigns, "analytics": stats, "activity": activity,
             "records": people, "tables": tables, "audiences": audiences,
-            "fetched_at": utc_now(), "calls": cli.calls}
+            "fetched_at": utc_now(), "calls": cli.calls, "sent_reused": reused}
 
 
 # ── building snapshots ───────────────────────────────────────────────────────
@@ -689,7 +784,11 @@ def build_clay(raw: dict, cfg: dict, ids: Identities) -> tuple[list[Node], list[
             "analytics": {**(c.get("analytics") or {}), **{k: totals.get(k) for k in
                           ("sent", "replies", "repliesExcludingOoo", "bounces", "unsubscribes") if k in totals}},
             "steps": [{k: s.get(k) for k in ("step", "sentCount", "repliedCount", "bouncedCount")} for s in steps],
-            "reply_categories": [{"name": x.get("categoryName"), "leads": x.get("leads")} for x in cats],
+            # sentiment is Clay's tag on the category ("positive" for
+            # Interested, Information Request...): gtme report counts the
+            # positive ones as "tagged, read the text", never as interest.
+            "reply_categories": [{"name": x.get("categoryName"), "leads": x.get("leads"),
+                                  "sentiment": clip(x.get("sentiment"), 20)} for x in cats],
             "analytics_as_of": stats.get("generatedAt"),
         }))
         link(cam_id, "FOR_CLIENT", cid)
@@ -1004,6 +1103,80 @@ def thread_bookings(history: list[dict]) -> list[tuple[dict, dict]]:
     return out
 
 
+# ── bounce notices and removal asks, read off the reply itself ───────────────
+
+# On 2026-10-10 Zeutara's "replies to answer" carried two bounce notices
+# ("Delivery Status Notification (Failure)", "Message blocked") and a
+# "Remove <name>" that Clay had left uncategorised. The reply text is read by
+# tools/gtme_reply (the kit's one reply classifier, offline and stdlib-only);
+# only its bounce and unsubscribe kinds become verdicts here.
+RULE_BY = "rule:gtme_reply"
+AUTO_KINDS = frozenset({"bounce", "unsubscribe"})
+# The one thing gtme_reply cannot see: a notice's sender header. Mailer-daemon
+# notices arrive as REPLY rows under the lead's own address.
+BOUNCE_FROM = re.compile(r"mailer-daemon|postmaster@|mail delivery (?:subsystem|system)", re.I)
+# gtme_reply.clean_reply_text is quadratic on a run of unclosed tags: 106 ms
+# on 20,000 characters of "<br<br<br..." (2026-10-10, the 100k adversarial
+# test, cut to MATCH_LIMIT). Its own intent pass reads 6,000 characters; 8,000
+# of raw HTML keeps the worst shape near a fifth of that and still covers the
+# top of a styled reply, where its own words sit.
+AUTO_CLASS_LIMIT = 8_000
+
+
+def _gtm_query():
+    """The graph's read side, bin/lib/gtm_query.py in Dough's engine (it moved with the
+    gtme engine; tools/dough_home.py finds Dough). The query side never imports this module."""
+    if "gtm_query" not in sys.modules:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("chewbacca_dough_home", ROOT / "tools" / "dough_home.py")
+        home = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(home)
+        lib = str(home.engine() / "bin" / "lib")
+        if lib not in sys.path:
+            sys.path.append(lib)
+    import gtm_query  # noqa: PLC0415
+    return gtm_query
+
+
+def _gtme_reply():
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gtme_reply  # noqa: PLC0415  tools/gtme_reply.py, imported only by a sync
+    return gtme_reply
+
+
+def auto_class(msg: dict) -> tuple[str, str] | None:
+    """("bounce" | "unsubscribe", gtme_reply's label) for a reply whose sender,
+    subject or own words say what it is, else None."""
+    if BOUNCE_FROM.search(str(msg.get("from") or "")[:500]):
+        return "bounce", "sender is a mail server"
+    gr = _gtme_reply()
+    subject = clip(msg.get("subject"), 500)
+    if subject and gr.reply_intent(subject).get("kind") == "bounce":
+        return "bounce", clip(subject, 60)
+    text = gr.clean_reply_text(str(msg.get("email_body") or "")[:AUTO_CLASS_LIMIT])
+    verdict = gr.reply_intent(text)
+    kind = verdict.get("kind")
+    if kind in AUTO_KINDS:
+        return kind, clip(verdict.get("label") or kind, 60)
+    return None
+
+
+# The ids `chewbacca clay reply` needs, read off the thread. They come from
+# Clay's own API but pass through email headers (a message id is
+# "<...@mail.gmail.com>"), so one is kept only whole: no controls, no
+# whitespace, nothing clipped. A Gmail message id runs about 50 characters.
+REPLY_ID_MAX = 300
+REPLY_ID = re.compile(r"^[!-~]{1,%d}$" % REPLY_ID_MAX)
+
+
+def reply_id(value) -> str:
+    """A Clay id as text, or "" when it is missing or not a plain token."""
+    text = str(value) if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
+    return text if REPLY_ID.match(text) else ""
+
+
 def client_lead_emails(graph: Graph, client_id_: str) -> set[str]:
     """Every address enrolled in one of this client's campaigns."""
     return {r["email"] for r in graph.query(
@@ -1084,11 +1257,27 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
         reply_msgs = [m for m in history if m.get("type") == "REPLY"]
         reply_ids: list[tuple[str, str]] = []  # (time, reply node id), oldest first
         cat_name = clip(categories.get(str(item.get("lead_category_id")), ""), 80)
+        autos = [auto_class(m) for m in reply_msgs]
+        # A bounce notice is the mail server talking, not the lead: the
+        # thread's latest reply is the lead's last own message, so a notice
+        # can never stand in for (or hide) what they wrote.
+        own = [i for i, a in enumerate(autos) if not a or a[0] != "bounce"]
+        last = own[-1] if own else len(reply_msgs) - 1
         for n, msg in enumerate(reply_msgs):
             when = clip(msg.get("time"), 40)
             later = [m for m in history if str(m.get("time") or "") > when]
+            before = [m for m in history if m.get("type") == "SENT" and str(m.get("time") or "") <= when]
             text = msg.get("email_body") or ""
-            flag = screen_fn(text)
+            # The reply in the lead's own words, quoted thread and HTML gone.
+            # The snippet used to be the raw body's first 280 characters, and
+            # on 2026-10-11 73 of 87 Zeutara snippets were mostly <div> tags
+            # cut mid-sentence, so anything reading them was guessing.
+            words = _gtme_reply().clean_reply_text(text[:AUTO_CLASS_LIMIT])
+            # Screen what gets stored as well as the raw body: cleaning decodes
+            # entities and drops tags, so an instruction spelled in entities
+            # passes a raw-only screen and lands readable in `text`
+            # (security review of 65f7991d, 2026-10-11).
+            flag = screen_fn(text) or screen_fn(words)
             report["flagged"] += bool(flag) and flag != UNSCREENED
             report["unscreened"] += flag == UNSCREENED
             rid = node_key("reply", f"clay:{workspace_id}", item.get("email_lead_map_id") or key,
@@ -1101,22 +1290,36 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                 # exactly one client (and still suppresses its sender there).
                 "workspace_id": str(workspace_id), "client_id": cid,
                 "smartlead_campaign_id": clip(item.get("email_campaign_id"), 40),
+                # What `chewbacca clay reply` takes: the sequencer campaign,
+                # and the stats id and message id of the message answered
+                # (the reply's own stats id, else the send it answered, the
+                # way zeutara-gtme's autopilot builds reply_data).
+                "campaign_id": reply_id(item.get("email_campaign_id")),
+                "lead_id": reply_id(item.get("email_lead_id")),
+                "lead_map_id": reply_id(item.get("email_lead_map_id")),
+                "message_id": reply_id(msg.get("message_id")),
+                "stats_id": reply_id(msg.get("stats_id")) or (reply_id(before[-1].get("stats_id")) if before else ""),
                 "lead_status": clip(item.get("lead_status"), 40), "subject": clip(msg.get("subject"), 160),
-                "snippet": clip(text, SNIPPET), "screen_flag": flag,
+                "snippet": clip(words or text, SNIPPET), "text": reply_text(words), "screen_flag": flag,
                 "answered": any(m.get("type") == "SENT" for m in later),
                 "forwarded": any(m.get("type") == "FORWARD" for m in later),
-                "latest": n == len(reply_msgs) - 1,
+                "latest": n == last,
                 "thread_sent_times": [clip(m.get("time"), 40) for m in history if m.get("type") == "SENT"],
-                "clay_category": cat_name if n == len(reply_msgs) - 1 else "",
+                "clay_category": cat_name if n == last else "",
             })
             report["replies"] += 1
             edges[(person.id, "REPLIED", rid)] = Edge(person.id, "REPLIED", rid, {"time": when})
             if cam:
                 edges[(rid, "IN_CAMPAIGN", cam)] = Edge(rid, "IN_CAMPAIGN", cam, {})
             verdicts = list(labels.get((key, _minute(when)), []))
-            if n == len(reply_msgs) - 1 and cat_name:
+            if n == last and cat_name:
                 cls = CLAY_CATEGORY_CLASS.get(cat_name.lower(), "neutral")
                 verdicts.append((cls, "clay", cat_name))
+            # A person's own reply after this one overrides the rule: "Remove"
+            # followed by "actually, send the deck" is a live lead. A later
+            # bounce notice is not a person, so it overrides nothing.
+            if autos[n] and not any(a is None for a in autos[n + 1:]):
+                verdicts.append((autos[n][0], RULE_BY, autos[n][1]))
             for cls, by, raw_label in verdicts:
                 k = (rid, "CLASSIFIED_AS", f"replyclass:{cls}")
                 e = edges.get(k) or Edge(rid, "CLASSIFIED_AS", f"replyclass:{cls}", {"by": [], "raw": []})
@@ -1422,7 +1625,7 @@ def remember_suppressions(graph: Graph, client: str) -> int:
     and with them the proof those people were emailed, out of the graph. A
     suppression list rebuilt only from the live graph would then hand them
     back as fresh leads. The ledger keeps them."""
-    import gtm_query  # read-side helpers; the query side never imports this module
+    gtm_query = _gtm_query()
     stamp = utc_now()
     with graph.lock:
         live = gtm_query.live_suppressions(graph.db, client)
@@ -1478,7 +1681,8 @@ def default_calendar_readers() -> dict:
 
 def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identities | None = None,
          cli: ClayCLI | None = None, inbox_fn=None, calendar_fn=None, log=print,
-         calendar_readers: dict | None = None) -> list[dict]:
+         calendar_readers: dict | None = None, mailbox_reader=None,
+         mailbox_inboxes: list[str] | None = None) -> list[dict]:
     """Run the named ingesters. Each one that cannot read its source, or that
     fails for ANY reason, records FAILED with the reason and leaves its
     previous snapshot in place. The first version caught only the expected
@@ -1505,7 +1709,10 @@ def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identit
         if "clay" in sources:
             source = f"gtm-clay:{ws}"
             try:
-                raw = fetch_clay(cli, ws)
+                # Only the real CLI keeps a cache; a test's canned runner never
+                # reads or writes the home directory.
+                live = cli.runner is _subprocess_runner
+                raw = fetch_clay(cli, ws, cache_path=sent_cache_path(ws) if live else None)
                 refuse_empty(graph, source, "Campaign", len(raw.get("campaigns") or []), "clay campaigns list")
                 nodes, edges, report = build_clay(raw, cfg, ids)
                 graph.apply(source, nodes, edges)
@@ -1531,6 +1738,16 @@ def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identit
             except Exception as err:  # noqa: BLE001  recorded, never swallowed
                 record_sync(graph, source, "inbox", False, _failed(err), {}, ws)
                 results.append({"source": source, "ok": False, "note": _failed(err)})
+    if "mailbox" in sources:
+        source = "gtm-mailbox"
+        try:
+            import gtm_mailbox  # noqa: PLC0415  it imports this module
+            report = gtm_mailbox.sync_mailbox(graph, cfg, mailbox_reader, mailbox_inboxes)
+            record_sync(graph, source, "mailbox", True, "", report)
+            results.append({"source": source, "ok": True, **report})
+        except Exception as err:  # noqa: BLE001  recorded, never swallowed
+            record_sync(graph, source, "mailbox", False, _failed(err), {})
+            results.append({"source": source, "ok": False, "note": _failed(err)})
     if "calendar" in sources:
         source = "gtm-calendar"
         try:

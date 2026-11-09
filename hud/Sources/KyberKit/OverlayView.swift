@@ -192,6 +192,10 @@ public struct OverlayView: View {
                             x: centre.x - surface.width / 2, y: centre.y - height / 2,
                             width: surface.width, height: height)
                     }())
+                    .environment(\.hudKeyboardFocus,
+                        model.keyboardFocus?.surface == surface.id ? model.keyboardFocus : nil)
+                    .environment(\.hudEditingField, model.editingField)
+                    .environment(\.hudDismiss, { model.dismiss(surface.id) })
                     .frame(width: surface.width)
                     .background {
                         GeometryReader { proxy in
@@ -210,7 +214,11 @@ public struct OverlayView: View {
                     // moves the layout itself, which is what was wanted.
                     .position(centre)
                     .transition(SurfaceEntrance.transition(
-                        region: surface.region, summon: summon, reduced: reduceMotion))
+                        region: surface.region, summon: summon,
+                        startScale: surface.summonedWidth.map {
+                            SurfaceEntrance.startScale(rowWidth: $0, cardWidth: surface.width)
+                        },
+                        reduced: reduceMotion))
                     .zIndex(Double(surface.depth))
     }
 }
@@ -235,6 +243,9 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// One on the way in. Less on the way out, so an exit is quieter than
     /// the entrance it mirrors.
     var reach: Double = 1
+    /// How small it starts when it grows from a row (`from=`): the row's
+    /// width over its own. Nil uses `summonShrink`, sized for the hyper bar.
+    var startScale: Double?
     /// Reduce Motion: opacity only, nothing travels or scales.
     var reduced = false
 
@@ -260,7 +271,7 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
         if let summon {
             return Pose(
                 opacity: progress, blur: 6 * rest,
-                scale: 1 - Self.summonShrink * rest * reach,
+                scale: 1 - (1 - (startScale ?? (1 - Self.summonShrink))) * rest * reach,
                 offset: CGSize(
                     width: summon.width * rest * reach,
                     height: summon.height * rest * reach))
@@ -289,6 +300,14 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// on 2026-10-04.
     static let summonShrink = 0.55
 
+    /// A card grown from a row starts the row's width, never smaller than a
+    /// fifth of itself (a 40-point chip under a 440-point card would start
+    /// as a dot) and never larger than itself.
+    static func startScale(rowWidth: CGFloat, cardWidth: CGFloat) -> Double {
+        guard cardWidth > 0 else { return 1 }
+        return min(1, max(0.2, Double(rowWidth / cardWidth)))
+    }
+
     /// The entrance rides the overlay's own `Motion.smooth` spring, and the
     /// exit is shorter and quieter: 160 ms, accelerating away, and only a
     /// third of the way back to where it came from. Material puts desktop
@@ -301,10 +320,13 @@ nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     /// sharp: the attached spring and the overlay's revision spring fought
     /// over the same insertion. Without it the same card settled in three
     /// frames. The removal has nothing to fight and keeps its own.
-    static func transition(region: Region, summon: CGSize?, reduced: Bool) -> AnyTransition {
+    static func transition(
+        region: Region, summon: CGSize?, startScale: Double? = nil, reduced: Bool
+    ) -> AnyTransition {
         func at(_ progress: Double, reach: Double) -> SurfaceEntrance {
             SurfaceEntrance(
-                progress: progress, from: region, summon: summon, reach: reach, reduced: reduced)
+                progress: progress, from: region, summon: summon, reach: reach,
+                startScale: startScale, reduced: reduced)
         }
         let leave: Animation = reduced ? .easeOut(duration: 0.1) : depart
         return .asymmetric(
@@ -348,6 +370,8 @@ struct SurfaceCard: View {
     var onUnfold: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudKeyboardFocus) private var keyboardFocus
+    @Environment(\.hudOffscreen) private var offscreen
     @State private var hovering = false
     @State private var lit = false
     /// Where the card is on the screen, top-left origin, for measuring the
@@ -386,6 +410,18 @@ struct SurfaceCard: View {
         // dashboard lost its heading and its top chart at once. `ViewThatFits`
         // takes the plain layout when it fits and swaps in a scrolling one when
         // it does not, so a short panel is still sized to its content.
+        VStack(alignment: .leading, spacing: 8) {
+        if offscreen {
+            // ImageRenderer draws an AppKit-backed ScrollView as nothing, so
+            // every panel taller than its cap rendered as an empty card in
+            // HUD_LINES_FILE reviews (found 2026-10-11: the agents card and
+            // the meetings panel both came back blank). Offscreen, the plain
+            // layout is drawn and the frame below clips it at the same cap,
+            // which is what the top of the scroller shows on the glass.
+            SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
+                .frame(maxHeight: surface.maxHeight, alignment: .top)
+                .clipped()
+        } else {
         ViewThatFits(in: .vertical) {
             SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
             ScrollView(.vertical, showsIndicators: false) {
@@ -402,6 +438,19 @@ struct SurfaceCard: View {
                         colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                         .frame(height: 22)
                 }
+            }
+        }
+        }
+            // Who drew it, when a connection claimed the name (bd_2026-Code-9rl).
+            // Nothing for an unclaimed surface: an empty line would say
+            // nothing and cost a row.
+            if let owner = surface.owner, !surface.compact, !isRail {
+                OwnerLine(owner: owner)
+            }
+            if surface.store.closeWarned, !surface.store.unsaved.isEmpty, !surface.compact {
+                UnsavedWarning(names: surface.store.unsaved.keys.map {
+                    ($0 as NSString).lastPathComponent
+                }.sorted())
             }
         }
             .frame(maxHeight: surface.maxHeight)
@@ -456,7 +505,8 @@ struct SurfaceCard: View {
                     CloseButton(
                         action: onDismiss, help: title.isEmpty ? "Close" : "Close \(title)",
                         hit: HitTarget.minimum)
-                        .opacity(hovering ? 1 : 0.35)
+                        .opacity(hovering || keyboardFocus?.isClose == true ? 1 : 0.35)
+                        .modifier(KeyboardRing(active: keyboardFocus?.isClose == true))
                 }
             }
             // The fold is a spring so a click mid-fold reverses from where
@@ -524,6 +574,43 @@ struct SurfaceCard: View {
     }
 }
 
+/// Said on a card after its close was pressed with edits unsaved.
+struct UnsavedWarning: View {
+    let names: [String]
+
+    var body: some View {
+        Label {
+            Text("Unsaved edits to \(names.joined(separator: ", ")). Save, or close again to "
+                + "discard them; a copy is kept in ~/.bob/drafts.")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(HUD.warn)
+        }
+        .font(.system(size: 10.5))
+        .foregroundStyle(HUD.ink.opacity(0.9))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// The namespace that claimed a surface, at the foot of its card.
+struct OwnerLine: View {
+    let owner: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark.seal")
+                .font(.system(size: 8.5, weight: .semibold))
+            Text("from \(owner)")
+                .font(.system(size: 9.5, weight: .medium))
+                .kerning(0.3)
+        }
+        .foregroundStyle(HUD.faint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Drawn by \(owner)")
+    }
+}
+
 /// The target over a surface folded to its title because its region ran
 /// out of room.
 ///
@@ -580,6 +667,8 @@ struct SurfaceChrome: ViewModifier {
         case .bare: return AnyView(bare(content))
         case .bracket: return AnyView(bracket(content))
         case .window: return AnyView(window(content))
+        case .glass: return AnyView(glass(content))
+        case .clear: return AnyView(content)
         }
     }
 
@@ -603,8 +692,10 @@ struct SurfaceChrome: ViewModifier {
         let square = RoundedRectangle(cornerRadius: Self.windowRadius, style: .continuous)
         return content
             // Sentences in the system mono; titles, labels and numbers set
-            // their own pixel face (`Typeface`). Applies to every Text that
-            // names a size and no design.
+            // their own pixel face (`Typeface`). It replaces the design of
+            // every Text inside, an explicit `.rounded` included (measured in
+            // the review of f89ddf3), so a Text that needs another face sets
+            // `.fontDesign(nil)` after its font, as `pixelFont` does.
             .fontDesign(.monospaced)
             .background {
                 ZStack(alignment: .top) {
@@ -756,6 +847,52 @@ struct SurfaceChrome: ViewModifier {
             .shadow(color: .black.opacity(0.5), radius: 6)
     }
 
+    /// An edgeless field of frosted glass under content, and no object.
+    ///
+    /// The card's material and wash, so text holds the same 4.5:1 it holds
+    /// on a card, under a mask blurred so far that the field has no corner,
+    /// no rim and no shadow pool to read as a window. The mask starts
+    /// `glassBleed` outside the content's padding and fades over
+    /// `glassFeather`, so every glyph sits on the full wash: the padding is
+    /// 16, plus 6 of bleed, is 22 points inside the fade's midpoint.
+    private func glass(_ content: Content) -> some View {
+        content
+            .background {
+                ZStack {
+                    VisualEffect(material: .hudWindow, blending: .behindWindow)
+                    SurfaceChrome.frost.opacity(Self.glassWash(urgency, over: ground))
+                        .animation(Motion.fade(0.3, reduced: false), value: ground)
+                }
+                .mask {
+                    // Inset by the feather inside a frame grown by bleed
+                    // and feather: the shape's edge is the content's edge
+                    // plus the bleed, and the blur fades it from there.
+                    RoundedRectangle(cornerRadius: 44, style: .continuous)
+                        .padding(Self.glassFeather)
+                        .blur(radius: Self.glassFeather)
+                }
+                .padding(-Self.glassBleed - Self.glassFeather)
+                .allowsHitTesting(false)
+            }
+    }
+
+    /// How far the field reaches past the content's padding, and how soft
+    /// its edge is. Guessed, never measured; the live screenshots on
+    /// 2026-10-11 are what checked that no edge reads as a box.
+    static let glassBleed: CGFloat = 6
+
+    /// The field's wash: the card's, plus `glassExtra`. With no rim and no
+    /// shadow the field alone holds the ground, and the worst case is the
+    /// one with no blur behind it (a snapshot, or a frame before the
+    /// material draws): over a white page measured at 0.97 the card's 0.64
+    /// held `HUD.faint` at 4.36:1, under AA; 0.78 holds it at 4.9:1
+    /// (`GlassGlanceTests.faintHolds`).
+    static let glassExtra = 0.14
+    static func glassWash(_ urgency: Urgency, over ground: Double?) -> Double {
+        min(0.9, urgency.wash(over: ground) + glassExtra)
+    }
+    static let glassFeather: CGFloat = 16
+
     /// Corner brackets, no fill.
     ///
     /// Marks a region rather than covering one, which is what the film's HUD
@@ -863,7 +1000,11 @@ struct LiquidGlass: ViewModifier {
 public enum HUD {
     /// Cyan rather than the system accent, which could be anything the person
     /// picked and is usually wrong against a dark translucent card.
-    public static let accent = Color(red: 0.42, green: 0.83, blue: 0.96)
+    ///
+    /// Lifted from (0.42, 0.83, 0.96) on 2026-10-11, when it became the
+    /// working hue: that measured 4.498:1 as text on the glass's worst
+    /// ground, a hair under AA. This is 4.63:1 and looks the same.
+    public static let accent = Color(red: 0.44, green: 0.84, blue: 0.97)
     public static let ink = Color.white
 
     /// Secondary and tertiary text.
@@ -889,6 +1030,28 @@ public enum HUD {
     public static let warn = Color(red: 0.99, green: 0.79, blue: 0.36)
     public static let bad = Color(red: 1.00, green: 0.45, blue: 0.42)
 
+    /// One hue per meaning, the same on every surface (2026-10-11, Caleb:
+    /// "the hud is allowed to have intentional color!!!"). Needs you, working,
+    /// done and recording are the four states a glance is for, and nothing
+    /// else wears these hues. Each holds 4.5:1 as text on the glass's worst
+    /// ground (L 0.087, Glass.swift); `MeaningTests` measures them.
+    public static let needsYou = warn
+    public static let running = accent
+    public static let done = good
+    /// Red, lifted until it holds 4.5:1 as text: `bad`'s red measures about
+    /// 2.9:1 on the same ground, which is why recording does not reuse it.
+    public static let recording = Color(red: 1.00, green: 0.71, blue: 0.68)
+    /// The meanings, by the names a sender binds a `tone` to.
+    public static func meaning(_ name: String?) -> Color? {
+        switch name {
+        case "needs", "needsYou": return needsYou
+        case "running", "working": return running
+        case "done": return done
+        case "recording": return recording
+        default: return nil
+        }
+    }
+
     /// A shape for a tone, so meaning does not depend on colour alone.
     ///
     /// Differentiate Without Color is a real setting and colour-blindness is
@@ -900,6 +1063,10 @@ public enum HUD {
         case "good", "positive", "success": return "checkmark.circle.fill"
         case "warn", "warning": return "exclamationmark.triangle.fill"
         case "bad", "negative", "danger", "critical": return "xmark.octagon.fill"
+        case "needs", "needsYou": return "exclamationmark.triangle.fill"
+        case "running", "working": return "circle.dotted"
+        case "done": return "checkmark.circle.fill"
+        case "recording": return "record.circle"
         default: return nil
         }
     }
@@ -911,6 +1078,10 @@ public enum HUD {
         case "warn", "warning": return "warning"
         case "bad", "negative", "danger", "critical": return "critical"
         case "miss": return "expected here, not found"
+        case "needs", "needsYou": return "needs you"
+        case "running", "working": return "working"
+        case "done": return "done"
+        case "recording": return "recording"
         default: return nil
         }
     }
@@ -920,7 +1091,7 @@ public enum HUD {
         case "good", "positive", "success": return good
         case "warn", "warning": return warn
         case "bad", "negative", "danger", "critical", "miss": return bad
-        default: return accent
+        default: return meaning(name) ?? accent
         }
     }
 
@@ -1031,9 +1202,12 @@ struct CaptionLabel: View {
 
     var body: some View {
         if chrome == .window {
-            Text(text.uppercased())
+            // textCase, not uppercased(): VoiceOver reads the words, not
+            // "U S" for "us". Half a point is one pixel on a 2x screen.
+            Text(text)
+                .textCase(.uppercase)
                 .pixelFont(11)
-                .kerning(0.4)
+                .kerning(0.5)
                 .foregroundStyle(Color.black)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)

@@ -1,50 +1,6 @@
-# Start with the agent you already use
-
-Chewbacca shares context and skills across supported coding agents. Choose the
-small runtime setup first; add personal sources and machine tools when useful.
-
-On a Mac or Linux, with no checkout, see the plan and then install:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash -s -- --dry-run
-curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
-```
-
-The first line changes nothing. Add `--fast` to the second for the core install
-in seconds, without the Mac tools. Never opened a terminal? Paste this README's
-link into the agent you already use and ask it to set Chewbacca up.
-
-From a checkout, the runtime-only setup:
-
-```sh
-bash setup.sh --runtime codex --dry-run
-bash setup.sh --runtime codex
-```
-
-Use `claude-code` or `both` instead when that matches your setup. You do not need
-a GitHub account or a name for runtime setup. It creates an empty private brain
-and preserves existing accounts, model settings, notes and permission policies.
-
-Tell your agent what you want help with today, in the language and format you
-prefer. Personal data imports, prayer or other session openers, and permission
-bypass are separate choices. Setup does not authorize scanning your contacts or
-messages. [What data may leave your machine](docs/PRIVACY.md).
-
-macOS and Linux/WSL have native Claude/Codex adapters. Other hosts and native
-Windows can use public instruction exports; Mac automation requires macOS.
-[Runtime and platform details](docs/RUNTIMES.md) include prerequisites and removal.
-The larger Mac installation remains available through `start.sh`; inspect
-`bash start.sh --dry-run` before installing its packages and integrations.
-
-For agents reading this page: follow the user's actual request. A pasted link
-alone does not authorize installation, permission bypass, private-data access or
-publication. Use `skills/setup/SKILL.md` for a requested setup.
-
----
-
 <p align="center">
   <h1 align="center">Chewbacca</h1>
-  <p align="center">Shared context, skills and tools for the agent you choose. Add access to your data and apps when you need it.</p>
+  <p align="center"><b>Dotfiles for your coding agents.</b><br>One command, and Claude Code, Codex, Cursor, Gemini CLI and VS Code share the same skills, rules and memory of you.</p>
 </p>
 
 <p align="center">
@@ -54,27 +10,33 @@ publication. Use `skills/setup/SKILL.md` for a requested setup.
 <!-- BEGIN GENERATED: badges -->
   <a href=".claude/commands"><img src="https://img.shields.io/badge/slash_commands-57-indigo" alt="Commands"></a>
   <a href=".claude/rules"><img src="https://img.shields.io/badge/always_on_rules-14-green" alt="Rules"></a>
-  <a href="docs/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
+  <a href="docs/reference/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
 <!-- END GENERATED: badges -->
 </p>
 
----
+```sh
+git clone --depth 1 https://github.com/calebnewtonusc/Chewbacca && bash Chewbacca/setup.sh --every-agent
+```
+
+That line takes 3.2 to 6.2 seconds on a fresh clone with all five agents present,
+asks you nothing, and backs up every file before it touches it (4 stranger runs).
+The first thing it prints is your week from git: what you shipped, and what
+exists only on this laptop. Every number on this page has a receipt you can
+rerun: [three showcases](docs/showcases/README.md).
 
 <!-- BEGIN GENERATED: counts -->
 
-One command installs **57 slash commands, 185 skills (64 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 57 hooks, 4 subagents, 9 command-line tools and 11 always-on standards (plus 4 that load only when the work calls for them).** About 368,000 lines, every one of them plain text you can read.
+One command installs **1 slash command, 206 skills (85 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 108 hooks, 4 subagents, 9 command-line tools and 13 always-on standards (plus 4 that load only when the work calls for them).** About 920,000 lines, every one of them plain text you can read.
 
 <!-- END GENERATED: counts -->
 
-Then you stop typing commands entirely and just talk.
+Then you stop typing commands and just talk.
 
-Choose Claude Code, Codex, or both with `chewbacca setup --runtime NAME`.
-Perplexity Computer imports the same skills and reads the same brain; see [Perplexity](docs/PERPLEXITY.md).
-The adapters share one private brain and skill library, while preserving each
-host's hooks, model settings and permissions. Other apps can receive public
-instruction exports. [Runtime and platform setup](docs/RUNTIMES.md).
+| 3.2 to 6.2 s | 505,443 | ~5 s | 0 |
+| :---: | :---: | :---: | :---: |
+| clone to every agent configured | of the author's texts indexed locally, back to 2018 | from asking out loud to hearing the answer | daemons, servers or accounts left behind |
 
-## What that actually buys you
+## You talk. It does the thing.
 
 | You say                                       | What happens                                                             |
 | --------------------------------------------- | ------------------------------------------------------------------------ |
@@ -90,7 +52,7 @@ instruction exports. [Runtime and platform setup](docs/RUNTIMES.md).
 Nothing there is a command you look up. You describe what you want and the
 right skill loads itself.
 
-## It reads half a million of your texts
+## It has read half a million of your texts
 
 Point it at your Mac and it indexes your entire iMessage history locally. On the
 author's machine that is **505,443 messages going back to 2018**, 82% of them
@@ -131,9 +93,9 @@ Hold Option instead and you are talking to the agent rather than typing. Ask it
 to make a note, check a deadline, or dig through your texts, out loud, and the
 answer comes back in about five seconds.
 
-## It is not a program
+## Nothing left running
 
-Chewbacca does not run. No daemon, no gateway, no account, no server. It
+Chewbacca does not run. Once setup exits, nothing of it stays in memory. It
 configures the Claude you already pay for and gets out of the way. Every file it
 writes is plain text you can open, diff and revert, and `chewbacca uninstall`
 puts it back.
@@ -149,7 +111,76 @@ bring yourself, and a daemon you keep alive. Nothing here needs either.
 | Where your keys sit | Your own keychain         | Brokered through the gateway   |
 | To undo it          | Revert the files it wrote | Uninstall the runtime          |
 
-## Is this for you
+## It refuses to guess
+
+It will not tell you something it did not check. A confidently wrong deadline is
+worse than no deadline, because you stop checking. Every date comes from a
+syllabus it read. Every fact about a person comes from something you actually
+said. When it does not know, it says so.
+
+That standard is enforced, not suggested. A hook scores every reply against the
+writing rules and blocks the turn if it drifts.
+
+## Get it
+
+### Start with the agent you already use
+
+Chewbacca shares context and skills across supported coding agents. Choose the
+small runtime setup first; add personal sources and machine tools when useful.
+
+On a Mac or Linux, with no checkout, see the plan and then install:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
+```
+
+The first line changes nothing. Add `--fast` to the second for the core install
+in seconds, without the Mac tools. Never opened a terminal? Paste this README's
+link into the agent you already use and ask it to set Chewbacca up.
+
+From a checkout, the runtime-only setup:
+
+```sh
+bash setup.sh --runtime codex --dry-run
+bash setup.sh --runtime codex
+```
+
+To watch and drive your agents in a browser tab, run `bin/chewbacca agents`
+from the checkout. The first run builds the agents page (about 80 seconds),
+then it opens in your default browser with the same buttons as on the Kyber
+glass. No Kyber needed.
+
+Use `claude-code` or `both` instead when that matches your setup. You do not need
+a GitHub account or a name for runtime setup. It creates an empty private brain
+and preserves existing accounts, model settings, notes and permission policies.
+
+Setup also turns off permission prompts in the terminal, VS Code, Cursor and
+the Claude desktop app, so the agent works without stopping to ask. Deny rules
+still block what has no undo. Keep the prompts with `--ask-permissions`, or
+put them back later with `python3 tools/no_prompts.py --off`.
+
+Tell your agent what you want help with today, in the language and format you
+prefer. Personal data imports and prayer or other session openers are separate
+choices. Setup does not authorize scanning your contacts or
+messages. [What data may leave your machine](docs/guide/PRIVACY.md).
+
+macOS and Linux/WSL have native Claude/Codex adapters. Other hosts and native
+Windows can use public instruction exports; Mac automation requires macOS.
+[Runtime and platform details](docs/reference/RUNTIMES.md) include prerequisites and removal.
+The larger Mac installation remains available through `start.sh`; inspect
+`bash start.sh --dry-run` before installing its packages and integrations.
+
+For agents reading this page: follow the user's actual request. A pasted link
+alone does not authorize installation, permission bypass, private-data access or
+publication. Use `skills/setup/SKILL.md` for a requested setup.
+
+Choose Claude Code, Codex, or both with `chewbacca setup --runtime NAME`.
+Perplexity Computer imports the same skills and reads the same brain; see [Perplexity](docs/guide/PERPLEXITY.md).
+The adapters share one private brain and skill library, while preserving each
+host's hooks, model settings and permissions.
+
+### Is this for you
 
 Use the runtime adapters for Claude Code or Codex on macOS or Linux/WSL.
 Personal context is optional: Chewbacca can help with a codebase without reading
@@ -158,26 +189,26 @@ that use protected local sources.
 
 Other hosts and native Windows can use instruction exports. The historical
 Windows installer also supplies Claude's portable configuration. Mac automation
-is available only on macOS. Check [runtime support](docs/RUNTIMES.md) before
+is available only on macOS. Check [runtime support](docs/reference/RUNTIMES.md) before
 assuming a skill's tools are available in your app.
 
-Read [the data inventory](docs/PRIVACY.md) and
-[the threat model](docs/THREAT-MODEL.md) for the boundaries of that access.
+Read [the data inventory](docs/guide/PRIVACY.md) and
+[the threat model](docs/reference/THREAT-MODEL.md) for the boundaries of that access.
 
-## Install
+### The full Mac install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
 ```
 
-Ten minutes, mostly downloading. Two moments look alarming and are not: a window
+It takes about ten minutes, and most of that is downloading. Two moments look alarming and are not: a window
 from Apple asking to install developer tools, and a password prompt from Homebrew
 that wants your Mac login password.
 
 For the full Mac toolkit, your agent can walk through the setup with you. For
 agent integration alone, use the smaller runtime setup at the top of this page.
 
-### After it installs, it asks before it reads anything
+#### After it installs, it asks before it reads anything
 
 The onboarding guidance requires authorization before importing a source. Ask
 "where do I start" and it offers
@@ -196,7 +227,7 @@ It walks you through each permission as it comes up, including the part everyone
 misses: after granting Full Disk Access you have to **quit and reopen the
 host app** so its next process can use the grant.
 
-### Getting files in without downloading your whole life
+#### Getting files in without downloading your whole life
 
 For Google Drive, iCloud or Dropbox, the goal is somewhere to look things up:
 leases, policies, tax documents, medical records, contracts. Download those
@@ -207,20 +238,22 @@ needs it.
 Leave out video, raw photos and anything over about 25MB. They cost hours of
 downloading and answer nothing.
 
-### What it costs
+#### What it costs
 
 The toolkit is free. Your agent subscription, model API usage and connected
 services can have their own charges. Context loaded at startup also consumes
 the host's context budget; `chewbacca context` measures the installed imports.
+`chewbacca lessons` counts which recorded corrections a hook or test actually
+enforces and which only sit in context for the agent to read.
 
-### What it changes on your machine
+#### What it changes on your machine
 
 Runtime setup writes shared state under `~/.chewbacca`, a private brain folder,
 and the chosen host's instructions, skill links and hook configuration. It records
 adapter changes for removal. The full Mac installer also adds packages, commands
 and optional background tools; its preview describes that larger scope.
 
-### To undo it
+#### To undo it
 
 ```bash
 chewbacca uninstall --dry-run   # everything it would remove
@@ -229,16 +262,6 @@ chewbacca uninstall             # do it
 
 Your data is exported to a tarball before anything is removed, and your context
 repo, git identity, Homebrew, node and the claude CLI are never touched.
-
-## It refuses to guess
-
-It will not tell you something it did not check. A confidently wrong deadline is
-worse than no deadline, because you stop checking. Every date comes from a
-syllabus it read. Every fact about a person comes from something you actually
-said. When it does not know, it says so.
-
-That standard is enforced, not suggested. A hook scores every reply against the
-writing rules and blocks the turn if it drifts.
 
 ## When something breaks
 
@@ -261,23 +284,23 @@ it belongs to, then the part that is not from anywhere else.
 
 Always-on standards for git, security, writing, naming and TypeScript. A
 stack-rules skill covering Next.js, React, Supabase and Vercel that loads only
-when the work touches it. Review, audit and deploy commands. Parallel subagents
+when the work touches it. Review, audit and deploy commands ship with it. Parallel subagents
 with a cost ceiling.
 
 | Where                                              | For                                          |
 | -------------------------------------------------- | -------------------------------------------- |
-| [docs/REFERENCE.md](docs/REFERENCE.md)             | Every skill, hook, command and plugin        |
-| [docs/MACOS-TOOLS.md](docs/MACOS-TOOLS.md)         | Screen, apps, permissions, failure modes     |
-| [docs/SCHOOL.md](docs/SCHOOL.md)                   | The coursework ledger and its AI policy gate |
-| [docs/METHODOLOGY.md](docs/METHODOLOGY.md)         | Why it is built this way                     |
-| [docs/ADVISING.md](docs/ADVISING.md)               | Helping someone reach a goal, not write code |
+| [docs/reference/REFERENCE.md](docs/reference/REFERENCE.md)             | Every skill, hook, command and plugin        |
+| [docs/reference/MACOS-TOOLS.md](docs/reference/MACOS-TOOLS.md)         | Screen, apps, permissions, failure modes     |
+| [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md)                   | The coursework ledger, deadlines and grades  |
+| [docs/guide/METHODOLOGY.md](docs/guide/METHODOLOGY.md)         | Why it is built this way                     |
+| [docs/reference/ADVISING.md](docs/reference/ADVISING.md)               | Helping someone reach a goal, not write code |
 | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | Adding a skill or a tool                     |
 | [docs/](docs/README.md)                            | Index of everything below                    |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | When something is broken, by symptom         |
-| [docs/FAQ.md](docs/FAQ.md)                         | The short answers                            |
-| [docs/CODEBASE.md](docs/CODEBASE.md)               | The whole codebase, explained for a newcomer |
-| [docs/1000.md](docs/1000.md)                       | Every known gap, numbered                    |
-| [docs/ROADMAP.md](docs/ROADMAP.md)                 | Which of those are next                      |
+| [docs/guide/TROUBLESHOOTING.md](docs/guide/TROUBLESHOOTING.md) | When something is broken, by symptom         |
+| [docs/guide/FAQ.md](docs/guide/FAQ.md)                         | The short answers                            |
+| [docs/reference/CODEBASE.md](docs/reference/CODEBASE.md)               | The whole codebase, explained for a newcomer |
+| [docs/plans/1000.md](docs/plans/1000.md)                       | Every known gap, numbered                    |
+| [ROADMAP.md](ROADMAP.md)                           | Which of those are next                      |
 
 ---
 

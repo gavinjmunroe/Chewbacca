@@ -159,6 +159,199 @@ rm -f "$T/kit/z16jobs.json" "$T/engine/sessions/z16.json"
 bash "$ROOT/bin/chewbacca-api" mcp >/dev/null 2>&1
 tail -1 "$T/calls" | grep -qx mcp || no "chewbacca api mcp did not start the engine's server"
 
+# A non-spec JSON file kept beside the specs is skipped quietly.
+echo '{"note":"x","timeline":{},"user":{}}' > "$T/kit/notaspec.json"
+err="$(bash "$ROOT/bin/chewbacca-api" sync 2>&1 >/dev/null)"
+[ -f "$T/engine/sites/notaspec.json" ] && no "a non-spec JSON file was installed"
+printf '%s' "$err" | grep -q notaspec && no "a non-spec JSON file printed a refusal"
+rm -f "$T/kit/notaspec.json"
+
+# The profile import takes only the named sign-in cookies from the identity
+# provider's host, picks the profile that used them last, and imports the
+# foreign domain separately. A fake Chrome cookie store, encrypted the way
+# Chrome does it, stands in for his.
+if python3 -c 'import cryptography' 2>/dev/null; then
+  python3 - "$T/chrome" <<'PY'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+for prof, seen in (("Profile 1", 200), ("Profile 2", 100)):
+    os.makedirs(f"{sys.argv[1]}/{prof}", exist_ok=True)
+    db = sqlite3.connect(f"{sys.argv[1]}/{prof}/Cookies")
+    db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+    for host, name in (("webreg.usc.edu", "wr"), (".login.microsoftonline.com", "ESTSAUTH"),
+                       ("login.microsoftonline.com", "buid"), (".login.microsoftonline.com", "OtherMsCookie")):
+        db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, seen))
+    db.commit()
+PY
+  : > "$T/calls"
+  # The import itself runs with `cryptography` unimportable, the way it is on
+  # a fresh Mac's /usr/bin/python3: it must decrypt through openssl instead.
+  mkdir -p "$T/nocrypto/cryptography"
+  echo 'raise ImportError("no cryptography on a fresh Mac")' > "$T/nocrypto/cryptography/__init__.py"
+  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey PYTHONPATH="$T/nocrypto" \
+    FAKE_KEEP="$T/kept" bash -c '
+      cat > "'"$T"'/bin/api-anything" <<'"'"'SH'"'"'
+#!/bin/bash
+printf "%s\n" "$*" >> "$FAKE_LOG"
+for a in "$@"; do case "$prev" in --cookies) cp "$a" "$FAKE_KEEP.$2.json";; esac; prev="$a"; done
+echo "{\"ok\":true}"
+SH
+      chmod +x "'"$T"'/bin/api-anything"
+      PROFILE_LOGIN_SITES_TEST=1 bash "'"$ROOT"'/bin/chewbacca-api" login usc-reg >/dev/null 2>&1'
+  grep -q 'login microsoftonline.com --cookies' "$T/calls" || no "the identity provider's cookies were not imported under their own domain"
+  grep -q 'login usc-reg --cookies' "$T/calls" || no "the site's own cookies were not imported"
+  if [ -f "$T/kept.microsoftonline.com.json" ]; then
+    grep -q OtherMsCookie "$T/kept.microsoftonline.com.json" && no "an unlisted Microsoft cookie was imported"
+    grep -q ESTSAUTH "$T/kept.microsoftonline.com.json" || no "the Entra session cookie was dropped"
+    grep -q '"fake-ESTSAUTH"' "$T/kept.microsoftonline.com.json" || no "cookies did not decrypt without the cryptography package"
+  else
+    no "no identity-provider cookie file reached the engine"
+  fi
+  # A classmate's Mac: USC lives in "Profile 1", and a personal "Profile 3"
+  # opened Outlook more recently, so it holds a newer Microsoft cookie and no
+  # USC session. The Microsoft cookies must not vote, or usc-reg imports the
+  # personal profile and never gets the WebReg cookie.
+  python3 - "$T/chrome2" <<'PY2'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+for prof, rows in (("Profile 1", (("webreg.usc.edu", "wr", 100), (".login.microsoftonline.com", "ESTSAUTH", 100))),
+                   ("Profile 3", ((".login.microsoftonline.com", "ESTSAUTH", 900),))):
+    os.makedirs(f"{sys.argv[1]}/{prof}", exist_ok=True)
+    db = sqlite3.connect(f"{sys.argv[1]}/{prof}/Cookies")
+    db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+    for host, name, seen in rows:
+        db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, seen))
+    db.commit()
+PY2
+  rm -f "$T"/kept.*
+  CHEWBACCA_CHROME_DIR="$T/chrome2" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_KEEP="$T/kept" \
+    bash "$ROOT/bin/chewbacca-api" login usc-reg >/dev/null 2>&1
+  grep -q fake-wr "$T/kept.usc-reg.json" 2>/dev/null ||
+    no "usc-reg imported the profile with the newest Microsoft cookie instead of the one signed in to USC"
+
+  # A lapsed session re-imports from Chrome once and retries, silently. WebReg
+  # answered a bare 302 on 2026-10-10 after the 12 hour import ran out.
+  cat > "$T/bin/api-anything" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_LOG"
+case "$1 $2" in
+  "login usc-reg") touch "$FAKE_STATE"; echo '{"ok":true}' ;;
+  "call usc-reg"|"call alpha")
+    if [ -f "$FAKE_STATE" ]; then echo '{"ok":true,"data":[1]}'
+    else echo '{"ok":false,"class":"error","reason":"HTTP 302: "}'; echo "next: retry once" >&2; fi ;;
+  *) echo '{"ok":true}' ;;
+esac
+SH
+  chmod +x "$T/bin/api-anything"
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=20271 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":true' || no "a lapsed usc-reg session was not re-imported and retried: $out"
+  grep -q '^login usc-reg --cookies' "$T/calls" || no "the retry did not re-import from Chrome"
+  # A site with no profile login is never re-imported: the failure passes through.
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(FAKE_STATE="$T/state" bash "$ROOT/bin/chewbacca-api" call alpha getThing 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":false' || no "a non-profile site's failure was swallowed: $out"
+  grep -q '^login' "$T/calls" && no "a non-profile site triggered a Chrome re-import"
+  # No session in any profile: the failure passes through, and Keychain is never asked.
+  : > "$T/calls"; rm -f "$T/state"; mkdir -p "$T/nochrome"
+  printf '#!/bin/bash\ntouch "%s/keychain-asked"\necho fakekey\n' "$T" > "$T/bin/security"; chmod +x "$T/bin/security"
+  out="$(CHEWBACCA_CHROME_DIR="$T/nochrome" FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=1 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"ok":false' || no "with no Chrome session the original failure should pass through: $out"
+  [ -e "$T/keychain-asked" ] && no "Keychain was asked for a Chrome key with no session to decrypt"
+  rm -f "$T/bin/security"
+
+  if command -v node >/dev/null 2>&1; then
+  # A USC site whose sign-in finishes inside a page (AIMS parking) answers a
+  # guest page instead of a 401 once the session lapses: ok true and
+  # signedIn false on 2026-10-13, which read as "no permits, no tickets". That
+  # answer re-imports, finishes the sign-in headless, and retries.
+  python3 - "$T/chrome3" <<'PY3'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+os.makedirs(f"{sys.argv[1]}/Profile 1", exist_ok=True)
+db = sqlite3.connect(f"{sys.argv[1]}/Profile 1/Cookies")
+db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+for host, name in ((".aimsparking.com", "cf_clearance"), (".login.microsoftonline.com", "ESTSAUTH")):
+    db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, 100))
+db.commit()
+PY3
+  cat > "$T/warm.mjs" <<'JS'
+import fs from "fs";
+const [url, inFile, outFile, ...check] = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_LOG, `warmup ${url} ${check.join(" ")}\n`);
+const jar = JSON.parse(fs.readFileSync(inFile, "utf8"));
+fs.writeFileSync(outFile, JSON.stringify([...jar, { name: "AW9_SESSION", value: "signed-in", domain: ".usc.aimsparking.com", path: "/" }]));
+JS
+  cat > "$T/bin/api-anything" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_LOG"
+case "$1 $2" in
+  "login usc-parking")
+    for a in "$@"; do [ "$prev" = --cookies ] && grep -q signed-in "$a" && touch "$FAKE_STATE"; prev="$a"; done
+    echo '{"ok":true}' ;;
+  "call usc-parking")
+    if [ -f "$FAKE_STATE" ]; then echo '{"ok":true,"data":{"signedIn":true,"activePermits":1}}'
+    else echo '{"ok":true,"data":{"signedIn":false,"cartItems":0}}'; fi ;;
+  "call usc-reg") echo '{"ok":false,"class":"drift","reason":"extract path missing"}' ;;
+  *) echo '{"ok":true}' ;;
+esac
+SH
+  chmod +x "$T/bin/api-anything"
+  : > "$T/calls"; rm -f "$T/state"
+  out="$(CHEWBACCA_CHROME_DIR="$T/chrome3" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    CHEWBACCA_SSO_WARMUP="$T/warm.mjs" bash "$ROOT/bin/chewbacca-api" call usc-parking account 2>/dev/null)"
+  printf '%s' "$out" | grep -q '"signedIn":true' || no "a guest answer from usc-parking was returned as the student's data: $out"
+  grep -q '^warmup https://uscauth.aimsparking.com/.* user.logged_in$' "$T/calls" || no "usc-parking re-imported without finishing and checking the USC sign-in"
+  # Drift on a site without a page sign-in is a real drift: no re-import.
+  : > "$T/calls"
+  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+    bash "$ROOT/bin/chewbacca-api" call usc-reg holds term=20271 >/dev/null 2>&1
+  grep -q '^login' "$T/calls" && no "a drift on usc-reg triggered a Chrome re-import"
+# Entra stops on Duo: the half sign-in imports nothing and the login says so.
+printf 'process.stderr.write("sign-in stopped at login.microsoftonline.com\\n"); process.exit(1);\n' > "$T/warm-fail.mjs"
+: > "$T/calls"; rm -f "$T/state"
+CHEWBACCA_CHROME_DIR="$T/chrome3" CHEWBACCA_CHROME_SAFE_KEY=fakekey FAKE_STATE="$T/state" \
+  CHEWBACCA_SSO_WARMUP="$T/warm-fail.mjs" bash "$ROOT/bin/chewbacca-api" login usc-parking >/dev/null 2>&1 &&
+  no "a failed USC sign-in for usc-parking reported success"
+grep -q '^login usc-parking --cookies' "$T/calls" && no "a failed USC sign-in still imported cookies for usc-parking"
+  fi
+
+  # restore the plain fake engine
+  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "$FAKE_LOG"\necho "{\\"ok\\":true}"\n' > "$T/bin/api-anything"
+fi
+
+# Every profile-login row that reaches Microsoft's sign-in names the Entra
+# cookies it takes. login.microsoftonline.com holds his whole Microsoft 365
+# sign-in, so a row there with the "-" (all cookies) prefix would carry it all
+# (security review, 2026-10-10). Rows are read from the script itself.
+rows="$(sed -n '/^PROFILE_LOGIN_SITES="/,/"$/p' "$ROOT/bin/chewbacca-api" | sed 's/^PROFILE_LOGIN_SITES="//; s/"$//')"
+[ -n "$rows" ] || no "could not read PROFILE_LOGIN_SITES"
+while read -r site hosts _; do
+  [ -n "$site" ] || continue
+  case ",$hosts," in
+    *microsoftonline.com,*) no "$site takes every login.microsoftonline.com cookie; name the Entra set" ;;
+  esac
+done <<EOF
+$rows
+EOF
+
 # Calls pass through with their args intact; teach maps to add.
 bash "$ROOT/bin/chewbacca-api" call alpha getThing 'q=two words' >/dev/null
 grep -qx 'call alpha getThing q=two words' "$T/calls" || no "call args changed on the way through"

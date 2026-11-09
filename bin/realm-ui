@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Realm's own desktop interface on the glass: build it, serve it, check it.
+
+    realm-ui build [--force] [--mode stock|glass] [--source <checkout>]
+                                copy Carlton's renderer out of the realm checkout and vite build it.
+                                stock (default): his app as he ships it. glass: our tiles and story
+                                layer over it. --mode and --source stick for every later build once
+                                one works (settings.json); `--source default` goes back to the engine's
+                                checkout. REALM_UI_MODE / REALM_UI_SOURCE change one build only
+    realm-ui start              serve it on 127.0.0.1 (registers with chewbacca-daemon), print the url
+    realm-ui serve              the server in the foreground (what the daemon runs)
+    realm-ui stop               stop it and take it off the daemon
+    realm-ui status [--json]    built, running, url
+    realm-ui show               open it on the glass (the `realm` surface); with no
+                                Kyber running it opens a browser tab instead
+    realm-ui open [--build] [--front|--background] [--print-url]
+                                open it in a normal browser tab, no Kyber needed: same
+                                page, same buttons. Starts the engine and the server if
+                                they're down. --print-url prints a one-time address
+                                instead of opening it (for a headless browser or ssh);
+                                that address is a credential for two minutes, once.
+                                --build builds the engine and the page first if they
+                                aren't (what `chewbacca agents` runs; ~80 s the first time)
+
+Realm is Carlton Aikins' agent workspace (github.com/31Carlton7/realm). The
+details are in bin/lib/realm_ui/__init__.py.
+
+Exit codes: 0 done, 1 failed, 2 usage, 3 status says not running.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import realm_ui  # noqa: E402
+
+
+def main(argv: list) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0 if argv else 2
+    cmd, rest = argv[0], argv[1:]
+    try:
+        if cmd == "build":
+            picks, force, i = {}, False, 0
+            while i < len(rest):
+                arg = rest[i]
+                name, eq, value = arg.partition("=")
+                if arg == "--force":
+                    force = True
+                elif name in ("--mode", "--source"):
+                    if not eq:
+                        i += 1
+                        value = rest[i] if i < len(rest) else ""
+                    if not value or value.startswith("--"):
+                        print(f"realm-ui: {name} needs a value", file=sys.stderr)
+                        return 2
+                    picks[name[2:]] = value
+                else:
+                    print(f"realm-ui: unknown build option {arg}", file=sys.stderr)
+                    return 2
+                i += 1
+            realm_ui.build(force=force, mode_pick=picks.get("mode", ""), source=picks.get("source", ""))
+            return 0
+        if cmd == "start":
+            print(realm_ui.start()["url"])
+            return 0
+        if cmd == "serve":
+            os.execv(realm_ui.node() or "/usr/bin/env", realm_ui.serve_argv())
+        if cmd == "stop":
+            print("stopped" if realm_ui.stop() else "not running")
+            return 0
+        if cmd == "status":
+            info = realm_ui.status()
+            if "--json" in rest:
+                print(json.dumps(info))
+            else:
+                print(f"built {'yes' if info['built'] else 'no'}"
+                      + (f" ({info.get('mode') or 'glass'}, realm {info['realmCommit'][:8]}" + (f" from {info['source']}" if info.get("source") else "") + ")"
+                         if info["realmCommit"] else "")
+                      + (f", running at {info['url']}" if info["running"] else ", not running"))
+            return 0 if info["running"] else 3
+        if cmd == "open":
+            front = True if "--front" in rest else False if "--background" in rest else None
+            if "--build" in rest:
+                realm_ui.ensure_built()
+            got = realm_ui.open_in_browser(front=front, print_only="--print-url" in rest)
+            print(got if "--print-url" in rest else f"Opened the agents page in your browser: {got}")
+            return 0
+        if cmd == "show":
+            import surface_intent  # noqa: PLC0415
+            ok = surface_intent.open_with_preset("realm", {})
+            if not ok:
+                # No Kyber on this Mac (or it's down): the same page in a tab.
+                got = realm_ui.open_in_browser()
+                print(f"No glass running, so it opened in your browser: {got}")
+                return 0
+            print("Realm is up.")
+            return 0
+    except RuntimeError as err:
+        print(f"realm-ui: {err}", file=sys.stderr)
+        return 1
+    print(f"realm-ui: unknown command {cmd}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

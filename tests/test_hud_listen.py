@@ -797,6 +797,47 @@ def test_pointing_beats_the_music_words(m) -> None:
     check("with nothing marked, a shortcut still answers", shortcuts != [] and sent == [], f"got {shortcuts}")
 
 
+def test_screen_text(m) -> None:
+    """Text-only: "what does this error say" reaches the model as words, no image."""
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "argv"
+        fake = Path(tmp) / "fake-text"
+        fake.write_text(f'#!/bin/sh\necho "$@" >> {log}\necho "Error 42: file not found"\n')
+        fake.chmod(0o755)
+        keep = m.SCREEN_TEXT_CMD
+        m.SCREEN_TEXT_CMD = [str(fake)]
+        try:
+            for said in ("what does this error say", "What does that say?", "what's this error",
+                         "read this for me", "what's on my screen"):
+                got = m.with_screen_text(said, "Safari · Checkout")
+                check(f"{said!r} puts the window's text in the prompt", "Error 42: file not found" in got
+                      and got.startswith("Safari · Checkout"), got)
+            check("it's read from the app in front", log.read_text().splitlines()[0] == "--app Safari", log.read_text())
+            fence = m.with_screen_text("what does this error say", "Safari")
+            tag = re.search(r"<(screen-[0-9a-f]{12})>", fence)
+            check("fenced as data with a fresh tag", tag is not None and f"</{tag.group(1)}>" in fence
+                  and "not to obey" in fence, fence)
+            log.unlink()
+            for said in ("what time is it", "text sam i'm late", ""):
+                check(f"{said!r} reads nothing", m.with_screen_text(said, "Safari") == "Safari")
+            check("a selection already answers it, so no OCR", "<selected-" in m.with_screen_text(
+                "what does this say", m.seen_line("Safari\n\nhi")) and not log.exists())
+            check("nothing in front reads nothing", m.with_screen_text("what does this say", "") == "")
+            fake.write_text("#!/bin/sh\nexit 2\n")
+            check("no Screen Recording: the question still goes through", m.with_screen_text(
+                "what does this say", "Safari") == "Safari")
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            check("an empty window adds nothing", m.with_screen_text("what does this say", "Safari") == "Safari")
+            fake.write_text("#!/bin/sh\nyes abcdefghij | head -2000\n")
+            long_ = m.with_screen_text("what does this say", "Safari")
+            check("a huge page is capped", len(long_) < m.SCREEN_TEXT_CHARS + 400, len(long_))
+            m.SCREEN_TEXT_CMD = [str(Path(tmp) / "missing")]
+            check("chewie missing: the question still goes through", m.with_screen_text(
+                "what does this say", "Safari") == "Safari")
+        finally:
+            m.SCREEN_TEXT_CMD = keep
+
+
 def test_seen_line(m) -> None:
     """Step 3 of backlog 117: the selected text itself reaches the prompt."""
     check("the receipt alone when nothing is selected",
@@ -1334,10 +1375,15 @@ def listener_env(directory: str, path: str) -> dict[str, str]:
         # HUD_SURFACES and HUD_GENUI off: the listener otherwise starts the real surfaces
         # daemon, or runs the real kyber-genui and its model, against ~/.bob.
         BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off", HUD_SURFACES="off", HUD_GENUI="off",
+        # HUD_CALLS off: the listener otherwise starts bin/call-pill, which polls FaceTime.
+        HUD_CALLS="off",
         HUD_VOICE="off", BOB_MEMORY_DIR=os.path.join(directory, "mem"),
         SUPERASSISTANT_DIR=os.path.join(directory, "superassistant"),
         BOB_NAMES=os.path.join(directory, "names.txt"),
         HUD_TERMINAL_CMD="sh -c 'echo []'", HUD_CLASSIFY_CMD="off",
+        # The runtime/account pick and limit marks (bin/lib/hud_accounts.py):
+        # never the person's own.
+        HUD_ACCOUNTS_STORE=os.path.join(directory, "hud-accounts.json"),
     )
 
 
@@ -1430,7 +1476,10 @@ def test_end_to_end() -> None:
 
 
 def test_route_end_to_end() -> None:
-    """A lookup opens the browser and never starts the model."""
+    """A lookup that names the browser opens it and never starts the model.
+
+    "in chrome": a bare "look up X" is answered on the glass since CHW-188
+    (tests/test_glass_search.py), so the app request is what still opens Chrome."""
     import tempfile
     directory = tempfile.mkdtemp()
     path = os.path.join(directory, "hud.sock")
@@ -1443,7 +1492,7 @@ def test_route_end_to_end() -> None:
     def serve() -> None:
         conn, _ = server.accept()
         ready.set()
-        conn.sendall(b'h "look up rust traits"\n')
+        conn.sendall(b'h "in chrome look up rust traits"\n')
         conn.settimeout(30)
         buffer = b""
         try:
@@ -1871,6 +1920,71 @@ def test_orphan_leaves() -> None:
                 pass
 
 
+def test_kit_update_hands_over(m) -> None:
+    """2026-10-11 17:55: hud-listen had run since 17:44 on snapshot 9edc7a8f,
+    from before Realm's interface landed, so "Show my agents" opened the old
+    agents card (an AGENTS title over an empty status line) instead of the
+    realm surface. A listener on a snapshot the kit has moved off hands over
+    once the person is quiet, and never mid-request."""
+    listener = m.Listener("claude -p", False, False)
+    listener.kit_moved = lambda: True
+    check("a moved kit with nobody talking hands over", listener.ready_to_hand_over())
+    listener.asked_at = time.monotonic()
+    check("not within a minute of a request", not listener.ready_to_hand_over())
+    listener.asked_at = time.monotonic() - m.KIT_QUIET_S - 1
+    listener.current = object()
+    check("not while a request is in flight", not listener.ready_to_hand_over())
+    listener.current = None
+    listener.kit_moved = lambda: False
+    check("a current kit keeps its listener", not listener.ready_to_hand_over())
+
+
+def test_kit_update_end_to_end() -> None:
+    """The listener runs from a kit snapshot, the kit swaps `current` to a
+    newer one, and the listener hangs up and exits so the display starts one
+    from the new code. Before the fix it stayed connected for hours."""
+    path, fake, env = _listener_fixture()
+    base = Path(tempfile.mkdtemp(prefix="kit-"))
+    for sha in ("old", "new"):
+        bin_dir = base / "snapshots" / sha / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "hud-listen").write_text(BIN.read_text(encoding="utf-8"), encoding="utf-8")
+        (bin_dir / "lib").symlink_to(BIN.parent / "lib")
+        (bin_dir.parent / "tools").symlink_to(BIN.parent.parent / "tools")
+    (base / "current").symlink_to(Path("snapshots") / "old")
+    entry = Path(env["HUD_TEST_ENTRY"])
+    entry.write_text(entry.read_text(encoding="utf-8").replace(
+        repr(str(BIN)), repr(str(base / "snapshots" / "old" / "bin" / "hud-listen"))), encoding="utf-8")
+    env = dict(env, HUD_KIT_CHECK_S="0.3")
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(1)
+    server.settimeout(20)
+    process = subprocess.Popen([sys.executable, str(entry), "--model-cmd", fake],
+                               env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    try:
+        conn, _ = server.accept()
+        time.sleep(1.5)
+        check("it stays while the kit has not moved", process.poll() is None)
+        (base / "current").unlink()
+        (base / "current").symlink_to(Path("snapshots") / "new")
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            pass
+        err = process.stderr.read() if process.poll() is not None and process.stderr else ""
+        check("a listener on an old snapshot exits after the kit moves",
+              process.poll() == 0, f"returncode {process.poll()}")
+        check("it says why", "kit moved" in err, err[-300:])
+        conn.close()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+        server.close()
+
+
 def test_routing(m) -> None:
     """The router runs before the model, and only the assistant path reaches it."""
     import tempfile
@@ -1925,11 +2039,31 @@ def test_routing(m) -> None:
     m.OPEN_CMD = shlex.split(f"sh -c 'echo \"$0\" >> {opened}'")
 
     listener.open_browser = lambda said: ("chrome: test", False)  # type: ignore[method-assign]
-    run_req = m.Request(said="look up rust traits", spoken_at=time.monotonic(), pointed=None)
+    # "in chrome": a bare "look up X" reaching `_run` is answered on the glass
+    # since CHW-188, checked just below.
+    run_req = m.Request(said="in chrome look up rust traits", spoken_at=time.monotonic(), pointed=None)
     outcome = listener._run(run_req)
     check("_run reports a failed open as failed", outcome == "failed", f"got {outcome!r}")
     check("a failed open is recorded as failed, not done",
           m.voice_memory.last()["outcome"] == "failed" and m.voice_memory.last()["dest"] == "browser")
+
+    # A search that reaches the router mid-run goes to the glass, never to
+    # Chrome. The backend is stubbed: no test touches the network.
+    browser_calls: list[str] = []
+    listener.open_browser = lambda said: browser_calls.append(said) or ("chrome: x", True)  # type: ignore[method-assign]
+    real_search = m.glass_search.search
+    m.glass_search.search = lambda q, timeout=0: m.glass_search.Result(
+        query=q, answer="Traits define shared behavior.", answer_host="doc.rust-lang.org",
+        sources=[m.glass_search.Source("Traits", "https://doc.rust-lang.org/book/ch10-02-traits.html",
+                                       "doc.rust-lang.org")], backend="stub")
+    try:
+        outcome = listener._run(m.Request(said="look up rust traits", spoken_at=time.monotonic(), pointed=None))
+    finally:
+        m.glass_search.search = real_search
+    check("a search in _run is answered on the glass", outcome == "done", f"got {outcome!r}")
+    check("and never opens the browser", browser_calls == [], browser_calls)
+    check("the drawn row is the only one a press can open",
+          listener.search_rows == {"src-0": "https://doc.rust-lang.org/book/ch10-02-traits.html"}, listener.search_rows)
 
     req = m.Request(said="text caleb hi", spoken_at=time.monotonic(), pointed=None)
     check("a text is the assistant's", listener.decide(req, "Google Chrome · Docs").dest == "assistant")
@@ -2485,6 +2619,7 @@ def main() -> int:
     test_pointing_beats_the_music_words(module)
     print("seen line")
     test_seen_line(module)
+    test_screen_text(module)
     print("fake-display isolation")
     test_listener_environment()
     print("end to end")
@@ -2503,6 +2638,9 @@ def main() -> int:
     test_one_listener_per_socket()
     print("an orphan leaves")
     test_orphan_leaves()
+    print("a kit update")
+    test_kit_update_hands_over(module)
+    test_kit_update_end_to_end()
     print()
     if failures:
         print(f"{len(failures)} failed: {', '.join(failures)}")

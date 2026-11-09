@@ -1,6 +1,8 @@
 ---
 name: stack-rules
-description: "Enforces this kit's standards for Next.js, React, Supabase and Vercel work. Use when writing or reviewing UI components, API routes, database schemas or queries, deployment config, styling, animations, accessibility, performance, state management or tests, or when running a pre-ship audit. Covers shadcn/ui patterns, Zod-validated App Router routes, RLS policies, Core Web Vitals budgets and WCAG contrast."
+description: "This kit's standards for Next.js, React, Supabase and Vercel work: components, API routes, schemas, RLS, deploys, styling, a11y, performance, state, tests. Use when writing, reviewing or auditing them."
+triggers: >-
+  Enforces this kit's standards for Next.js, React, Supabase and Vercel work. Use when writing or reviewing UI components, API routes, database schemas or queries, deployment config, styling, animations, accessibility, performance, state management or tests, or when running a pre-ship audit. Covers shadcn/ui patterns, Zod-validated App Router routes, RLS policies, Core Web Vitals budgets and WCAG contrast.
 ---
 
 # Stack rules

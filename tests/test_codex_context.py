@@ -8,7 +8,10 @@ import subprocess
 from unittest.mock import patch
 from pathlib import Path
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +21,7 @@ spec.loader.exec_module(context)
 
 
 class ContextTests(unittest.TestCase):
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_agent_only_setup_preserves_existing_configuration(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)

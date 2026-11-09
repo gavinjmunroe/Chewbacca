@@ -89,16 +89,124 @@ const PORT = parseInt(
       9333 +
         (SRC_PROFILE === "Default"
           ? 0
-          : 1 + ([...SRC_PROFILE].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 500)),
+          : 1 +
+            ([...SRC_PROFILE].reduce(
+              (h, c) => (h * 31 + c.charCodeAt(0)) >>> 0,
+              7,
+            ) %
+              500)),
     ),
   10,
 );
 // One debug dir per source profile. Sharing one dir across profiles silently
 // served whichever account was copied first.
-const PROFILE = path.join(
-  os.tmpdir(),
-  "chewie-chrome-" + SRC_PROFILE.replace(/\W+/g, "-").toLowerCase(),
-);
+// CHEWIE_WEB_DIR is for tests: an existing dir is used as is, never seeded.
+const PROFILE =
+  process.env.CHEWIE_WEB_DIR ||
+  path.join(
+    os.tmpdir(),
+    "chewie-chrome-" + SRC_PROFILE.replace(/\W+/g, "-").toLowerCase(),
+  );
+
+// A bridge Chrome nobody is using shuts itself down. On 2026-10-19 the Default
+// and Profile 1 bridge Chromes were still up 6 and 7.5 hours after their last
+// call, one holding 20 renderers, while the Mac sat at load 280 with 11 of 12 GB
+// of swap used. 15 minutes covers a working session's gaps between calls and
+// is otherwise a guess; CHEWIE_WEB_IDLE_S changes it.
+const IDLE_S = parseInt(process.env.CHEWIE_WEB_IDLE_S || "900", 10);
+// Every `read <url>` opened a new tab and none ever closed (the 20 renderers
+// above). Four keeps the last few pages for a follow-up click or fill.
+const MAX_TABS = parseInt(process.env.CHEWIE_WEB_MAX_TABS || "4", 10);
+const STAMP = path.join(PROFILE, ".chewie-last-used");
+const WATCH_PID = path.join(PROFILE, ".chewie-watch.pid");
+
+function touchStamp() {
+  // Never creates PROFILE: ensureChrome seeds the logins only into a dir that
+  // doesn't exist yet.
+  try {
+    if (fs.existsSync(PROFILE)) fs.writeFileSync(STAMP, String(Date.now()));
+  } catch {
+    /* an unwritable stamp only means the watcher sees the launch time */
+  }
+}
+
+function idleSeconds() {
+  try {
+    return (Date.now() - fs.statSync(STAMP).mtimeMs) / 1000;
+  } catch {
+    return Infinity;
+  }
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function watcherRunning() {
+  try {
+    const pid = parseInt(fs.readFileSync(WATCH_PID, "utf8"), 10);
+    return pid > 0 && alive(pid);
+  } catch {
+    return false;
+  }
+}
+
+// One watcher per bridge Chrome, also adopted by a Chrome launched before the
+// watcher existed. It carries the same profile and port in its env.
+function startWatcher() {
+  if (watcherRunning()) return;
+  const w = spawn(process.execPath, [__filename, "idle-watch"], {
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CHEWIE_CHROME_PROFILE: SRC_PROFILE,
+      CHEWIE_CDP_PORT: String(PORT),
+    },
+  });
+  w.unref();
+}
+
+async function idleWatch() {
+  if (watcherRunning()) return;
+  fs.writeFileSync(WATCH_PID, String(process.pid));
+  try {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, Math.min(30, IDLE_S) * 1000));
+      if (!(await debuggerUp())) return;
+      // Keep watching after a close. A call can start a new Chrome during the close, and
+      // it finds this pid still alive and starts no watcher of its own, which left a Chrome
+      // up with nothing to close it (stress test, 2026-11-05). The next pass exits if none.
+      if (idleSeconds() > IDLE_S) await closeBridgeChrome();
+    }
+  } finally {
+    try {
+      if (fs.readFileSync(WATCH_PID, "utf8") === String(process.pid))
+        fs.unlinkSync(WATCH_PID);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+// Close the oldest page tabs so a new one keeps the total at MAX_TABS.
+async function trimTabs() {
+  try {
+    const pages = (await CDP.List({ port: PORT })).filter(
+      (t) => t.type === "page",
+    );
+    // CDP lists the most recently opened page first.
+    for (const t of pages.slice(Math.max(0, MAX_TABS - 1)))
+      await CDP.Close({ port: PORT, id: t.id });
+  } catch {
+    /* a tab that won't close is still better than no read */
+  }
+}
 
 function debuggerUp() {
   return new Promise((res) => {
@@ -145,8 +253,101 @@ function writeLocalState() {
   );
 }
 
+// No window, ever, unless a person asked for one. Caleb, 2026-10-11, after this
+// bridge's Chrome jumped in front of him mid-work for the second time that
+// night: "Make sure chewbs never flash bangs anyone ever again". The bridge
+// Chrome is a copy of the profile used for reads and form fills; nothing in it
+// needs to be seen. CHEWIE_WEB_VISIBLE=1 shows it, for a sign-in a person does.
+const VISIBLE = process.env.CHEWIE_WEB_VISIBLE === "1";
+
+function launchArgs() {
+  const args = [
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${PROFILE}`,
+    "--profile-directory=Default",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--restore-last-session=false",
+  ];
+  if (!VISIBLE) args.push("--headless=new", "--window-size=1440,900");
+  return args;
+}
+
+// A bridge Chrome left running with a window (launched before this change, or
+// once with CHEWIE_WEB_VISIBLE=1) would keep taking the screen on every call.
+async function runningHeadless() {
+  return new Promise((res) => {
+    const req = http.get(
+      { host: "127.0.0.1", port: PORT, path: "/json/version", timeout: 800 },
+      (r) => {
+        let body = "";
+        r.on("data", (c) => (body += c));
+        r.on("end", () => {
+          try {
+            const v = JSON.parse(body);
+            res(
+              /Headless/i.test(`${v.Browser || ""} ${v["User-Agent"] || ""}`),
+            );
+          } catch {
+            res(false);
+          }
+        });
+      },
+    );
+    req.on("error", () => res(false));
+    req.on("timeout", () => {
+      req.destroy();
+      res(false);
+    });
+  });
+}
+
+async function closeBridgeChrome() {
+  // Browser.close only works on the browser target, which /json/version names;
+  // a page target ignores it and the windowed Chrome stays (measured 2026-10-11).
+  try {
+    const ver = await new Promise((res, rej) => {
+      http
+        .get(
+          {
+            host: "127.0.0.1",
+            port: PORT,
+            path: "/json/version",
+            timeout: 800,
+          },
+          (r) => {
+            let b = "";
+            r.on("data", (c) => (b += c));
+            r.on("end", () => {
+              try {
+                res(JSON.parse(b));
+              } catch (e) {
+                rej(e);
+              }
+            });
+          },
+        )
+        .on("error", rej);
+    });
+    const client = await CDP({ target: ver.webSocketDebuggerUrl });
+    await client.Browser.close();
+  } catch {
+    /* already gone */
+  }
+  for (let i = 0; i < 40 && (await debuggerUp()); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
 async function ensureChrome() {
-  if (await debuggerUp()) return;
+  touchStamp();
+  if (await debuggerUp()) {
+    if (VISIBLE || (await runningHeadless())) {
+      startWatcher();
+      return;
+    }
+    await closeBridgeChrome();
+  }
   if (!fs.existsSync(CHROME)) fail("Google Chrome not found at " + CHROME);
   // Seed the debug profile from the chosen real profile once, so logins carry over.
   if (!fs.existsSync(PROFILE)) {
@@ -188,21 +389,17 @@ async function ensureChrome() {
       /* a fresh profile still works, just logged out */
     }
   }
-  const child = spawn(
-    CHROME,
-    [
-      `--remote-debugging-port=${PORT}`,
-      `--user-data-dir=${PROFILE}`,
-      "--profile-directory=Default",
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--restore-last-session=false",
-    ],
-    { detached: true, stdio: "ignore" },
-  );
+  const child = spawn(CHROME, launchArgs(), {
+    detached: true,
+    stdio: "ignore",
+  });
   child.unref();
   for (let i = 0; i < 40; i++) {
-    if (await debuggerUp()) return;
+    if (await debuggerUp()) {
+      touchStamp();
+      startWatcher();
+      return;
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
   fail("Chrome debug port never came up on " + PORT);
@@ -231,6 +428,7 @@ async function withTab(fn, targetUrl) {
         );
       client = await CDP({ port: PORT, target: tgt });
     } else if (targetUrl) {
+      await trimTabs();
       const tgt = await CDP.New({ port: PORT, url: targetUrl });
       client = await CDP({ port: PORT, target: tgt });
     } else {
@@ -241,6 +439,7 @@ async function withTab(fn, targetUrl) {
     return await fn({ Page, Runtime, DOM, Input, client });
   } finally {
     if (client) await client.close();
+    touchStamp();
   }
 }
 
@@ -291,9 +490,56 @@ const FIND_JS = (sel) => `(() => {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2, tag: el.tagName.toLowerCase() }
 })()`;
 
+// A load event can fire before anyone is listening: a data: URL or a cached page lands
+// that fast. Waiting on it alone hung `read` for 2.5 hours in the stress test of
+// 2026-11-05, with its Chrome still up. 20 s is guessed, never measured.
+async function loaded(Page, Runtime) {
+  const waits = [Page.loadEventFired(), new Promise((r) => setTimeout(r, 20000).unref())];
+  if (Runtime) {
+    waits.push(
+      (async () => {
+        for (;;) {
+          const { result } = await Runtime.evaluate({ expression: "document.readyState" });
+          if (result.value === "complete") return;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      })().catch(() => new Promise(() => {})),
+    );
+  }
+  await Promise.race(waits);
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
+  // No call outlives this, so a stuck one can't hold a Chrome open. Guessed, never measured.
+  if (cmd !== "idle-watch") {
+    setTimeout(
+      () => fail(`${cmd} still running after its deadline`),
+      parseInt(process.env.CHEWIE_WEB_CALL_S || "300", 10) * 1000,
+    ).unref();
+  }
   switch (cmd) {
+    case "launch-args": {
+      // What the bridge would start Chrome with; for tests, starts nothing.
+      out(launchArgs());
+      break;
+    }
+    case "idle-watch": {
+      // Started by ensureChrome; closes this profile's bridge Chrome once idle.
+      await idleWatch();
+      process.exit(0);
+    }
+    case "close": {
+      // Shut this profile's bridge Chrome now. Another profile: set CHEWIE_CHROME_PROFILE.
+      const was = await debuggerUp();
+      await closeBridgeChrome();
+      out(
+        was
+          ? `closed the bridge Chrome on ${PORT}`
+          : `no bridge Chrome on ${PORT}`,
+      );
+      break;
+    }
     case "frames": {
       await ensureChrome();
       const list = await CDP.List({ port: PORT });
@@ -320,7 +566,7 @@ async function main() {
     }
     case "read": {
       await withTab(async ({ Runtime, Page }) => {
-        if (rest[0]) await Page.loadEventFired();
+        if (rest[0]) await loaded(Page, Runtime);
         out(await evalInPage(Runtime, READ_JS));
       }, rest[0]);
       break;
@@ -329,7 +575,7 @@ async function main() {
       if (!rest[0]) fail("goto needs a url");
       await withTab(async ({ Page }) => {
         await Page.navigate({ url: rest[0] });
-        await Page.loadEventFired();
+        await loaded(Page);
         out("ok: " + rest[0]);
       }, rest[0]);
       break;
@@ -386,7 +632,8 @@ async function main() {
     }
     default:
       out(
-        "usage: chewie web {read|eval|click|fill|goto|tabs|profiles} ...\n" +
+        "usage: chewie web {read|eval|click|fill|goto|tabs|profiles|close} ...\n" +
+          `  an idle bridge Chrome closes itself after ${IDLE_S}s (CHEWIE_WEB_IDLE_S).\n` +
           "  CHEWIE_CHROME_PROFILE picks the account, by dir, name or email.\n" +
           "  it defaults to Default, which is often the wrong one. run: chewie web profiles",
       );

@@ -220,7 +220,7 @@ real commit; nothing here is written by hand.
 - locate one named person, and read the balance with the stored key
 - Gate the other producers on having studied the craft (#1)
 - test: cover guide trends and trigger cases, and make hud-listen pytest-runnable
-- Add docs/ADVISING.md: helping someone reach a goal
+- Add docs/reference/ADVISING.md: helping someone reach a goal
 - triggers: say the thing out loud and see whether any skill fires
 - nobody should ever have to type a slash command
 - life-ops was never firing: one unquoted colon in its description
@@ -334,10 +334,10 @@ real commit; nothing here is written by hand.
 - make the temporal curves real on actual data
 - relationship graphs over time, and fix the backfill that silently did nothing
 - update bin/skill-scan
-- update docs/SYSTEM-PROMPTS.md
+- update docs/reference/SYSTEM-PROMPTS.md
 - update setup.sh
-- update docs/SKILLS.md
-- update docs/EXTENSIONS.md
+- update docs/reference/SKILLS.md
+- update docs/reference/EXTENSIONS.md
 - update README.md
 - update README.md
 - update README.md
@@ -348,7 +348,7 @@ real commit; nothing here is written by hand.
 - update .claude/hooks/format-and-sync.sh
 - update add-skill.sh
 - update add-skill.sh
-- update docs/SKILLS.md
+- update docs/reference/SKILLS.md
 - update .claude/agents/explorer.md
 - update .claude/agents/debugger.md
 - update .claude/agents/code-reviewer.md
@@ -362,7 +362,7 @@ real commit; nothing here is written by hand.
 - update setup.sh
 - update setup.sh
 - update setup.sh
-- update docs/EXTENSIONS.md
+- update docs/reference/EXTENSIONS.md
 - update .claude/hooks/session-context.sh
 - update .claude/hooks/session-context.sh
 - update install.sh
@@ -381,9 +381,9 @@ real commit; nothing here is written by hand.
 - update README.md
 - update README.md
 - update setup.sh
-- update docs/EXTENSIONS.md
-- update docs/EXTENSIONS.md
-- update docs/EXTENSIONS.md
+- update docs/reference/EXTENSIONS.md
+- update docs/reference/EXTENSIONS.md
+- update docs/reference/EXTENSIONS.md
 - sync CLAUDE.md
 - sync CLAUDE.md
 - update setup.sh

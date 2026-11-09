@@ -30,16 +30,33 @@ CANDIDATES=$(find . -maxdepth 3 -name '*.csv' -newermt '-20 minutes' \
 [ -n "$CANDIDATES" ] || exit 0
 
 # A contact list, not any CSV. Needs an email-ish and a name-ish column.
-LISTS=""
+# An array, not a string: "UCLA founders/x.csv" split on its space into two
+# missing files and the gate refused a list that passed (2026-10-26).
+LISTS=()
 while IFS= read -r f; do
   head -1 "$f" 2>/dev/null | grep -qiE '(^|,)"?(email|email_address|work_email)"?(,|$)' || continue
   head -1 "$f" 2>/dev/null | grep -qiE '(full_name|fullname|name|organization|company)' || continue
-  LISTS="$LISTS $f"
+  LISTS+=("$f")
 done <<< "$CANDIDATES"
-[ -n "${LISTS// /}" ] || exit 0
+[ "${#LISTS[@]}" -gt 0 ] || exit 0
 
-# shellcheck disable=SC2086
-REPORT=$("$GATE" $LISTS 2>/dev/null) && exit 0
+# A folder with a .per-sender file holds one list per sender (each founder emails
+# from their own inbox), so a person on two of its lists is two senders' email,
+# not a duplicate. Without this, 13 founders' investor lists in one folder failed
+# "449 people appear on more than one list" on every turn (2026-10-26) while
+# list-gate --per-sender passed them.
+SINGLE=(); PERSENDER=()
+for f in "${LISTS[@]}"; do
+  if [ -e "$(dirname "$f")/.per-sender" ]; then PERSENDER+=("$f"); else SINGLE+=("$f"); fi
+done
+REPORT=""; ok=1
+if [ "${#SINGLE[@]}" -gt 0 ]; then
+  R=$("$GATE" "${SINGLE[@]}" 2>/dev/null) || { ok=0; REPORT+="$R"$'\n'; }
+fi
+if [ "${#PERSENDER[@]}" -gt 0 ]; then
+  R=$("$GATE" --per-sender "${PERSENDER[@]}" 2>/dev/null) || { ok=0; REPORT+="$R"$'\n'; }
+fi
+[ "$ok" -eq 1 ] && exit 0
 DETAIL=$(printf '%s' "$REPORT" | grep -E '^\s+(FAIL|warn)' | head -25)
 [ -n "$DETAIL" ] || exit 0
 

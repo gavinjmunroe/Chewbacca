@@ -31,7 +31,15 @@ GUARD="${TMPDIR:-/tmp}/slop-guard-$PROMPT_ID"
 
 # The two flags a rewrite is worth a duplicate for. See the comment in the
 # prose-check block below for why nothing else refuses.
-HARD_RE='^(em-dash|banned-word)$'
+# Nothing refuses any more, hard bans included. A Stop hook runs after the
+# reply is on Caleb's screen, so every refusal here put a second copy under
+# the first: on 2026-10-11 three replies in a row went out twice over a file
+# name, and he wrote "You're repeating yourself the same message? ... you
+# often do this". A duplicate costs him more than one em dash or one word
+# does. Every flag now goes to the pending file, and voice-remind.sh puts it
+# in front of the next reply before it's written. tests/stop_hooks_never_rewrite.sh
+# refuses any Stop hook that asks for the reply to be rewritten or resent.
+HARD_RE='^$'
 STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}"
 
 queue_flags() {  # $1 = detail, $2 = labels
@@ -99,8 +107,8 @@ if [ -x "$PROSE" ]; then
         echo "prose-check flagged your reply against Caleb's own rules:"
         printf '%s\n' "$PROSE_DETAIL"
         echo
-        echo "Rewrite the reply plainly. Do not explain the rewrite, do not"
-        echo "apologise, and do not mention this check."
+        echo "The reply is already on his screen, so do NOT repeat or rewrite it."
+        echo "Write the next reply plainly. Do not mention this check."
       } >&2
       exit 2
     fi
@@ -143,9 +151,8 @@ fi
   echo "Your reply scored $SCORE on slop-check, and the limit is $MAX."
   printf '%s\n' "$DETAIL"
   echo
-  echo "Rewrite the reply itself, plainly. Say the same things with the drama"
-  echo "removed: no em dashes, no bolded fragments used as headers, no colon"
-  echo "reveals, no recap ending. Do not explain the rewrite, do not apologise"
-  echo "for it, and do not mention this check."
+  echo "The reply is already on his screen, so do NOT repeat or rewrite it."
+  echo "Write the next reply plainly: no em dashes, no bolded fragments used as"
+  echo "headers, no colon reveals, no recap ending. Do not mention this check."
 } >&2
 exit 2

@@ -9,7 +9,8 @@ ok(){ printf '  \033[0;32mpass\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[0;31mfail\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 command -v jq >/dev/null 2>&1 || { echo "  skip: jq not installed"; exit 0; }
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-run(){ jq -n --arg c "$1" '{tool_input:{command:$c}}' | bash "$HOOK" >/dev/null 2>&1; echo $?; }
+export CHEWBACCA_STATE_DIR="$TMP/state"; mkdir -p "$CHEWBACCA_STATE_DIR"
+run(){ jq -n --arg c "$1" --arg s "${2:-s1}" '{tool_input:{command:$c}, session_id:$s}' | bash "$HOOK" >/dev/null 2>&1; echo $?; }
 printf 'import subprocess\nfrom concurrent.futures import ThreadPoolExecutor\ndef f(e): subprocess.run(["clay","workflows","runs","test","wf",e])\nlist(ThreadPoolExecutor(8).map(f,[1,2]))\n' > "$TMP/loop.py"
 printf 'import subprocess\nsubprocess.run(["clay","workflows","runs","test","wf","x"])\n' > "$TMP/one.py"
 [ "$(run "for e in a b; do clay workflows runs test wf --inputs -; done")" = 2 ] && ok "inline shell loop refused" || no "inline shell loop refused"
@@ -20,4 +21,14 @@ printf 'import subprocess\nsubprocess.run(["clay","workflows","runs","test","wf"
 [ "$(run "clay campaigns list")" = 0 ] && ok "unrelated clay command allowed" || no "unrelated clay command allowed"
 printf 'import subprocess\np="one sentence for a cold email"\nsubprocess.run(["clay","workflows","actions","test","pkg","key"])\n' > "$TMP/prose.py"
 [ "$(run "python3 $TMP/prose.py")" = 0 ] && ok "the word for in prose is not a loop" || no "the word for in prose is not a loop"
+# Caleb's chat ok within 2 hours (chat-approval.sh) stands in for CLAY_LOOP_OK,
+# which launch-guard can never let through as an env prefix (2026-10-10).
+mkdir -p "$CHEWBACCA_STATE_DIR/clay-chat-approval"
+printf '{"v": 2, "interactive": true, "at": %s, "session_id": "s1"}' "$(date +%s)" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+[ "$(run "python3 $TMP/loop.py")" = 0 ] && ok "a fresh chat ok allows an approved loop" || no "a fresh chat ok allows an approved loop"
+[ "$(run "python3 $TMP/loop.py" s2)" = 2 ] && ok "another tab's chat ok does not" || no "another tab's chat ok does not"
+printf '{"at": %s, "session_id": "s1"}' "$(date +%s)" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+[ "$(run "python3 $TMP/loop.py")" = 2 ] && ok "a v1 record (could be a launched session's) does not" || no "a v1 record (could be a launched session's) does not"
+printf '{"v": 2, "interactive": true, "at": %s, "session_id": "s1"}' "$(( $(date +%s) - 3 * 3600 ))" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+[ "$(run "python3 $TMP/loop.py")" = 2 ] && ok "a stale chat ok does not" || no "a stale chat ok does not"
 echo "  $pass passed, $fail failed"; [ "$fail" -eq 0 ]

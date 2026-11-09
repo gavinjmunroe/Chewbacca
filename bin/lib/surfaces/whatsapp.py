@@ -7,7 +7,7 @@ count and whether the chat waits on him; "Open" on a row shows that chat's
 last lines underneath; a 1:1 chat opened that way can be answered.
 
 SENDING FAILS CLOSED, the same bar as the Messages Thread Go
-(docs/KYBER-SURFACES.md). A send needs all of these at the press:
+(docs/reference/KYBER-SURFACES.md). A send needs all of these at the press:
 
 - the target is the JID of the chat whose Open was pressed, held by the
   provider itself. It is never a label, never a list position, never a value
@@ -127,7 +127,8 @@ class WhatsApp(Provider):
             chats = WA.chats(ctx)
             if not chats and not linked:
                 raise SurfaceError(WA.NOT_LINKED)
-            recent = WA.by_chat(WA.messages(ctx, after=ctx.now() - timedelta(days=WINDOW_DAYS)))
+            window = WA.messages(ctx, after=ctx.now() - timedelta(days=WINDOW_DAYS))
+            recent, reacted = WA.by_chat(window), WA.my_reactions(window)
         except WA.WacliError as err:
             raise SurfaceError(str(err)) from None
         # Read fresh, so the person a row shows is the one Open and Send
@@ -154,7 +155,7 @@ class WhatsApp(Provider):
                 "last_from_me": bool(newest and newest.get("FromMe")),
                 "at": WA.when(newest.get("Timestamp")) if newest else WA.when(chat.get("last_message_ts")),
                 "unread": int(chat.get("unread_count") or 0),
-                "waiting": bool(msgs) and WA.waiting(msgs, chat, known),
+                "waiting": bool(msgs) and WA.waiting(msgs, chat, known, reacted.get(jid)),
             })
         rows.sort(key=lambda r: (not r["waiting"], -(r["at"].timestamp() if r["at"] else 0)))
         rows = rows[:MOST_ROWS]

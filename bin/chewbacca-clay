@@ -22,6 +22,14 @@
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+// The verdict log (tools/verdicts.py reads it), loaded up front and guarded so
+// a missing file can never throw after a write has gone out.
+let verdictLog;
+try {
+  verdictLog = require("./lib/verdicts");
+} catch {
+  verdictLog = { record() {} };
+}
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -35,13 +43,57 @@ const testEnv = (name) => (FIXTURES ? process.env[name] : undefined);
 const ROOT = testEnv("CHEWBACCA_ROOT") || path.resolve(__dirname, "..");
 const LIB = testEnv("CHEWBACCA_CLAY_LIB") || path.join(ROOT, "library", "clay-api");
 const MEASURED = process.env.CHEWBACCA_CLAY_MEASURED || path.join(LIB, "measured.json");
-const ENGINE_HOME = process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
+// --session NAME reads Clay through a second login, kept in its own engine
+// home so it never overwrites the BMA one. 2026-10-11: Caleb said "We hv the
+// amber workspace in clay", and the only imported session (Chrome Profile 7,
+// caleb@bluemodernadvisory.com) saw five workspaces and no Amber; two other
+// Chrome profiles held Clay cookies.
+const SESSION_NAME = (() => {
+  const i = process.argv.indexOf("--session");
+  if (i < 0) return "";
+  const name = String(process.argv[i + 1] || "");
+  process.argv.splice(i, 2);
+  if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(name)) {
+    process.stdout.write(`${JSON.stringify({ ok: false, class: "usage", reason: "--session takes a short lowercase name like personal or usc" })}\n`);
+    process.exit(2);
+  }
+  return name;
+})();
+const ENGINE_HOME = SESSION_NAME
+  ? path.join(os.homedir(), ".chewbacca", `api-anything-${SESSION_NAME}`)
+  : process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
 
 const EXIT = { ok: 0, failed: 1, usage: 2, refused: 3 };
 
 function out(obj, code) {
-  process.stdout.write(`${JSON.stringify(obj)}\n`);
+  // The 2026-10-15 piped ops read exited after only 512 bytes of JSON.
+  // Flush synchronously before exit so snapshot readers receive the envelope.
+  // A pipe is non-blocking, so past its 64 KB buffer writeSync throws EAGAIN
+  // mid-line; on 2026-10-16 a 65 KB Sabo row came out as half a row followed by
+  // an error envelope. Keep writing until every byte is out.
+  const buf = Buffer.from(`${JSON.stringify(obj)}\n`);
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += fs.writeSync(1, buf, off, buf.length - off);
+    } catch (e) {
+      if (e.code !== "EAGAIN") throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
+  }
+  if (BATCH) throw new BatchLine(code);
   process.exit(code);
+}
+
+// `batch` runs many reads in one process: each line printed ends that read and
+// the next line starts. On 2026-10-26 a 992-table export spent ~3 s of node
+// startup per read against ~0.3 s of Clay's own answer.
+let BATCH = false;
+class BatchLine extends Error {
+  constructor(code) {
+    super("batch line done");
+    this.code = code;
+  }
 }
 
 function readJson(file, fallback) {
@@ -52,20 +104,30 @@ function readJson(file, fallback) {
   }
 }
 
-const registry = readJson(path.join(LIB, "registry.json"), null);
+// Read once. A write is built from these in-memory copies, and the files are
+// only re-read after approval to refuse if they changed (see fingerprint).
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8"); } catch { return null; }
+}
+const REGISTRY_TEXT = readText(path.join(LIB, "registry.json"));
+const SPEC_TEXT = readText(path.join(LIB, "clay.json"));
+const parseOr = (t, fallback) => { try { return JSON.parse(t); } catch { return fallback; } };
+const registry = parseOr(REGISTRY_TEXT, null);
 if (!registry) out({ ok: false, class: "error", reason: `no registry at ${LIB}/registry.json` }, EXIT.failed);
-const spec = readJson(path.join(LIB, "clay.json"), { operations: [] });
+const spec = parseOr(SPEC_TEXT, { operations: [] });
 const specOps = new Map(spec.operations.map((o) => [o.name, o]));
 const measured = readJson(MEASURED, {});
 
 // ── args ─────────────────────────────────────────────────────────────────────
 function parseArgv(argv) {
-  const flags = { allowWrites: false, surface: null, maxTier: null };
+  const flags = { allowWrites: false, dryRun: false, surface: null, maxTier: null, full: false };
   const kv = {};
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--allow-writes") flags.allowWrites = true;
+    else if (a === "--full") flags.full = true;
+    else if (a === "--dry-run") flags.dryRun = true;
     else if (a === "--surface") {
       flags.surface = argv[++i] ?? "";
       if (flags.surface === "api") flags.surface = "api-anything";
@@ -74,16 +136,12 @@ function parseArgv(argv) {
     else if (a === "-h" || a === "--help") pos.push("help");
     else if (a.startsWith("--")) out({ ok: false, class: "usage", reason: `unknown flag ${a}` }, EXIT.usage);
     else if (a.includes("=") && pos.length >= 1) {
+      // Values stay the raw strings typed; normalizeArgs parses each one once.
+      // A key given twice is refused: last-one-wins would let a check and a
+      // build read different values (security review of 300f4ddb).
       const k = a.slice(0, a.indexOf("="));
-      let v = a.slice(a.indexOf("=") + 1);
-      if (/^[[{]/.test(v)) {
-        try {
-          v = JSON.parse(v);
-        } catch {
-          out({ ok: false, class: "usage", reason: `${k} is not valid JSON` }, EXIT.usage);
-        }
-      }
-      kv[k] = v;
+      if (Object.hasOwn(kv, k)) out({ ok: false, class: "usage", reason: `${k} is given more than once` }, EXIT.usage);
+      kv[k] = a.slice(a.indexOf("=") + 1);
     } else pos.push(a);
   }
   return { pos, kv, flags };
@@ -93,10 +151,51 @@ function parseArgv(argv) {
 const opByName = new Map(registry.ops.map((o) => [o.name, o]));
 const uiByName = new Map((registry.ui_only || []).map((o) => [o.name, o]));
 
+// Which Clay workspace an op runs against. There is no built-in default: the
+// registry used to name one client's workspace, so any op run without ws=
+// acted on that client (2026-10-09). Order: ws= on the command line, then
+// $CLAY_WORKSPACE_ID, then the GTM client config when it names exactly one
+// workspace across all clients. Anything else refuses. Fixture mode reads only
+// an explicit $GTM_CONFIG, never the real one.
+const WS_FILES = [];
+function gtmConfigPath() {
+  if (process.env.GTM_CONFIG) return process.env.GTM_CONFIG;
+  return FIXTURES ? null : path.join(os.homedir(), ".chewbacca", "gtm", "clients.json");
+}
+
+function resolveWorkspace() {
+  if (process.env.CLAY_WORKSPACE_ID) return { ws: process.env.CLAY_WORKSPACE_ID, from: "CLAY_WORKSPACE_ID" };
+  const file = gtmConfigPath();
+  const cfg = file ? parseOr(readText(file), null) : null;
+  const clients = Array.isArray(cfg?.clients) ? cfg.clients : [];
+  const byWs = new Map();
+  for (const c of clients) for (const w of Array.isArray(c?.workspaces) ? c.workspaces : []) {
+    if (!byWs.has(String(w))) byWs.set(String(w), String(c?.name ?? "unnamed"));
+  }
+  if (byWs.size === 1) {
+    WS_FILES.push(file);
+    return { ws: [...byWs.keys()][0], from: file };
+  }
+  const found = byWs.size ? `; ${file} names ${byWs.size} (${[...byWs.values()].join(", ")})` : file ? `; ${file} names none` : "";
+  return { error: `no Clay workspace chosen: pass ws=<id> or set CLAY_WORKSPACE_ID${found}. chewbacca clay workspaces lists them` };
+}
+
+// An op with a CLI or kit-bin surface takes ws= even when its API surface
+// needs none: the CLI call is pinned to it (pinCli). Unresolved, the CLI is
+// skipped and the reason is kept for the "no surface" answer.
+const usesCli = (op) => op.surfaces.some((s) => s.type !== "api-anything");
+const takesWs = (op) => op.args.some((a) => a.replace("?", "") === "ws") || usesCli(op);
+let WS_UNRESOLVED = "";
+
 function withDefaults(op, kv) {
   const args = { ...kv };
   const wantsWs = op.args.some((a) => a.replace("?", "") === "ws");
-  if (wantsWs && args.ws === undefined) args.ws = process.env.CLAY_WORKSPACE_ID || registry.defaults.ws;
+  if ((wantsWs || usesCli(op)) && args.ws === undefined) {
+    const r = resolveWorkspace();
+    if (r.error && wantsWs) out({ ok: false, op: op.name, class: "input", reason: r.error }, EXIT.usage);
+    if (r.error) WS_UNRESOLVED = r.error;
+    else args.ws = r.ws;
+  }
   return args;
 }
 
@@ -121,8 +220,10 @@ function bind(s, args) {
     return bound;
   }
   // A value that starts with "-" would reach the CLI as a flag: treat it as missing.
+  // An object (a filter AST) goes to the CLI as one argv token of JSON.
+  const text = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : String(v));
   const fill = (tok) =>
-    tok.replace(/\{(\w+)\}/g, (_, k) => (args[k] === undefined || String(args[k]).startsWith("-") ? "\u0000" : String(args[k])));
+    tok.replace(/\{(\w+)\}/g, (_, k) => (args[k] === undefined || text(args[k]).startsWith("-") ? "\u0000" : text(args[k])));
   const argv = s.argv.map(fill);
   if (argv.some((t) => t.includes("\u0000"))) return null;
   for (const [k, extra] of Object.entries(s.optional || {})) {
@@ -131,14 +232,146 @@ function bind(s, args) {
   return argv;
 }
 
+// The clay CLI keeps one current workspace for every process on the Mac
+// (activeProfile in its config.json, moved by `clay workspaces switch`) and
+// takes no workspace argument. 2026-10-11: `folders ws=1149025` (BMA) came back
+// with Jonah's folders under BMA's id. 2026-10-17 12:43: the Sabo tab left it
+// on 1149025, and the Zeutara tab's csv-upload answered "Trigger not found"
+// and workflow-graph "does not belong to this workspace" for ids in 1372623.
+// So no call here reads that setting. Each CLI call runs with CLAY_CONFIG_HOME
+// pointed at a private config holding only the op's own workspace's sign-in,
+// the one profile the CLI can pick, and the shared active workspace is never
+// changed. A token the CLI refreshes in the private copy is written back.
+// Fixture mode reads only an explicit $CLAY_CONFIG_HOME, never the real one,
+// and spawns a CLI only when a test names one in CHEWBACCA_CLAY_TEST_CLI.
+const TEST_CLI = testEnv("CHEWBACCA_CLAY_TEST_CLI") || "";
+const fixtureSurface = (type) => FIXTURES && !(TEST_CLI && type === "cli");
+
+function sharedCliConfig() {
+  if (process.env.CLAY_CONFIG_HOME) return path.join(process.env.CLAY_CONFIG_HOME, "clay", "config.json");
+  if (FIXTURES) return null;
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(base, "clay", "config.json");
+}
+
+function cliProfile(ws) {
+  const file = sharedCliConfig();
+  const cfg = file ? parseOr(readText(file), null) : null;
+  const prof = cfg?.profiles?.[String(ws)];
+  return prof && (prof.oauth || prof.apiKey) ? { file, cfg, prof } : null;
+}
+
+function cliSignedIn(ws) {
+  if (ws === undefined) return false;
+  if (fixtureSurface("cli")) {
+    const list = process.env.CHEWBACCA_CLAY_CLI_WS || "any";
+    return list === "any" || list.split(",").includes(String(ws));
+  }
+  return !!cliProfile(ws);
+}
+
+function cliExe() {
+  return TEST_CLI || whichAbs("clay");
+}
+
+// One writer of the shared config at a time among these processes. The CLI
+// itself writes it by rename without a lock, so the write-back below is a
+// compare-and-swap on the token it started from, as the CLI's own refresh is.
+function withCliLock(file, fn) {
+  const lock = `${file}.chewbacca.lock`;
+  // Waits up to 15 s, longer than the 10 s after which a lock counts as left
+  // by a killed process, so a stale lock is always cleared before giving up.
+  // A write-back holds it for milliseconds (guessed, never measured under load).
+  for (let i = 0; i < 600; i++) {
+    let fd;
+    try {
+      fd = fs.openSync(lock, "wx", 0o600);
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      // The holder can release the lock between open and stat: ENOENT is the retry.
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10000) fs.rmSync(lock, { force: true }); } catch (err) { if (err.code !== "ENOENT") throw err; }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      continue;
+    }
+    try { return fn(); } finally { fs.closeSync(fd); fs.rmSync(lock, { force: true }); }
+  }
+  throw new Error(`could not lock ${file}`);
+}
+
+// { env, done } for one CLI call in workspace ws, or { error } and nothing runs.
+function pinCli(ws) {
+  ws = String(ws ?? "");
+  if (!/^[0-9]{1,12}$/.test(ws)) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
+  const found = cliProfile(ws);
+  if (!found) return { error: `the clay CLI is not signed in to workspace ${ws}; nothing was sent` };
+  // A process killed mid-call leaves its private config (a copy of the
+  // sign-in) behind; any older than an hour is swept before a new one is made.
+  try {
+    for (const name of fs.readdirSync(os.tmpdir())) {
+      if (!name.startsWith("chewbacca-clay-cli-")) continue;
+      const p = path.join(os.tmpdir(), name);
+      if (Date.now() - fs.statSync(p).mtimeMs > 3600000) fs.rmSync(p, { recursive: true, force: true });
+    }
+  } catch (e) {
+    // Another call can remove a copy mid-sweep; the new call still runs either way.
+    if (e.code !== "ENOENT") process.stderr.write(`chewbacca clay: could not sweep old CLI configs (${e.message})\n`);
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chewbacca-clay-cli-"));
+  const file = path.join(dir, "clay", "config.json");
+  const remove = () => fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(path.dirname(file), { mode: 0o700 });
+    fs.writeFileSync(file, `${JSON.stringify({ version: found.cfg.version, activeProfile: ws, profiles: { [ws]: found.prof } }, null, 2)}\n`, { mode: 0o600 });
+    const back = parseOr(readText(file), null);
+    if (back?.activeProfile !== ws || Object.keys(back?.profiles || {}).join(",") !== ws) throw new Error("read back as another workspace");
+  } catch (e) {
+    remove();
+    return { error: `could not pin the clay CLI to workspace ${ws} (${e.message}); nothing was sent` };
+  }
+  const started = JSON.stringify(found.prof);
+  // Never throws: the call has already run, and a failed write-back must not
+  // turn a write that landed into a crash.
+  const done = () => {
+    try {
+      const now = parseOr(readText(file), null)?.profiles?.[ws];
+      if (now && JSON.stringify(now) !== started) {
+        withCliLock(found.file, () => {
+          const raw = readText(found.file);
+          const cur = parseOr(raw, null);
+          if (!cur?.profiles || JSON.stringify(cur.profiles[ws]) !== started) return;
+          cur.profiles[ws] = now;
+          const tmp = `${found.file}.${process.pid}.tmp`;
+          fs.writeFileSync(tmp, `${JSON.stringify(cur, null, 2)}\n`, { mode: 0o600 });
+          // The CLI writes this file without the lock: if it moved since the
+          // read above, keep its version rather than clobber a switch or a refresh.
+          if (readText(found.file) !== raw) return fs.rmSync(tmp, { force: true });
+          fs.renameSync(tmp, found.file);
+        });
+      }
+    } catch (e) {
+      process.stderr.write(`chewbacca clay: the refreshed CLI token for ${ws} was not written back (${e.message})\n`);
+    } finally {
+      remove();
+    }
+  };
+  return { ws, env: { ...process.env, CLAY_CONFIG_HOME: dir }, done };
+}
+
+// The CLI names the workspace it answered for; any other one is a failure.
+function answeredElsewhere(data, ws) {
+  const got = data && typeof data === "object" && !Array.isArray(data) ? data.workspace?.id : undefined;
+  return got !== undefined && got !== null && String(got) !== String(ws) ? String(got) : null;
+}
+
 function plan(op, args, only) {
   const cands = [];
   op.surfaces.forEach((s, i) => {
     if (only && s.type !== only) return;
+    if (s.type === "cli" && !cliSignedIn(args.ws)) return;
     const bound = bind(s, args);
     if (bound === null) return;
     const m = measured[op.name]?.[surfaceKey(op, s)];
-    cands.push({ s, bound, i, ms: m?.ms ?? Number.POSITIVE_INFINITY, verified: m?.at ?? null });
+    cands.push({ s, bound, i, ws: args.ws, ms: m?.ms ?? Number.POSITIVE_INFINITY, verified: m?.at ?? null });
   });
   // Fastest measured first; an unmeasured surface keeps the registry's order behind measured ones.
   // "order": "fixed" is for an op whose surfaces answer with different detail (the CLI's
@@ -175,24 +408,152 @@ function syncSpec() {
   } catch {}
 }
 
+// Batch reads reuse one lookup and one hash per process; a single call is unchanged.
+const batchMemo = {};
 function engineDist() {
   if (process.env.API_ANYTHING_DIST) return process.env.API_ANYTHING_DIST;
+  if (BATCH && "dist" in batchMemo) return batchMemo.dist;
   const which = spawnSync("sh", ["-c", "command -v api-anything"], { encoding: "utf8" });
   const bin = which.stdout.trim();
-  if (!bin) return null;
-  return path.dirname(fs.realpathSync(bin));
+  const dist = bin ? path.dirname(fs.realpathSync(bin)) : null;
+  if (BATCH) batchMemo.dist = dist;
+  return dist;
 }
 
 // sha256 of dist/*.js in name order. The engine runs with Caleb's Clay session,
 // so only the build made from the pinned commit is trusted; anything else
 // (an install from a moving HEAD) is refused and the next surface answers.
 function distHash(dist) {
+  if (BATCH && batchMemo.hash?.[0] === dist) return batchMemo.hash[1];
+  const digest = distHashNow(dist);
+  if (BATCH) batchMemo.hash = [dist, digest];
+  return digest;
+}
+
+function distHashNow(dist) {
   const h = crypto.createHash("sha256");
   for (const f of fs.readdirSync(dist).filter((x) => x.endsWith(".js")).sort()) h.update(fs.readFileSync(path.join(dist, f)));
   return h.digest("hex");
 }
 
+// Fixture mode records what a write hands to its surface, so a test can prove
+// it is the request the person approved.
+function logSent(entry) {
+  const f = FIXTURES && process.env.CHEWBACCA_CLAY_SENT_LOG;
+  if (f) fs.appendFileSync(f, `${JSON.stringify(entry)}\n`);
+}
+
+// ── writes: everything resolved before approval, nothing re-resolved after ──
+//
+// Security review of f3a934cb (TOCTOU): the engine was handed an op name and
+// args and re-resolved the spec, the session and the URL at call time, after
+// the person had approved. A write now never goes through call(). Before the
+// prompt, prepareWrite loads and checks the engine build, imports it, loads the
+// session into memory and resolves the CLI or bin to an absolute path. After
+// approval the only thing that happens is sending the frozen request: the
+// engine's send() gets a synthetic op whose request IS the frozen one (no
+// slots, no params), and a fetch wrapper refuses any hop whose method, URL or
+// body differs from it, so a redirect can't replay the body elsewhere.
+
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+const ENV_PINNED = ["CLAY_WORKSPACE_ID", "GTM_CONFIG", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT", "CLAY_CONFIG_HOME", "XDG_CONFIG_HOME"];
+
+// Everything a write depends on, hashed: the registry and spec as read at
+// startup and as on disk, the pinned env, and the files prepareWrite resolved
+// (engine build, session, executable). Taken before the prompt and again after
+// approval; any difference refuses the send.
+function fingerprint(prep) {
+  const parts = [
+    `registry:${sha256(REGISTRY_TEXT ?? "")}:${sha256(readText(path.join(LIB, "registry.json")) ?? "")}`,
+    `spec:${sha256(SPEC_TEXT ?? "")}:${sha256(readText(path.join(LIB, "clay.json")) ?? "")}`,
+    ...ENV_PINNED.map((k) => `env:${k}=${process.env[k] ?? ""}`),
+    ...[...(prep.files || []), ...WS_FILES].map((f) => `file:${f}:${sha256(fs.existsSync(f) ? fs.readFileSync(f) : "")}`),
+    ...(prep.dist ? [`dist:${distHash(prep.dist)}`] : []),
+  ];
+  return sha256(parts.join("\n"));
+}
+
+function whichAbs(name) {
+  const r = spawnSync("sh", ["-c", 'command -v "$1"', "sh", name], { encoding: "utf8" });
+  const p = r.stdout.trim();
+  return p ? fs.realpathSync(p) : null;
+}
+
+async function prepareWrite(op, s, frozen) {
+  if (fixtureSurface(s.type)) return { files: [], send: async () => {
+    logSent({ surface: s.type, op: op.name, request: frozen });
+    if (s.type === "api-anything") return fixture("api-anything", s.op) ?? { ok: false, class: "error", reason: `no fixture for ${s.op}` };
+    const f = fixture(s.type, op.name);
+    if (!f) return { ok: false, class: "error", reason: `no fixture for ${s.type} ${op.name}` };
+    return f.exit === 0 ? { ok: true, data: parseOr(f.stdout, null) } : { ok: false, class: "error", reason: f.stderr || `exit ${f.exit}` };
+  } };
+  if (s.type !== "api-anything") {
+    const exe = s.type === "cli" ? cliExe() : path.join(ROOT, "bin", frozen.argv[0]);
+    if (!exe || !fs.existsSync(exe)) return { error: `${s.type === "cli" ? "the clay CLI" : frozen.argv[0]} is not installed` };
+    const cli = s.type === "cli";
+    if (cli && frozen.workspace === undefined) return { error: `no Clay workspace for the CLI call: ${WS_UNRESOLVED || "pass ws=<id> or set CLAY_WORKSPACE_ID"}` };
+    const argv = frozen.argv.slice(1);
+    return { files: [exe], send: async () => {
+      // Only the CLI reads the shared config; a kit bin runs as it always has.
+      const pin = cli ? pinCli(frozen.workspace) : { env: process.env, done: () => {} };
+      if (pin.error) return { ok: false, class: "refused", reason: pin.error };
+      let r;
+      try {
+        r = spawnSync(exe, argv, { env: pin.env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
+      } finally {
+        pin.done();
+      }
+      if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
+      const data = parseOr(r.stdout, r.stdout);
+      const other = cli ? answeredElsewhere(data, frozen.workspace) : null;
+      if (other) return { ok: false, class: "workspace", reason: `the CLI answered for workspace ${other}, not ${frozen.workspace}` };
+      return { ok: true, data };
+    } };
+  }
+  const dist = engineDist();
+  if (!dist) return { error: "api-anything is not installed" };
+  if (!registry.engine.dist_sha256 || distHash(dist) !== registry.engine.dist_sha256) {
+    return { error: `the installed api-anything is not the build of the pinned commit ${registry.engine.sha.slice(0, 12)}` };
+  }
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  const http = await import(path.join(dist, "http.js"));
+  const sess = await import(path.join(dist, "session.js"));
+  const sessionPath = sess.sessionFile(registry.engine.site);
+  let session;
+  try { session = sess.loadSession(registry.engine.site); } catch (e) { return { error: `no usable Clay session: ${e.message}` }; }
+  const body = frozen.body === undefined ? undefined : JSON.stringify(frozen.body);
+  const synthetic = { name: op.name, request: { method: frozen.method, url: frozen.url, headers: { ...frozen.headers }, ...(body !== undefined ? { body } : {}) },
+    slots: [], params: [], volatile: [], readOnly: false, minTier: 1, response: { format: "json" } };
+  // The engine's own builder, on the synthetic op, must give back exactly the approved request.
+  const built = http.buildRequest(synthetic, {}, { cookies: [], values: {} });
+  const h = { ...built.headers };
+  delete h.cookie;
+  if (built.method !== frozen.method || built.url !== frozen.url || JSON.stringify(h) !== JSON.stringify(frozen.headers) || (built.body ?? undefined) !== body) {
+    return { error: "the engine would build a request other than the one shown; nothing was sent" };
+  }
+  let hops = 0;
+  const guarded = (url, init) => {
+    hops += 1;
+    const sentBody = init?.body === undefined ? undefined : String(init.body);
+    if (hops > 1 || String(url) !== frozen.url || init?.method !== frozen.method || sentBody !== body) {
+      throw new Error("refused: the outgoing request differs from the approved one (a redirect or a rewrite); nothing more was sent");
+    }
+    return fetch(url, init);
+  };
+  return { dist, files: [sessionPath], send: async () => {
+    try {
+      const r = await http.send(synthetic, {}, session, { site: registry.engine.site, fetchImpl: guarded });
+      const ok = r.status >= 200 && r.status < 300;
+      return { ok, status: r.status, data: parseOr(r.body, r.body), ...(ok ? {} : { class: "error", reason: `HTTP ${r.status}` }) };
+    } catch (e) {
+      return { ok: false, class: "error", reason: String(e.message || e) };
+    }
+  } };
+}
+
+// Reads only: the engine resolves the op itself, which is fine for a GET.
 async function callEngine(opName, bound, flags, write) {
+  if (write) return { ok: false, class: "refused", reason: "a write never goes through call(); it is sent from its frozen request" };
   if (FIXTURES) {
     const f = fixture("api-anything", opName);
     return f ?? { ok: false, class: "error", reason: `no fixture for ${opName}` };
@@ -217,14 +578,28 @@ async function callEngine(opName, bound, flags, write) {
   return call(registry.engine.site, opName, bound, opts);
 }
 
-function runProcess(kind, opName, file, argv) {
-  if (FIXTURES) {
+function runProcess(kind, opName, file, argv, ws) {
+  if (fixtureSurface(kind)) {
     const f = fixture(kind, opName);
     if (!f) return { exit: 127, stdout: "", stderr: `no fixture for ${kind} ${opName}` };
     return f;
   }
-  const r = spawnSync(file, argv, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
-  return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  // Kit bins (clay-balance, clay-inbox) sign in their own way and never read
+  // the CLI's config, so only the CLI itself is pinned.
+  if (kind !== "cli") {
+    const r = spawnSync(file, argv, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
+    return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  }
+  const exe = cliExe();
+  if (!exe) return { exit: 127, stdout: "", stderr: "the clay CLI is not installed" };
+  const pin = pinCli(ws);
+  if (pin.error) return { exit: 1, stdout: "", stderr: pin.error };
+  try {
+    const r = spawnSync(exe, argv, { env: pin.env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
+    return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+  } finally {
+    pin.done();
+  }
 }
 
 function pluck(data, dotted) {
@@ -240,21 +615,155 @@ function where(data, cond) {
 // The only POSTs that read. Any other non-GET request in the spec is a write,
 // whatever the registry's `kind` says, so relabeling one in the registry can't
 // slip it past the person-at-a-terminal gate.
-const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory"]);
+const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory", "bulkFetchRecords"]);
+// Reads whose answer can pass the engine's 20,000-char display cap (a people
+// cell alone ran past it on the Sabo table, 2026-10-16, and `row` came back
+// "incomplete"). When the engine cuts one, the same frozen request is sent once
+// more through the pinned sender and the whole body is shaped here instead.
+const FULL_READS = new Set(["getRow", "listRows", "listRowsAfter", "bulkFetchRecords", "getViewRecordIds", "getTableViews", "getTableColumns", "getWorkflowRunSteps", "getActions"]);
 function specWrites(specName) {
   const so = specOps.get(specName);
   if (!so) return true;
   return String(so.request?.method || "").toUpperCase() !== "GET" && !READ_POSTS.has(specName);
 }
-function isWrite(op) {
-  return op.kind === "write" || op.surfaces.some((s) => s.type === "api-anything" && specWrites(s.op));
+// Every surface is judged on its own, whatever the op's label says (security
+// review of e5f1edeb: a `clay tables delete` CLI surface or a kit bin under a
+// kind:read op skipped the gate because only api-anything methods were read).
+// A CLI command is a read only when its last subcommand is a known read verb;
+// anything else, a mutating verb or one never seen, is a write. A bin is a
+// write unless it is listed here as read-only.
+const CLI_READ_LEAVES = new Set([
+  "list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
+  "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
+  "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
+  "business-context", "files", "segments", "whoami", "versions",
+]);
+// The clay CLI's mutating subcommands (clay 1.9.1 --help, walked 2026-10-09).
+// Listed so a mutating verb is a write even where it sits mid-command.
+const CLI_WRITE_VERBS = new Set([
+  "create", "update", "delete", "add", "remove", "run", "import", "publish", "set", "enroll", "send", "archive",
+  "restore", "upsert", "insert", "start", "pause", "resume", "cancel", "edit", "upload", "switch", "login",
+  "logout", "rename", "decide", "seed", "test", "start-test", "end-test", "send-test", "update-claygent",
+  "ensure-audience-writeback", "add-nodes", "remove-nodes", "upgrade-to-account-agent", "create-account-agent",
+  "insert", "onboard", "feedback",
+]);
+const READ_BINS = new Set(["clay-inbox", "clay-balance"]);
+
+function cliCommand(argv) {
+  const words = [];
+  for (const t of argv) {
+    if (t.startsWith("-") || t.includes("{")) break;
+    words.push(t);
+  }
+  return words;
 }
 
+function surfaceWrites(s) {
+  if (s.type === "api-anything") return specWrites(s.op) || specOps.get(s.op)?.readOnly === false;
+  if (s.type === "cli") {
+    const words = cliCommand(s.argv || []);
+    return !words.length || words.some((w) => CLI_WRITE_VERBS.has(w)) || !CLI_READ_LEAVES.has(words.at(-1));
+  }
+  if (s.type === "bin") return !READ_BINS.has((s.argv || [])[0]);
+  return true;
+}
+
+function isWrite(op) {
+  return op.kind !== "read" || String(op.gate || "").startsWith("write") || op.surfaces.some(surfaceWrites);
+}
+
+// The keys of each item (or the one object) a spec's response.pick names. Only
+// plain keys: an op whose pick renames or reaches into arrays stays out of
+// FULL_READS.
+function pickKeys(data, keys) {
+  if (!keys?.length) return data;
+  const one = (o) => (o && typeof o === "object" ? Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]])) : o);
+  return Array.isArray(data) ? data.map(one) : one(data);
+}
+
+// A FULL_READS op sent again, whole. The request is the one the engine built
+// from validated args, frozen; it must be a read (GET, or a POST in READ_POSTS)
+// to api.clay.com under /v3/, and the sender refuses a redirect or rewrite.
+async function fullRead(op, s, bound) {
+  const sop = specOps.get(s.op);
+  const shapedPick = (sop?.response?.pick || []).some((k) => /[=[.]/.test(k));
+  if (!sop || specWrites(s.op) || sop.readOnly === false || shapedPick) {
+    return { ok: false, class: "refused", reason: `${s.op} can't be read whole` };
+  }
+  let frozen;
+  try {
+    frozen = deepFreeze(dryRequest(s, bound, validatedSet(bound), bound));
+  } catch (e) {
+    return { ok: false, class: "input", reason: e.message };
+  }
+  const url = new URL(frozen.url);
+  const method = String(frozen.method).toUpperCase();
+  if (url.origin !== `https://${CLAY_API_HOST}` || !url.pathname.startsWith("/v3/") || !(method === "GET" || (method === "POST" && READ_POSTS.has(s.op)))) {
+    return { ok: false, class: "refused", reason: "a whole read goes only to a known read endpoint" };
+  }
+  let raw;
+  if (FIXTURES) {
+    raw = fixture("api-anything-full", s.op);
+    if (!raw) return { ok: false, class: "error", reason: `no full fixture for ${s.op}` };
+  } else {
+    const prepared = await prepareWrite(op, s, frozen);
+    if (prepared.error) return { ok: false, class: "error", reason: prepared.error };
+    raw = await prepared.send();
+  }
+  if (!raw.ok) return { ok: false, class: raw.class || "error", reason: raw.reason };
+  return { ok: true, data: pickKeys(pluck(raw.data, sop.response?.extract), sop.response?.pick) };
+}
+
+// fields=f_a,f_b on a row read: each row keeps only those cells, so one big
+// cell can be read on its own.
+function narrowCells(data, fields) {
+  const keep = new Set(fields);
+  const one = (row) => (row && typeof row === "object" && row.cells && typeof row.cells === "object"
+    ? { ...row, cells: Object.fromEntries(Object.entries(row.cells).filter(([k]) => keep.has(k))) }
+    : row);
+  return Array.isArray(data) ? data.map(one) : one(data);
+}
+
+// Reads only. A write never reaches here: runOp sends it through prepareWrite.
 async function attempt(op, cand, flags) {
   const { s, bound } = cand;
   const t0 = Date.now();
+  if (isWrite(op)) return { ok: false, surface: s.type, class: "refused", reason: "a write is only sent from its approved, frozen request", ms: 0 };
   if (s.type === "api-anything") {
-    const r = await callEngine(s.op, bound, flags, isWrite(op));
+    let r = await callEngine(s.op, bound, flags, false);
+    const fullThread = op.name === "thread" && s.op === "threadHistory";
+    if (r.ok && r.truncated && (fullThread || flags.full)) {
+      // execute.call caps output at 20,000 chars before returning it. For a
+      // read, use the same pinned HTTP sender and frozen request builder
+      // already used below, so the whole result survives that display cap.
+      // --full extends it past thread: on 2026-10-26 a BMA workspace export
+      // needed all 1,368 resources and the cap showed 76.
+      const frozen = deepFreeze(dryRequest(s, bound, validatedSet(bound), bound));
+      const url = new URL(frozen.url);
+      const exactThread = frozen.method === "POST" && !url.search &&
+        /^\/v3\/workspaces\/\d+\/clay-sequencer\/master-inbox\/message-history$/.test(url.pathname);
+      // isWrite(op) already refused above, so this op and its spec entry are
+      // reads; Clay sends some list reads as POST (resources_v2 is one).
+      const plainRead = ["GET", "POST"].includes(frozen.method) && specOps.get(s.op)?.readOnly !== false &&
+        !specWrites(s.op) && /^\/v3\//.test(url.pathname);
+      if (url.origin !== "https://api.clay.com" || !(fullThread ? exactThread : plainRead || exactThread))
+        return { ok: false, surface: s.type, class: "refused", reason: "a complete read needs a read op on api.clay.com/v3 or the exact thread endpoint", ms: Date.now() - t0 };
+      if (FIXTURES) {
+        const full = fixture("api-anything-full", s.op);
+        if (full) r = full;
+      } else {
+        const prepared = await prepareWrite(op, s, frozen);
+        if (prepared.error) return { ok: false, surface: s.type, class: "error", reason: prepared.error, ms: Date.now() - t0 };
+        r = await prepared.send();
+      }
+    }
+    if (r.ok && r.truncated && FULL_READS.has(s.op)) {
+      const full = await fullRead(op, s, bound);
+      // A whole read that fails leaves the cut result as it was, so the next
+      // surface still gets its turn and the cut stays reported.
+      if (full.ok) r = { ...r, data: full.data, truncated: undefined, whole: `the engine cut it (${r.truncated}); read again whole` };
+      else r = { ...r, truncated: `${r.truncated}; the whole read failed: ${full.reason}` };
+    }
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -265,11 +774,11 @@ async function attempt(op, cand, flags) {
       ...(typeof r.ms === "number" ? { engine_ms: r.ms } : {}),
     };
     if (!r.ok) return { ...res, class: r.class, reason: r.reason, next: r.next };
-    return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed };
+    return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed, ...(r.whole ? { whole: r.whole } : {}) };
   }
   const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
   const argv = s.type === "cli" ? bound : bound.slice(1);
-  const r = runProcess(s.type, op.name, file, argv);
+  const r = runProcess(s.type, op.name, file, argv, cand.ws);
   const res = { surface: s.type, call: `${s.type === "cli" ? "clay" : bound[0]} ${argv.join(" ")}`.trim(), ms: Date.now() - t0 };
   if (r.exit !== 0) {
     let reason = r.stderr.trim().slice(0, 400);
@@ -284,6 +793,8 @@ async function attempt(op, cand, flags) {
   } catch {
     return { ...res, ok: false, class: "error", reason: "surface printed something that is not JSON" };
   }
+  const other = answeredElsewhere(data, cand.ws);
+  if (other) return { ...res, ok: false, class: "workspace", reason: `the CLI answered for workspace ${other}, not ${cand.ws}` };
   const result = { ...res, ok: true, data: where(pluck(data, s.extract), s.where) };
   if (data && typeof data === "object" && data.cursor) result.cursor = data.cursor;
   return result;
@@ -293,7 +804,7 @@ async function attempt(op, cand, flags) {
 function listOps() {
   const ops = registry.ops.map((op) => ({
     op: op.name,
-    kind: op.kind,
+    kind: isWrite(op) ? "write" : "read",
     gate: op.gate,
     args: op.args,
     summary: op.summary,
@@ -310,6 +821,13 @@ function listOps() {
       };
     }),
     ui: op.ui ?? null,
+    ...(op.kind === "write"
+      ? {
+          verified: op.verified ?? null,
+          ...(op.confidence ? { confidence: op.confidence } : {}),
+          ...(op.evidence ? { evidence: op.evidence.source === "cli" ? op.evidence.command : `${op.evidence.file} ${op.evidence.contract} @${op.evidence.contract_offset}` } : {}),
+        }
+      : {}),
   }));
   const ui = (registry.ui_only || []).map((u) => ({ op: u.name, kind: "ui", gate: u.gate, route: u.route, why: u.why }));
   const untaught = (registry.untaught_writes || []).map((w) => ({ op: w.name, kind: "write", gate: w.gate, endpoint: w.endpoint, taught: false }));
@@ -323,26 +841,451 @@ const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const ARG_SHAPES = {
   ws: /^\d{1,12}$/,
   table: ID, row: ID, view: ID, audience: ID, campaign: ID, campaign_id: ID, lead_id: ID,
-  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID,
+  workflow: ID, run: ID, detail: /^(summary|full)$/,
+  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID, after_field: /^f_[A-Za-z0-9_-]{1,80}$/,
   limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
   ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
   emailOrDomain: /^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+  field: /^f_[A-Za-z0-9_-]{1,80}$/,
+  entry: ID, resource: ID,
+  name: /^[^\u0000-\u001f\u007f]{1,128}$/,
+  data_type: /^(text|number|email|url|date|boolean|longtext|image|currency|json)$/,
+  on: /^(true|false)$/,
+  mode: /^(all|keep_existing)$/,
+  status: /^(START|PAUSED|STOPPED)$/,
+  lead_map_id: /^\d{1,15}$/, category_id: /^\d{1,15}$/,
+  read_status: /^(READ|UNREAD)$/,
+  resource_type: /^(FOLDER|TABLE|WORKBOOK|WORKFLOW|AUDIENCE_SEGMENT)$/,
+  trigger: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  // An absolute path to a .csv with no "..": the CLI uploads whatever file it is
+  // handed, so a path that wanders is refused before it is read.
+  csv: /^\/(?!.*\/\.\.?(\/|$))[A-Za-z0-9 ._\/-]{1,400}\.csv$/,
+  out: /^\/(?!.*\/\.\.?(\/|$))[A-Za-z0-9 ._\/-]{1,400}\.csv$/,
+  email: /^[A-Za-z0-9._%+'-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/,
+  max_credits: /^\d{1,6}$/,
 };
-const JSON_ARGS = new Set(["forward_data", "reply_data"]);
+// Comma lists, or a JSON array: each item must have the item shape. The cap is
+// the op's `limits` entry, else 200.
+const LIST_ARGS = { fields: ARG_SHAPES.field, rows: ID, emails: ARG_SHAPES.emailOrDomain };
 
-function badArg(args) {
+const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+const CELL_KEY = /^f_[A-Za-z0-9_-]{1,80}$/;
+const cellsBad = (c) => (!isObj(c) || !Object.keys(c).length || !Object.keys(c).every((k) => CELL_KEY.test(k)) ? "cells must map column ids (f_...) to values" : null);
+// JSON args, each checked for the shape its body slot expects.
+const JSON_ARGS = {
+  holds: (v) => Array.isArray(v) && v.length > 0 && v.length <= 100 ? null : "must be an array of exact email/entityId holds",
+  forward_data: (v) => (isObj(v) ? null : "must be a JSON object"),
+  reply_data: (v) => (isObj(v) ? null : "must be a JSON object"),
+  settings: (v) => (isObj(v) && Object.keys(v).length <= 100 && Object.keys(v).every((k) => /^[A-Z][A-Z0-9_]{0,63}$/.test(k))
+    ? null : "must be the table's tableSettings object (UPPER_CASE keys), from chewbacca clay table"),
+  update: (v) => {
+    if (!isObj(v) || !Object.keys(v).length) return "must be a non-empty JSON object";
+    const extra = Object.keys(v).filter((k) => !["name", "description", "typeSettings"].includes(k));
+    if (extra.length) return `may only hold name, description, typeSettings (not ${extra.join(", ")})`;
+    if (v.name !== undefined && !(typeof v.name === "string" && ARG_SHAPES.name.test(v.name))) return "name must be a 1 to 128 character string";
+    if (v.typeSettings !== undefined && !isObj(v.typeSettings)) return "typeSettings must be the column's whole typeSettings object";
+    return null;
+  },
+  // add-enrichment-column: one whole column body. An action must wait for run-cells
+  // (runAsButton), or creating it fills every row on Clay's side (2026-10-17).
+  spec: (v) => {
+    if (!isObj(v)) return "must be a JSON object";
+    const extra = Object.keys(v).filter((k) => !["name", "type", "typeSettings", "activeViewId"].includes(k));
+    if (extra.length) return `may only hold name, type, typeSettings, activeViewId (not ${extra.join(", ")})`;
+    if (!(typeof v.name === "string" && ARG_SHAPES.name.test(v.name))) return "name must be a 1 to 128 character string";
+    if (!["action", "formula", "text", "number", "email", "url", "date", "boolean"].includes(v.type)) return "type must be action, formula or a plain data type";
+    if (!isObj(v.typeSettings)) return "typeSettings must be an object";
+    if (v.type === "action" && v.typeSettings.runAsButton !== true) return "an action column needs typeSettings.runAsButton true, so it runs only on rows run-cells picks";
+    // Security review, 2026-10-17: the runAsButton check meant nothing if action keys could ride
+    // on another type. Only an action column may name a provider, inputs or credentials.
+    const ACTION_KEYS = ["actionKey", "actionPackageId", "actionVersion", "inputsBinding", "authAccountId", "conditionalRunFormulaText", "runAsButton"];
+    if (v.type !== "action" && ACTION_KEYS.some((k) => k in v.typeSettings)) return "only an action column may carry actionKey, inputs, credentials or run settings";
+    if (v.type === "formula" && !["text", "waterfall"].includes(v.typeSettings.formulaType)) return "a formula column needs formulaType text or waterfall";
+    if (v.activeViewId !== undefined && !ID.test(String(v.activeViewId))) return "activeViewId must be a view id";
+    return null;
+  },
+  records: (v, op) => {
+    if (!Array.isArray(v) || !v.length) return "must be a non-empty JSON array";
+    const cap = op?.limits?.records ?? 100;
+    if (v.length > cap) return `holds ${v.length} records, ${cap} at most`;
+    for (const r of v) {
+      const bad = op?.compose === "new-records" ? cellsBad(r) : !isObj(r) || typeof r.id !== "string" || !ID.test(r.id) ? "each record needs an id (r_...)" : cellsBad(r.cells);
+      if (bad) return bad;
+    }
+    return null;
+  },
+  // View settings (bundle schemas XEt, P8t, O8t, app-3TgCQQBH.js 2026-10-16).
+  sort: (v) => (Array.isArray(v) && v.length <= 20 && v.every((x) => isObj(x) && Object.keys(x).every((k) => k === "fieldId" || k === "direction") &&
+    CELL_KEY.test(String(x.fieldId)) && (x.direction === "ASC" || x.direction === "DESC"))
+    ? null : "must be [{\"fieldId\":\"f_...\",\"direction\":\"ASC\"|\"DESC\"}], [] to clear"),
+  view_filter: (v) => {
+    if (!isObj(v)) return "must be a JSON object, {} to clear";
+    if (!Object.keys(v).length) return null;
+    const item = (x, depth) => {
+      if (!isObj(x)) return false;
+      if (x.filterType === "Group") return depth < 2 && (x.combinationMode === undefined || ["AND", "OR"].includes(x.combinationMode)) &&
+        Array.isArray(x.items) && x.items.length <= 50 && x.items.every((y) => item(y, depth + 1));
+      return CELL_KEY.test(String(x.fieldId)) && /^[A-Z][A-Z_]{1,40}$/.test(String(x.type)) &&
+        Object.keys(x).every((k) => ["fieldId", "type", "value", "filterType", "disabled"].includes(k));
+    };
+    return ["AND", "OR"].includes(v.combinationMode) && Array.isArray(v.items) && v.items.length >= 1 && v.items.length <= 50 &&
+      Object.keys(v).every((k) => k === "combinationMode" || k === "items") && v.items.every((x) => item(x, 0))
+      ? null : "must be {\"combinationMode\":\"AND\"|\"OR\",\"items\":[{\"fieldId\":\"f_...\",\"type\":\"NOT_EMPTY\"}, ...]} (the shape views shows)";
+  },
+  columns: (v) => (isObj(v) && Object.keys(v).length >= 1 && Object.keys(v).length <= 200 && Object.entries(v).every(([k, x]) =>
+    CELL_KEY.test(k) && isObj(x) && Object.keys(x).length >= 1 &&
+    Object.entries(x).every(([p, y]) => (["isVisible", "isPinned"].includes(p) && typeof y === "boolean") || (p === "width" && Number.isInteger(y) && y >= 40 && y <= 2000)))
+    ? null : "must map column ids to {isVisible?, isPinned?, width?}, e.g. {\"f_...\":{\"isVisible\":false}}"),
+  filter: (v) => (isObj(v) && v.type === "GroupOp" && Array.isArray(v.items) ? null : "must be a filter AST whose root is a GroupOp with items"),
+  // campaign-update and campaign-sequence. A status key would launch or stop a
+  // campaign from here, which only campaign-status (never START) may do.
+  input: (v, op) => {
+    if (!isObj(v) || !Object.keys(v).length) return "must be a non-empty JSON object";
+    if (op?.name === "campaign-sequence") return Array.isArray(v.ops) && v.ops.length ? null : "must be {\"ops\": [...]}";
+    const allowed = ["settings", "leadBaseSegmentId", "name", "leadExclusionSegmentIds"];
+    const extra = Object.keys(v).filter((k) => !allowed.includes(k));
+    return extra.length ? `may only hold ${allowed.join(", ")} (not ${extra.join(", ")})` : null;
+  },
+  config: (v) => {
+    if (!isObj(v)) return "must be a JSON object";
+    if (!isObj(v.source) || v.source.type !== "S3_CSV" || typeof v.source.key !== "string") return "source must be {type:S3_CSV, key, ...} from a finished multi-part upload";
+    if (!isObj(v.destination) || !["TABLE", "NOOP", "BULK_ENRICHMENT"].includes(v.destination.type)) return "destination.type must be TABLE, NOOP or BULK_ENRICHMENT";
+    if (!isObj(v.map)) return "map must be an object";
+    if (typeof v.isImportWithoutRun !== "boolean") return "isImportWithoutRun must be true or false";
+    return null;
+  },
+};
+
+function badArg(args, op) {
   for (const [k, v] of Object.entries(args)) {
-    if (JSON_ARGS.has(k)) {
-      let parsed;
-      try { parsed = typeof v === "string" ? JSON.parse(v) : v; } catch { return `${k} is not JSON`; }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `${k} must be a JSON object`;
+    if (JSON_ARGS[k]) {
+      // v is already parsed, once, by normalizeArgs.
+      const bad = JSON_ARGS[k](v, op);
+      if (bad) return `${k} ${bad}`;
+      continue;
+    }
+    if (LIST_ARGS[k]) {
+      if (!Array.isArray(v)) return `${k} must be a list`;
+      const items = v;
+      const cap = op?.limits?.[k] ?? 200;
+      if (!items.length || items.length > cap) return `${k} holds ${items.length} items, 1 to ${cap} allowed`;
+      if (!items.every((x) => LIST_ARGS[k].test(x))) return `${k} has an item that does not look like a ${k.replace(/s$/, "")}`;
       continue;
     }
     const shape = ARG_SHAPES[k];
     if (!shape) return `${k} has no allowed shape`;
     if (!shape.test(String(v))) return `${k} does not look like a ${k}`;
+    // csv-upload sends the file to Clay, so only client data under ~/code/work
+    // may go, by its real path (security review of c511c674: any .csv on disk).
+    if (k === "csv") {
+      const root = path.join(os.homedir(), "code", "work") + path.sep;
+      let real;
+      try { real = fs.realpathSync(String(v)); } catch { real = null; }
+      if (!FIXTURES && (!real || !real.startsWith(root))) return `csv must be a file under ${root}`;
+    }
+    // out= is written, so its folder must already exist under the same root.
+    if (k === "out") {
+      const root = path.join(os.homedir(), "code", "work") + path.sep;
+      let real;
+      try { real = fs.realpathSync(path.dirname(String(v))) + path.sep; } catch { real = null; }
+      if (!FIXTURES && (!real || !real.startsWith(root))) return `out must be in a folder under ${root}`;
+    }
   }
   return null;
+}
+
+// Turn the validated args into what the spec slots take: lists to arrays, JSON
+// strings to objects, and the two composed bodies.
+// ── one parse, then validate what is actually sent ──────────────────────────
+//
+// Security review of 300f4ddb (validator differential): args were checked in
+// one representation and built from another (JSON parsed twice, lists split
+// twice, last duplicate key winning). Now every arg is parsed exactly once
+// here, badArg checks those parsed values, compose and the builder use the
+// same objects, and the builder refuses any value it was not handed by this
+// step. The finished request is checked again (checkFinal).
+
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const CLAY_API_HOST = "api.clay.com";
+
+// JSON.parse keeps the last of two equal keys and treats "__proto__" as a
+// plain key, so a duplicate could be checked one way and read another. This
+// parser refuses both, and builds objects with no prototype chain to reach.
+const PRIMITIVE = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y;
+function strictJson(text) {
+  let i = 0;
+  const ws = () => { while (" \t\n\r".includes(text[i]) && i < text.length) i++; };
+  const fail = (m) => { throw new Error(m); };
+  function value(depth) {
+    if (depth > 64) fail("nests too deep");
+    ws();
+    const c = text[i];
+    if (c === "{") {
+      i++;
+      const o = Object.create(null);
+      ws();
+      if (text[i] === "}") { i++; return Object.assign({}, o); }
+      for (;;) {
+        ws();
+        if (text[i] !== '"') fail("has a key that is not a string");
+        const k = value(depth + 1);
+        if (FORBIDDEN_KEYS.has(k)) fail(`has a ${k} key`);
+        if (Object.hasOwn(o, k)) fail(`has the key ${JSON.stringify(k)} twice`);
+        ws();
+        if (text[i++] !== ":") fail("is missing a colon");
+        o[k] = value(depth + 1);
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "}") { i++; break; }
+        fail("has an object that is not closed");
+      }
+      // A plain object again, with only own keys from the text.
+      return Object.fromEntries(Object.entries(o));
+    }
+    if (c === "[") {
+      i++;
+      const a = [];
+      ws();
+      if (text[i] === "]") { i++; return a; }
+      for (;;) {
+        a.push(value(depth + 1));
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "]") { i++; break; }
+        fail("has an array that is not closed");
+      }
+      return a;
+    }
+    PRIMITIVE.lastIndex = i;
+    const m = PRIMITIVE.exec(text);
+    if (!m) fail("is not valid JSON");
+    i += m[0].length;
+    return JSON.parse(m[0]);
+  }
+  const v = value(0);
+  ws();
+  if (i !== text.length) fail("has text after the JSON");
+  return v;
+}
+
+function normalizeArgs(args) {
+  const n = {};
+  for (const [k, raw] of Object.entries(args)) {
+    if (typeof raw !== "string") return { error: `${k} is not text` };
+    if (JSON_ARGS[k]) {
+      try { n[k] = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+    } else if (LIST_ARGS[k]) {
+      if (raw.trimStart().startsWith("[")) {
+        let a;
+        try { a = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+        if (!Array.isArray(a) || !a.every((x) => typeof x === "string")) return { error: `${k} must be a list of strings` };
+        n[k] = a;
+      } else n[k] = raw.split(",");
+    } else n[k] = raw;
+  }
+  return { values: n };
+}
+
+// Every value the builder may put into a request: the normalized args and
+// what compose derives from them, held by identity.
+function validatedSet(values) {
+  const set = new Set();
+  for (const v of Object.values(values)) set.add(v);
+  return set;
+}
+
+function forbiddenKeyIn(v) {
+  if (v === null || typeof v !== "object") return null;
+  for (const [k, x] of Object.entries(v)) {
+    if (FORBIDDEN_KEYS.has(k)) return k;
+    const deep = forbiddenKeyIn(x);
+    if (deep) return deep;
+  }
+  return null;
+}
+
+// The finished request, checked as it will go out: https to the spec's host,
+// the spec's query, a path that is the spec's template with only slot
+// segments changed, each one the plain validated value with nothing to decode
+// or normalize, and a body that round-trips as JSON with no prototype keys.
+function checkFinal(sop, req, vals) {
+  const tmpl = new URL(sop.request.url);
+  const m = /^https:\/\/([^/?#]+)(\/[^?#]*)(\?[^#]*)?$/.exec(req.url);
+  if (!m) throw new Error("the built URL is not a plain https URL");
+  const [, host, rawPath, query = ""] = m;
+  // A fixed allowlist, not the spec's own host: a doctored spec can't widen it.
+  if (host !== CLAY_API_HOST || host !== tmpl.host) throw new Error(`the built URL goes to ${host}, not ${CLAY_API_HOST}`);
+  if (!rawPath.startsWith("/v3/")) throw new Error("the built path is outside Clay's /v3 API");
+  // The query is the spec's, pair for pair, except a key the spec slots, which
+  // must hold exactly its validated value and nothing a server would read twice.
+  const qSlots = new Map(sop.slots.filter((s) => s.at.length === 1 && s.at[0].startsWith("query:")).map((s) => [s.at[0].slice(6), s.param]));
+  const pairsOf = (q) => (q && q !== "?" ? q.replace(/^\?/, "").split("&").map((p) => {
+    const eq = p.indexOf("=");
+    return [decodeURIComponent(eq < 0 ? p : p.slice(0, eq)), decodeURIComponent(eq < 0 ? "" : p.slice(eq + 1))];
+  }) : []);
+  const got = pairsOf(query);
+  const want = new Map(pairsOf(tmpl.search));
+  const seen = new Set();
+  for (const [k, v] of got) {
+    if (seen.has(k)) throw new Error(`the built URL's query repeats ${k}`);
+    seen.add(k);
+    if (qSlots.has(k) && vals[qSlots.get(k)] !== undefined) {
+      const val = vals[qSlots.get(k)];
+      if (v !== String(val) || !/^[A-Za-z0-9_=+.-]{1,200}$/.test(v)) throw new Error(`query ${k} is not the validated value`);
+    } else if (!want.has(k) || want.get(k) !== v) throw new Error("the built URL's query differs from the spec's");
+  }
+  for (const k of want.keys()) if (!seen.has(k)) throw new Error(`the built URL's query lost ${k}`);
+  if (rawPath.includes("%") || new URL(req.url).pathname !== rawPath) throw new Error("the built path would be decoded or normalized");
+  const segs = rawPath.slice(1).split("/");
+  const tsegs = tmpl.pathname.slice(1).split("/");
+  if (segs.length !== tsegs.length) throw new Error("the built path has a different number of segments than the spec's");
+  const slotAt = new Map(sop.slots.filter((s) => s.at.length === 1 && s.at[0].startsWith("path:")).map((s) => [Number(s.at[0].slice(5)), s.param]));
+  segs.forEach((seg, i) => {
+    if (slotAt.has(i)) {
+      if (seg !== String(vals[slotAt.get(i)]) || !/^[A-Za-z0-9_-]{1,80}$/.test(seg)) throw new Error(`path segment ${i} is not the validated value`);
+    } else if (seg !== tsegs[i]) throw new Error(`path segment ${i} differs from the spec's`);
+  });
+  if (req.body !== undefined) {
+    const parsed = strictJson(req.body);
+    if (JSON.stringify(parsed) !== req.body) throw new Error("the built body does not round-trip as JSON");
+    const k = forbiddenKeyIn(parsed);
+    if (k) throw new Error(`the built body has a ${k} key`);
+  }
+}
+
+function compose(op, args) {
+  const a = { ...args };
+  // cam_ drafts use the v2 campaign resource. The legacy sequencer status
+  // endpoint returned "Campaign does not belong to this workspace" on Oct 14.
+  if (op.name === "campaign-status") a.status = { START: "active", PAUSED: "paused", STOPPED: "completed" }[a.status];
+  if (op.compose === "table-settings") {
+    a.table_settings = { ...a.settings, AUTO_RUN_ON: String(a.on) === "true", ...(a.mode ? { AUTO_RUN_MODE: a.mode } : {}) };
+  }
+  if (op.compose === "new-records") a.records_body = a.records.map((cells) => ({ cells }));
+  return a;
+}
+
+// ── dry run: the request a surface would send, built the way api-anything's
+// buildRequest builds it (http.ts at the pinned sha), minus the cookie ───────
+function coerceParam(p, v) {
+  if (p.type === "number" && typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (p.type === "boolean" && (v === "true" || v === "false")) return v === "true";
+  if ((p.type === "object" || p.type === "array") && typeof v === "string") return JSON.parse(v);
+  if (p.type === "string" && typeof v !== "string") return typeof v === "object" ? JSON.stringify(v) : String(v);
+  return v;
+}
+
+function setSlot(req, at, value) {
+  const [first, ...rest] = at;
+  if (first.startsWith("path:")) {
+    const u = new URL(req.url);
+    const segs = u.pathname.slice(1).split("/");
+    segs[Number(first.slice(5))] = encodeURIComponent(String(value));
+    u.pathname = `/${segs.join("/")}`;
+    return { ...req, url: u.toString() };
+  }
+  // query:<key> rewrites that pair in place (appends it when the template has
+  // none), as api-anything's codec does. Until 2026-10-10 this threw, so every
+  // read with a query slot (credit-usage days=, campaign-leads limit= and
+  // cursor=, rows limit=) refused before any surface ran, on main, live.
+  if (first.startsWith("query:") && !rest.length) {
+    const key = first.slice("query:".length);
+    const u = new URL(req.url);
+    const pairs = u.search ? u.search.slice(1).split("&") : [];
+    const enc = `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
+    const i = pairs.findIndex((p) => decodeURIComponent(p.split("=")[0]) === key);
+    if (i < 0) pairs.push(enc);
+    else pairs[i] = enc;
+    return { ...req, url: `${u.origin}${u.pathname}${pairs.length ? `?${pairs.join("&")}` : ""}` };
+  }
+  if (first !== "body") throw new Error(`dry run does not handle slot step ${first}`);
+  if (!rest.length) return { ...req, body: typeof value === "object" ? JSON.stringify(value) : String(value) };
+  const doc = JSON.parse(req.body);
+  const keys = rest[0].slice("json:/".length).split("/");
+  let node = doc;
+  for (const k of keys.slice(0, -1)) node = node[k];
+  const last = keys.at(-1);
+  // A number written into a JSON string leaf stays a string, as the engine does.
+  node[last] = typeof node[last] === "string" && typeof value !== "string" && typeof value !== "object" ? String(value) : value;
+  return { ...req, body: JSON.stringify(doc) };
+}
+
+function dryRequest(s, bound, validated, args) {
+  if (s.type !== "api-anything") {
+    // Rebuild the argv from the template, taking only validated values, and
+    // refuse if it is not exactly what bind produced.
+    const text = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : String(v));
+    const fill = (tok) => tok.replace(/\{(\w+)\}/g, (_, k) => {
+      if (!validated.has(args[k])) throw new Error(`argv value ${k} is not a validated value`);
+      return text(args[k]);
+    });
+    const want = s.argv.map(fill);
+    for (const [k, extra] of Object.entries(s.optional || {})) if (args[k] !== undefined) want.push(...extra.map(fill));
+    const got = s.type === "cli" ? bound : bound.slice(1);
+    const wantArgs = s.type === "cli" ? want : want.slice(1);
+    if (JSON.stringify(got) !== JSON.stringify(wantArgs)) throw new Error("the built argv differs from the validated one");
+    // The workspace the call is pinned to is part of what gets approved.
+    if (args.ws !== undefined && !validated.has(args.ws)) throw new Error("ws is not a validated value");
+    return { argv: [s.type === "cli" ? "clay" : bound[0], ...got], ...(args.ws !== undefined ? { workspace: String(args.ws) } : {}) };
+  }
+  const sop = specOps.get(s.op);
+  let req = { method: sop.request.method.toUpperCase(), url: sop.request.url, headers: { ...sop.request.headers }, body: sop.request.body };
+  const vals = {};
+  for (const p of sop.params) {
+    const v = bound[p.name] ?? p.default;
+    if (v === undefined) continue;
+    // The builder takes only values normalizeArgs produced and badArg passed.
+    if (bound[p.name] !== undefined && !validated.has(v)) throw new Error(`param ${p.name} is not a validated value`);
+    vals[p.name] = coerceParam(p, v);
+    if (p.pattern && !new RegExp(`^(?:${p.pattern})$`).test(typeof vals[p.name] === "object" ? JSON.stringify(vals[p.name]) : String(vals[p.name]))) {
+      throw new Error(`param ${p.name} must be ${p.hint || p.pattern}`);
+    }
+  }
+  for (const slot of sop.slots) if (vals[slot.param] !== undefined) req = setSlot(req, slot.at, vals[slot.param]);
+  delete req.headers.cookie;
+  if (req.method === "GET") delete req.body;
+  checkFinal(sop, req, vals);
+  return { method: req.method, url: req.url, headers: req.headers, ...(req.body !== undefined ? { body: JSON.parse(req.body) } : {}) };
+}
+
+// ── readback: after a write that has never been read back, read the thing it
+// changed and say whether the change is there ────────────────────────────────
+function leaves(v, out = []) {
+  if (v !== null && typeof v === "object") for (const x of Object.values(v)) leaves(x, out);
+  else out.push(String(v).toLowerCase());
+  return out;
+}
+
+async function readback(op, args) {
+  const rb = op.readback;
+  if (!rb) return null;
+  const ro = opByName.get(rb.op);
+  const rargs = {};
+  for (const [rk, wk] of Object.entries(rb.args || {})) if (args[wk] !== undefined) rargs[rk] = args[wk];
+  if (ro?.args.some((a) => a.replace("?", "") === "ws")) rargs.ws = args.ws;
+  const cmd = `chewbacca clay ${rb.op} ${Object.entries(rargs).map(([k, v]) => `${k}=${v}`).join(" ")}`.trim();
+  // A readback only ever reads: a read op that turns out to write is never run here.
+  if (!ro || isWrite(ro) || rb.expect === "manual") return { op: rb.op, check: "manual", ok: null, run: cmd, why: "read it and confirm the change by eye; then set verified:true in registry.json" };
+  let got = null;
+  for (const cand of plan(ro, rargs, null)) {
+    const r = await attempt(ro, cand, {});
+    if (r.ok) { got = r.data; break; }
+  }
+  if (got === null) return { op: rb.op, check: rb.expect, ok: false, run: cmd, why: "the read failed, so the write is unconfirmed" };
+  const want = args[rb.value];
+  let ok;
+  if (rb.expect === "contains") ok = Array.isArray(got) && got.some((x) => x && String(x[rb.key]) === String(want));
+  else if (rb.expect === "absent") ok = !leaves(got).includes(String(want).toLowerCase());
+  else if (rb.expect === "contains-all") { const all = leaves(got); ok = [].concat(want).every((w) => all.includes(String(w).toLowerCase())); }
+  else if (rb.expect === "equals") {
+    const seen = [rb.path, `campaign.${rb.path}`, `data.${rb.path}`].map((p) => pluck(got, p)).find((x) => x !== undefined);
+    // A START lands as whatever Clay calls a running campaign, never "START".
+    // Clay's live value is unmeasured, so a draft, error, stopped or paused
+    // status reads as not started, and anything else as started.
+    if (rb.path === "status" && String(want) === "START") ok = seen !== undefined && !["draft", "error", "failed", "stopped", "paused"].includes(String(seen).toLowerCase());
+    else ok = seen !== undefined && String(seen) === String(want);
+  }
+  return { op: rb.op, check: rb.expect, ok: !!ok, run: cmd };
 }
 
 // A write needs a person at a terminal. The old gate printed its own
@@ -351,11 +1294,422 @@ function badArg(args) {
 // answer is read from /dev/tty, which agent shells don't have (ENXIO), and
 // CHEWBACCA_NO_SEND=1 refuses outright. Fixture mode reads a canned answer so
 // the gate is testable; fixture mode never reaches Clay.
-function personApproves(name, args) {
-  const prompt = `\nchewbacca clay is about to WRITE to Clay:\n  ${JSON.stringify({ op: name, args })}\nType the op name (${name}) to send it, anything else to stop: `;
-  if (FIXTURES) return (process.env.CHEWBACCA_CLAY_TTY_ANSWER || "") === name;
+// What the person reads is the request that goes out, as one line of JSON with
+// every byte outside printable ASCII escaped: a newline, an ESC sequence, a
+// bidi override or a line separator in a value can't hide part of the payload
+// or draw a fake one (security review of e5f1edeb, 2026-10-09). Nothing is
+// clipped; a request too long to read at a terminal is refused instead.
+const SHOW_MAX = 16000;
+function showable(obj) {
+  return JSON.stringify(obj).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+function approvalPrompt(name, request) {
+  const line = showable({ op: name, request });
+  return `\nchewbacca clay is about to WRITE to Clay (sha256 ${sha256(line)}):\n  ${line}\nType the op name (${name}) to send it, anything else to stop: `;
+}
+
+// Fixture mode only, for tests: change something between approval and send
+// ({"write": {"path": ..., "text": ...}} or {"env": {...}}), to prove the send
+// is refused. Fixture mode never reaches Clay.
+function afterApprovalTestHook() {
+  const raw = FIXTURES && process.env.CHEWBACCA_CLAY_TEST_AFTER_APPROVE;
+  if (!raw) return;
+  const h = JSON.parse(raw);
+  if (h.write) fs.writeFileSync(h.write.path, h.write.text);
+  for (const [k, v] of Object.entries(h.env || {})) process.env[k] = v;
+}
+
+function deepFreeze(v) {
+  if (v && typeof v === "object") {
+    for (const x of Object.values(v)) deepFreeze(x);
+    Object.freeze(v);
+  }
+  return v;
+}
+
+// add-leads changes who a live campaign emails (it emails whoever enters its
+// base segment), so it needs a passing gtme-grade receipt for add-leads on
+// that campaign, whose base segment must be this request's audience, checked by
+// `gtme-grade --verify` on the real values after the person approves and right
+// before the send. Moved here from launch-guard.sh on 2026-10-10: three reviews
+// in a row found shell commands the hook's parser read differently from the
+// shell, so the check runs in the code that sends, where nothing is parsed.
+// A campaign START (campaign-status status=START) needs a passing launch grade
+// on that campaign, and draftOnly makes sure it is still a draft.
+// Live, the verifier runs with a scrubbed environment and the passwd HOME, so a
+// caller's env can't point it at another key, receipt directory or fixture;
+// fixture mode (never reaches Clay) passes the test environment through.
+const GRADE_TIMEOUT_MS = 30000;
+function gradeGate(op, request, args) {
+  let ws, cid, action, audience;
+  if (op.name === "add-leads") {
+    const argv = request.argv || [];
+    if (argv[1] !== "audiences" || argv[2] !== "update" || !argv[3]) return "cannot read the audience from this request";
+    audience = argv[3];
+    cid = args.campaign;
+    // add-leads takes no ws=, so its grade is looked up in the workspace every
+    // other op resolves: $CLAY_WORKSPACE_ID, else the one workspace the GTM
+    // config names. Until 2026-10-13 this fell back to one client's workspace,
+    // so a second client's add-leads was checked against the first's grades.
+    const resolved = resolveWorkspace();
+    if (resolved.error) return resolved.error;
+    ws = resolved.ws;
+    if (!cid) return "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked";
+    action = "add-leads";
+  } else if (isStart(op, args)) {
+    ws = args.ws;
+    cid = args.campaign;
+    if (!ws || !cid) return "a START names ws= and campaign= so its grade can be checked";
+    action = "launch";
+  } else {
+    return null;
+  }
+  const grader = path.join(ROOT, "tools", "gtme_grade.py");
+  const env = FIXTURES ? { ...process.env } : { PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", HOME: os.userInfo().homedir };
+  const argv = ["-I", grader, "--verify", "--ws", String(ws), "--campaign", String(cid), "--action", action];
+  if (audience) argv.push("--audience", String(audience));
+  let r;
+  try {
+    r = spawnSync("python3", argv, { env, encoding: "utf8", timeout: GRADE_TIMEOUT_MS });
+  } catch (e) {
+    return `gtme-grade --verify could not run: ${e.message}`;
+  }
+  if (r.error) return `gtme-grade --verify could not run: ${r.error.message}`;
+  if (r.status !== 0) return (r.stderr || "").trim() || `gtme-grade --verify exited ${r.status}`;
+  return null;
+}
+
+// Caleb's approval in chat counts the same as a person at a terminal. The
+// clay-chat-approval.sh UserPromptSubmit hook writes this record only from a
+// prompt he typed (the harness hands the hook his prompt; no tool result can),
+// and launch-guard refuses any tool call that names the file. Before this, the
+// gate read /dev/tty only, so every Clay write came back to him as a command to
+// run, and on 2026-10-10 he said "fuck the guard fix chewbs do it urself".
+// Two hours covers one sitting's build; guessed, never measured. Any tab can use
+// a fresh approval from any of Caleb's tabs (his standing ok covers all GTM
+// work), which is why the window is short (security review of 42d642db: 12
+// hours across every tab). Records are per session and v2: on 2026-10-10 the
+// v1 single global record was written from a `claude --bg` session's own
+// prompt, so an agent that started a session approved its own writes. v2 is
+// written only for a prompt chat-approval.sh judged typed by a person. The
+// caller's own session's record wins; otherwise the freshest.
+const CHAT_APPROVAL_MS = 2 * 3600 * 1000;
+// The three Zeutara campaigns the 2026-10-16 recovery covers. A recovery op
+// aimed anywhere else is never approved from chat, by either runtime.
+const RECOVERY_WS = "1372623";
+const RECOVERY_CAMPAIGNS = ["cam_0tmpnciWKD2QKjY3QAT", "cam_0tmpndgzjN7hMBX8m8v", "cam_0tmrvre4dsi7pjvsfcy"];
+function inRecoveryScope(args) {
+  return String(args.ws) === RECOVERY_WS && RECOVERY_CAMPAIGNS.includes(args.campaign);
+}
+function chatApproval(name, request, args = {}) {
+  const nativeRecovery = ["campaign-restrict", "campaign-sender-isolate", "campaign-recovery-resume"].includes(name);
+  const dir = FIXTURES
+    ? process.env.CHEWBACCA_CLAY_CHAT_APPROVAL_DIR
+    : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-chat-approval");
+  if (!dir) return null;
+  let names;
+  try { names = fs.readdirSync(dir); } catch { names = []; }
+  if (names.includes("STOPPED")) return null;
+  const own = process.env.CLAUDE_CODE_SESSION_ID || "";
+  let best = null;
+  for (const n of names) {
+    if (!/^[A-Za-z0-9_.-]+\.json$/.test(n)) continue;
+    const sid = n.slice(0, -5);
+    let rec;
+    try { rec = JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch { continue; }
+    if (!rec || rec.v !== 2 || rec.interactive !== true || rec.session_id !== sid) continue;
+    const age = Date.now() - Number(rec.at) * 1000;
+    if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
+    // Recovery ops take Claude's attendance only from the caller's own tab,
+    // never the freshest record from another tab, and only inside the scope.
+    // On 2026-10-16 Caleb typed the relaunch instruction into the Claude tab
+    // that ran the repair; the Codex-only branch refused it as unauthenticated.
+    if (nativeRecovery) {
+      if (own && sid === own && inRecoveryScope(args)) return rec;
+      continue;
+    }
+    if (sid === own) return rec;
+    if (!best || Number(rec.at) > Number(best.at)) best = rec;
+  }
+  if (best) return best;
+  // Native Codex consent has different provenance from Claude attendance.
+  // Read the real composer turn, never manufacture a legacy approval file.
+  const nativeLaunch = name === "campaign-status" && request.body?.status === "active";
+  if (!FIXTURES && (nativeLaunch || nativeRecovery)) {
+    const nativeEnv = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: os.userInfo().homedir,
+      CODEX_THREAD_ID: process.env.CODEX_THREAD_ID || "", CODEX_SESSION_ID: process.env.CODEX_SESSION_ID || "" };
+    const native = spawnSync("/usr/bin/python3", ["-I", path.join(ROOT, "tools/codex_launch_consent.py")],
+      { env: nativeEnv, encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
+    if (native.status === 0) {
+      try {
+        const rec = JSON.parse(native.stdout);
+        if (rec?.v !== (nativeRecovery ? 4 : 3) || rec?.interactive !== true || rec?.source !== "native Desktop composer") return null;
+        const session = nativeEnv.CODEX_THREAD_ID || nativeEnv.CODEX_SESSION_ID;
+        if (!session || rec.session_id !== session) return null;
+        const age = Date.now() - Number(rec.at) * 1000;
+        if (!(age >= 0 && age < CHAT_APPROVAL_MS)) return null;
+        if (nativeRecovery) {
+          const campaigns = RECOVERY_CAMPAIGNS;
+          const scope = rec.recovery_scope;
+          if (!inRecoveryScope(args) ||
+              scope?.workspaceId !== "1372623" ||
+              !Array.isArray(scope.campaignIds) || scope.campaignIds.length !== 3 ||
+              !campaigns.every(id => scope.campaignIds.includes(id)) ||
+              !Array.isArray(scope.operations) || !scope.operations.includes(name)) return null;
+        }
+        return rec;
+      } catch { return null; }
+    }
+  }
+  return null;
+}
+
+function noteChatApproval(name, rec) {
+  const said = String(rec.excerpt || "").replace(/\s+/g, " ").slice(0, 60);
+  process.stderr.write(`chewbacca clay: ${name} approved in chat by Caleb, session ${rec.session_id}, ${new Date(rec.at * 1000).toISOString()}: "${said}"\n`);
+}
+
+// campaign-update and campaign-sequence touch only DRAFT campaigns. On a live
+// one, a new base segment emails whoever is in it and a sequence edit changes
+// mail already queued; those go through add-leads and its grade instead.
+function isStart(op, args) {
+  return op.name === "campaign-status" && String(args.status ?? "").trim().toUpperCase() === "START";
+}
+
+// A START goes only to a draft too: on a draft it is a launch, the one action
+// its grade covers; on a paused or stopped campaign Clay would resume it.
+function draftOnly(op, args) {
+  if (!["campaign-update", "campaign-sequence", "campaign-variant-test"].includes(op.name) && !isStart(op, args)) return null;
+  let status;
+  if (FIXTURES) {
+    status = process.env.CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS || "draft";
+  } else {
+    const exe = cliExe();
+    if (!exe) return "the clay CLI is not installed, so the campaign's status can't be read";
+    const pin = pinCli(args.ws);
+    if (pin.error) return pin.error;
+    let r;
+    try {
+      r = spawnSync(exe, ["campaigns", "get", String(args.campaign)], { env: pin.env, encoding: "utf8", timeout: 60000 });
+    } finally {
+      pin.done();
+    }
+    try {
+      const got = JSON.parse(r.stdout);
+      if (answeredElsewhere(got, args.ws)) return "the campaign's status came back from another workspace";
+      status = got.status;
+    } catch {
+      return "could not read the campaign's status";
+    }
+  }
+  if (status === "draft") return null;
+  return isStart(op, args)
+    ? `${args.campaign} is ${status}; only a draft is started from here, so a START is always a launch and never a resume`
+    : `${args.campaign} is ${status}; only a draft campaign can be edited here`;
+}
+
+const SELF_APPROVED = new Set(["reply"]);
+
+function unfinishedReply(args) {
+  let data = args.reply_data;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch { return "reply_data is not JSON"; }
+  }
+  const body = String((data && data.email_body) || "");
+  if (!body.trim()) return "the reply body is empty";
+  if (/\[NEED|\{\{|\[INSERT|\[TODO/i.test(body)) return "the reply still has a placeholder in it";
+  if (/[\u2013\u2014]/.test(body)) return "the reply has a long dash in it";
+  return null;
+}
+
+// ── standing allowance ───────────────────────────────────────────────────────
+// A daily credit allowance per workspace, set once by Caleb, stands in for the
+// per-write ok on table work in that workspace. On 2026-10-16 he approved the
+// same Sabo enrichment run (live_chain.py, about 1.1 credits a brand) three
+// times in one hour because each ok lapsed after 2 hours, and wrote "Fix chewbs
+// you shouldn't be asking for permission". Credits are real spend, so the ok is
+// a number checked here against observed spend instead of a prompt.
+//
+// It covers row, column and run-cells writes only. Campaign ops, replies,
+// deletes, imports and blocklist edits keep their own gates, and a START or
+// add-leads still needs its grade and pre-send receipt. table-auto-run is left
+// out: once on, a table spends with no further call here to check.
+//
+// Spend is the drop in the workspace's credit balance between checks, so a
+// top-up never counts as negative spend. A run's credits land after its call,
+// so one run-cells (five rows at most) can finish past the cap; the next write
+// is refused.
+const ALLOWANCE_GATES = new Set(["write:table-data", "write:schema", "write:spends-credits"]);
+// workflow-test-run runs any workflow it is pointed at, so an allowance never
+// covers it; verify-emails takes the allowance only for the workspace's own
+// verify workflow (VERIFY_WORKFLOWS), never a workflow= by name.
+const ALLOWANCE_NEVER = new Set(["table-auto-run", "workflow-test-run"]);
+const ALLOWANCE_FILE = FIXTURES
+  ? process.env.CHEWBACCA_CLAY_ALLOWANCES || ""
+  : path.join(os.userInfo().homedir, ".chewbacca", "clay-allowances.json");
+const ALLOWANCE_SPEND = FIXTURES
+  ? process.env.CHEWBACCA_CLAY_ALLOWANCE_SPEND || ""
+  : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-allowance-spend.json");
+
+function approvalDir() {
+  return FIXTURES ? process.env.CHEWBACCA_CLAY_CHAT_APPROVAL_DIR || "" : path.join(os.userInfo().homedir, ".chewbacca", "state", "clay-chat-approval");
+}
+
+function stoppedByCaleb() {
+  const d = approvalDir();
+  return !!d && fs.existsSync(path.join(d, "STOPPED"));
+}
+
+function readAllowances() {
+  const cfg = ALLOWANCE_FILE ? readJson(ALLOWANCE_FILE, null) : null;
+  return cfg && cfg.v === 1 && cfg.workspaces && typeof cfg.workspaces === "object" ? cfg : { v: 1, workspaces: {} };
+}
+
+function allowanceFor(ws) {
+  const a = readAllowances().workspaces[String(ws)];
+  const daily = Number(a?.daily_credits);
+  // An allowance with until= lapses after that local day.
+  if (a?.until && localDay() > String(a.until)) return null;
+  return a && Number.isFinite(daily) && daily > 0 ? { ...a, daily_credits: daily } : null;
+}
+
+function writeJsonAtomic(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(obj, null, 1)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+function localDay(t = new Date()) {
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+// The balance through api-anything only: the clay CLI and clay-balance answer
+// for whichever workspace they are signed in to, not the one asked for.
+function creditBalance(ws) {
+  const argv = [__filename, ...(SESSION_NAME ? ["--session", SESSION_NAME] : []), "--surface", "api-anything", "credits", `ws=${ws}`];
+  const r = spawnSync(process.execPath, argv, { encoding: "utf8", timeout: 60000, env: process.env });
+  const bal = Number(parseOr(r.stdout, null)?.data?.balance);
+  return r.status === 0 && Number.isFinite(bal) ? bal : null;
+}
+
+// null: the allowance doesn't cover this write, so the usual ok applies.
+// { ok: true, note } or { ok: false, reason } otherwise.
+function allowanceCheck(op, args) {
+  if (ALLOWANCE_NEVER.has(op.name) || !ALLOWANCE_GATES.has(op.gate) || args.ws === undefined) return null;
+  const ws = String(args.ws);
+  const a = allowanceFor(ws);
+  if (!a) return null;
+  const who = a.client ? `${a.client} (ws ${ws})` : `ws ${ws}`;
+  if (stoppedByCaleb()) return { ok: false, reason: `BLOCKED: Caleb said stop, which holds the ${who} allowance too until he says go` };
+  const bal = creditBalance(ws);
+  if (bal === null) {
+    process.stderr.write(`chewbacca clay: the ${who} credit balance could not be read, so the allowance can't be checked; asking for the usual ok\n`);
+    return null;
+  }
+  const all = (ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {};
+  const day = localDay();
+  let rec = all[ws];
+  if (!rec || rec.day !== day) rec = { day, spent: 0, last: Number.isFinite(Number(rec?.last)) ? Number(rec.last) : bal };
+  rec.spent = Math.round((Number(rec.spent) + Math.max(0, Number(rec.last) - bal)) * 100) / 100;
+  rec.last = bal;
+  all[ws] = rec;
+  try { writeJsonAtomic(ALLOWANCE_SPEND, all); } catch (e) {
+    return { ok: false, reason: `BLOCKED: the ${who} spend record could not be written (${e.message}), so spend can't be tracked` };
+  }
+  if (rec.spent >= a.daily_credits) {
+    return { ok: false, reason: `BLOCKED: ${who} has spent ${rec.spent} of its ${a.daily_credits}-credit daily allowance today; nothing was sent. It resets tomorrow, or Caleb raises it: chewbacca clay allowance-set ws=${ws} daily=<credits>` };
+  }
+  return { ok: true, note: `chewbacca clay: ${op.name} inside the ${who} allowance, ${rec.spent} of ${a.daily_credits} credits spent today, balance ${bal}\n` };
+}
+
+// Setting or raising an allowance is the one place it needs Caleb: him typing
+// allowance-set at a terminal, or a fresh prompt of his in chat that names the
+// number and says credits (or budget, allowance, cap). A bare recent prompt is
+// not enough, or any "yo" would let an agent raise its own cap.
+// A time-boxed allowance can also come from a message that names the client
+// and says to spend what it takes, with no number. Caleb, 2026-10-16, asked
+// twice for a Sabo cap: "Just use however much you need for tuesday to impress
+// sabo", then "Do wtv it take to impress sabo on tuesdeay, we can talk abt a
+// limit after that". It needs until= no more than 7 days out, so an open
+// allowance always lapses on its own.
+const OPEN_SPEND = /what ?ever (it )?takes?|wtv (it )?takes?|however much|no limit|whatever (you|u) need/i;
+const OPEN_MAX_DAYS = 7;
+
+function allowanceApproved(daily, open) {
+  if (stoppedByCaleb()) return null;
+  const num = String(daily);
+  const names = new RegExp(`(^|[^0-9.])${num.replace(".", "\\.")}([^0-9]|$)`);
+  const d = approvalDir();
+  let files;
+  try { files = fs.readdirSync(d); } catch { files = []; }
+  for (const n of files) {
+    if (!/^[A-Za-z0-9_.-]+\.json$/.test(n)) continue;
+    const rec = readJson(path.join(d, n), null);
+    if (!rec || rec.v !== 2 || rec.interactive !== true || rec.session_id !== n.slice(0, -5)) continue;
+    const age = Date.now() - Number(rec.at) * 1000;
+    if (!(age >= 0 && age < CHAT_APPROVAL_MS)) continue;
+    const said = String(rec.excerpt || "");
+    if (names.test(said) && /credit|budget|allowance|\bcap\b/i.test(said)) return `chat ${rec.session_id}: ${said.replace(/\s+/g, " ").slice(0, 80)}`;
+    if (open && open.test(said) && OPEN_SPEND.test(said)) return `chat ${rec.session_id}: ${said.replace(/\s+/g, " ").slice(0, 80)}`;
+  }
+  if (FIXTURES) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === "allowance-set" ? "terminal" : null;
   let fd;
   try { fd = fs.openSync("/dev/tty", "r+"); } catch { return null; }
+  try {
+    fs.writeSync(fd, `\nchewbacca clay: set a standing allowance of ${num} credits a day? Type allowance-set to confirm: `);
+    const buf = Buffer.alloc(64);
+    const got = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, null)).trim();
+    return got === "allowance-set" ? "terminal" : null;
+  } catch { return null; } finally { fs.closeSync(fd); }
+}
+
+function allowanceCommand(cmd, kv) {
+  const cfg = readAllowances();
+  const spend = (ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {};
+  const today = localDay();
+  const view = () => Object.fromEntries(Object.entries(cfg.workspaces).map(([ws, a]) => [ws,
+    { ...a, spent_today: spend[ws]?.day === today ? spend[ws].spent : 0 }]));
+  if (cmd === "allowance") out({ ok: true, file: ALLOWANCE_FILE, covers: "rows, columns and run-cells in the workspace; never campaigns, replies, deletes or auto-run", allowances: view() }, EXIT.ok);
+  const ws = String(kv.ws ?? "");
+  if (!/^[0-9]{1,12}$/.test(ws)) out({ ok: false, class: "usage", reason: `${cmd} needs ws=<workspace id>` }, EXIT.usage);
+  if (!ALLOWANCE_FILE) out({ ok: false, class: "usage", reason: "no allowance file in fixture mode" }, EXIT.usage);
+  if (cmd === "allowance-clear") {
+    delete cfg.workspaces[ws];
+    writeJsonAtomic(ALLOWANCE_FILE, cfg);
+    out({ ok: true, cleared: ws, allowances: view() }, EXIT.ok);
+  }
+  const daily = Number(kv.daily);
+  if (!(Number.isFinite(daily) && daily > 0 && daily <= 100000)) out({ ok: false, class: "usage", reason: "allowance-set needs daily=<credits a day>, a positive number" }, EXIT.usage);
+  const client = kv.client === undefined ? cfg.workspaces[ws]?.client : String(kv.client).slice(0, 60);
+  const until = kv.until === undefined ? undefined : String(kv.until);
+  if (until !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(until)) out({ ok: false, class: "usage", reason: "until= is a date like 2026-10-20" }, EXIT.usage);
+  const daysOut = until ? (Date.parse(`${until}T00:00:00`) - Date.parse(`${localDay()}T00:00:00`)) / 86400000 : Infinity;
+  if (until && daysOut < 0) out({ ok: false, class: "usage", reason: `until=${until} is already past` }, EXIT.usage);
+  // The client's own name, as a word, opens the no-number path.
+  const open = client && until && daysOut <= OPEN_MAX_DAYS ? new RegExp(`\\b${client.replace(/[^A-Za-z0-9 ]/g, "")}\\b`, "i") : null;
+  const by = allowanceApproved(daily, open);
+  if (!by) out({ ok: false, class: "refused", reason: `BLOCKED: an allowance needs Caleb: allowance-set typed at a terminal, or his own chat message in the last 2 hours naming ${daily} credits (or naming ${client || "the client"} and saying to spend what it takes, with until= at most ${OPEN_MAX_DAYS} days out)` }, EXIT.refused);
+  cfg.workspaces[ws] = { ...(client ? { client } : {}), daily_credits: daily, ...(until ? { until } : {}), set_at: new Date().toISOString(), set_by: by };
+  writeJsonAtomic(ALLOWANCE_FILE, cfg);
+  out({ ok: true, set: ws, allowances: view() }, EXIT.ok);
+}
+
+function personApproves(name, request, args = {}) {
+  const prompt = approvalPrompt(name, request);
+  if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
+  if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_ANSWER !== undefined) return process.env.CHEWBACCA_CLAY_TTY_ANSWER === name;
+  if (FIXTURES) {
+    const rec = chatApproval(name, request, args);
+    if (rec) noteChatApproval(name, rec);
+    return rec ? true : false;
+  }
+  let fd;
+  try { fd = fs.openSync("/dev/tty", "r+"); } catch {
+    const rec = chatApproval(name, request, args);
+    if (rec) noteChatApproval(name, rec);
+    return rec ? true : null;
+  }
   try {
     fs.writeSync(fd, prompt);
     const buf = Buffer.alloc(256);
@@ -366,6 +1720,54 @@ function personApproves(name, args) {
   } finally {
     fs.closeSync(fd);
   }
+}
+
+async function recoveryRead(name, values) {
+    const op = opByName.get(name);
+    if (!op || isWrite(op)) throw new Error(`Restriction snapshot needs a registered read: ${name}`);
+    const normalized = normalizeArgs(withDefaults(op, values));
+    if (normalized.error) throw new Error(normalized.error);
+    const bad = badArg(normalized.values, op);
+    if (bad) throw new Error(bad);
+    let candidates = plan(op, normalized.values, null);
+    if (name === "campaign") candidates = candidates.filter((candidate) => candidate.s.type === "api-anything" && candidate.s.op === "getCampaign");
+    // Snapshot reads have one documented surface. Do not downgrade to a
+    // fallback that strips the cursor envelope needed to prove completeness.
+    if (candidates.length !== 1) throw new Error(`Restriction read ${name} must have one pinned surface`);
+    const result = await attempt(op, candidates[0], {});
+    if (!result.ok || result.truncated) throw new Error(`Restriction read ${name} failed or was truncated`);
+    return result.data;
+}
+
+async function restrictionSnapshot(args) {
+  return require("./lib/clay-restriction-snapshot").collectRestrictionSnapshot(recoveryRead, args);
+}
+
+// rows after=<id>, in the view's own order. Clay's afterrecordid does not follow
+// the view: on the 404-row Sabo table (2026-10-16) after the 10th row it gave 3
+// rows and stopped, and after the 100th it started over at the 2nd. The app
+// itself pages by reading the view's ids and fetching rows by id, so this does too.
+async function rowsAfter(values) {
+  const readOne = async (opName, args) => {
+    const op = opByName.get(opName);
+    const cand = plan(op, args, "api-anything")[0];
+    if (!cand) return { ok: false, class: "input", reason: `${opName} has no surface for these args` };
+    return attempt(op, cand, {});
+  };
+  const ids = await readOne("row-ids", { ws: values.ws, table: values.table, view: values.view });
+  if (!ids.ok) return [{ ok: false, op: "rows", class: ids.class, reason: ids.reason }, EXIT.failed];
+  const at = ids.data.indexOf(values.after);
+  if (at < 0) return [{ ok: false, op: "rows", class: "input", reason: `${values.after} is not in view ${values.view}` }, EXIT.usage];
+  const limit = Math.min(100, Number(values.limit ?? 25));
+  // Ids come back from Clay, so they get the same shape check a typed id does.
+  const page = ids.data.slice(at + 1, at + 1 + limit).filter((id) => typeof id === "string" && ID.test(id));
+  const meta = { op: "rows", surface: "api-anything", call: "clay.getViewRecordIds+clay.bulkFetchRecords", remaining: Math.max(0, ids.data.length - at - 1 - page.length) };
+  if (!page.length) return [{ ok: true, ...meta, data: [] }, EXIT.ok];
+  const rows = await readOne("rows-by-id", { ws: values.ws, table: values.table, rows: page });
+  if (!rows.ok) return [{ ok: false, op: "rows", class: rows.class, reason: rows.reason }, EXIT.failed];
+  const byId = new Map(rows.data.map((r) => [r.id, r]));
+  const data = page.map((id) => byId.get(id)).filter(Boolean);
+  return [{ ok: true, ...meta, ...(rows.whole ? { whole: rows.whole } : {}), data: values.fields ? narrowCells(data, values.fields) : data }, EXIT.ok];
 }
 
 async function runOp(name, kv, flags) {
@@ -384,42 +1786,455 @@ async function runOp(name, kv, flags) {
   }
   const args = withDefaults(op, kv);
   const known = new Set(op.args.map((a) => a.replace("?", "")));
+  if (takesWs(op)) known.add("ws");
   const stray = Object.keys(kv).filter((k) => !known.has(k));
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
   }
-  const bad = badArg(args);
+  // An arg the registry lists without "?" is required, and is refused here,
+  // before --dry-run or the approval prompt. add-leads listed campaign as
+  // optional until 2026-10-10, so a dry run without it looked sendable and
+  // only the grade gate, after the person approved, said it was missing.
+  const missing = op.args.filter((a) => !a.endsWith("?") && args[a] === undefined);
+  if (missing.length) {
+    const why = missing.map((k) => (op.required_why || {})[k]).filter(Boolean).join("; ");
+    out({ ok: false, op: name, class: "input", reason: `${name} needs ${missing.map((k) => `${k}=`).join(", ")}${why ? `: ${why}` : ""}; ${name} takes ${op.args.join(", ")}` }, EXIT.usage);
+  }
+  const norm = normalizeArgs(args);
+  if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
+  const bad = badArg(norm.values, op);
   if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
+  // A campaign START is sent from here, by the agent, never handed to a person
+  // as a click (Caleb, 2026-10-12: "Never tell anyone to press anything in clay
+  // themselves"). The 2026-10-10 review's objection was that Clay decides
+  // launch vs resume at send time, so no grade could be bound to it. That is
+  // closed by only ever starting a DRAFT: after approval and right before the
+  // send, draftOnly reads the campaign and refuses anything else, so a START
+  // here is always a launch, and gradeGate checks a passing launch grade plus
+  // the pre-send gate on that same campaign. A paused campaign is never resumed
+  // from here.
+  // A value this kit never sends is refused before anything else.
+  for (const [k, banned] of Object.entries(op.refuse_values || {})) {
+    if (args[k] !== undefined && banned[String(args[k])]) {
+      out({ ok: false, op: name, class: "refused", gate: op.gate, reason: banned[String(args[k])] }, EXIT.refused);
+    }
+  }
+  const sendArgs = compose(op, norm.values);
+  let restriction;
+  let senderIsolation;
+  let recoveryResume;
+  if (name === "campaign-recovery-resume") {
+    try {
+      const policy = require("./lib/clay-campaign-recovery-resume");
+      const snapshot = await policy.collectResumeSnapshot(recoveryRead, sendArgs);
+      recoveryResume = { snapshot, plan: policy.planResume(snapshot, sendArgs) };
+      sendArgs.status = recoveryResume.plan.input.status;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
+  if (name === "campaign-sender-isolate") {
+    try {
+      const snapshot = await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign });
+      const policy = require("./lib/clay-campaign-sender-isolation");
+      senderIsolation = { snapshot, plan: policy.planSenderIsolation(snapshot, sendArgs) };
+      sendArgs.input = senderIsolation.plan.input;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
+  if (name === "campaign-restrict") {
+    try {
+      const snapshot = await restrictionSnapshot(sendArgs);
+      const policy = require("./lib/clay-campaign-restriction");
+      restriction = { snapshot, plan: policy.planRestriction(snapshot, sendArgs.holds) };
+      sendArgs.filter = restriction.plan.filter;
+    } catch (error) {
+      out({ ok: false, op: name, class: "refused", reason: error.message, sent: false }, EXIT.refused);
+    }
+  }
+  const validated = validatedSet(sendArgs);
+  const cands = plan(op, sendArgs, flags.surface);
+  if (!cands.length) {
+    const cliWhy = usesCli(op) && !flags.surface?.startsWith("api") ? (WS_UNRESOLVED ? `; the CLI needs a workspace: ${WS_UNRESOLVED}` : args.ws !== undefined && !cliSignedIn(args.ws) ? `; the clay CLI is not signed in to workspace ${args.ws}` : "") : "";
+    out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}${cliWhy}`, ui: uiRoute(op, args) }, EXIT.usage);
+  }
+  // --dry-run: the exact request the first surface would send. Nothing is sent.
+  // campaign-restrict first reads a complete snapshot to derive its protective
+  // payload; other operations do not load an engine or session for a preview.
+  // The request is built once and frozen here. --dry-run prints it, the person
+  // approves it, and the surface is handed it: nothing transforms it after.
+  let request;
+  try {
+    request = deepFreeze(dryRequest(cands[0].s, cands[0].bound, validated, sendArgs));
+  } catch (e) {
+    out({ ok: false, op: name, class: "input", reason: e.message }, EXIT.usage);
+  }
+  if (isWrite(op) && showable({ op: name, request }).length > SHOW_MAX) {
+    out({ ok: false, op: name, class: "input", reason: `this request is over ${SHOW_MAX} characters, too long to read at a terminal before approving; split it into smaller writes` }, EXIT.usage);
+  }
+  if (flags.dryRun) {
+    out({ ok: true, op: name, dry_run: true, sent: false, kind: isWrite(op) ? "write" : "read", gate: op.gate, surface: cands[0].s.type,
+      call: surfaceKey(op, cands[0].s), request, ...(restriction ? { protection: restriction.plan } : {}), ...(senderIsolation ? { protection: senderIsolation.plan } : {}), ...(recoveryResume ? { protection: recoveryResume.plan } : {}), ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
+  }
   if (isWrite(op)) {
-    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args } }, EXIT.refused);
+    // One verdict row per write (tools/verdicts.py): the op, never its payload.
+    // A reason that names a refusal from the body (unfinishedReply) could quote
+    // it; verdicts.js's scrub drops any reason holding an arg's value.
+    const argValues = Object.values(args || {}).filter((v) => typeof v === "string");
+    const verdict = (decision, reason) => {
+      try {
+        verdictLog.record("send", `clay ${name}`, decision, 0, verdictLog.scrub ? verdictLog.scrub(reason, argValues) : "", `clay ${name}`);
+      } catch {
+        /* a missing row, never a failed write */
+      }
+    };
+    const refuse = (reason) => {
+      verdict(process.env.CHEWBACCA_NO_SEND === "1" ? "held" : "refuse", reason);
+      return out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, request }, EXIT.refused);
+    };
     if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
     if (!flags.allowWrites) refuse("a write needs --allow-writes");
-    const yes = personApproves(name, args);
-    if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
+    // Checked before prepareWrite so its own balance read can't touch the
+    // session files the approval fingerprint covers.
+    const allowance = allowanceCheck(op, args);
+    if (allowance && !allowance.ok) refuse(allowance.reason);
+    const s = cands[0].s;
+    const prep = await prepareWrite(op, s, request);
+    if (prep.error) refuse(prep.error);
+    if (restriction) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-restriction.js"), path.join(ROOT, "bin/lib/clay-restriction-snapshot.js")];
+    if (senderIsolation) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-sender-isolation.js")];
+    if (recoveryResume) prep.files = [...(prep.files || []), path.join(ROOT, "bin/lib/clay-campaign-recovery-resume.js")];
+    const before = fingerprint(prep);
+    // Everything but the session file, for the resume recheck below.
+    const sessionFiles = new Set((prep.files || []).filter((f) => !f.startsWith(ROOT + path.sep)));
+    const stableFingerprint = (p) => fingerprint({ ...p, files: (p.files || []).filter((f) => !sessionFiles.has(f)) });
+    const beforeStable = stableFingerprint(prep);
+    const shownHash = sha256(showable({ op: name, request }));
+    // A reply answers a person who wrote first, in their own thread, from the
+    // inbox they wrote to. Caleb, 2026-10-11, after 16 investors sat a weekend
+    // unanswered behind this prompt: "clay replies NEVER need human
+    // confirmation." The body still has to be finished: a placeholder, a
+    // template token or a long dash in it is refused before anything is sent.
+    const selfApproved = SELF_APPROVED.has(name);
+    if (selfApproved) {
+      const unfinished = unfinishedReply(args);
+      if (unfinished) refuse(`${unfinished}; nothing was sent`);
+    }
+    if (allowance) process.stderr.write(allowance.note);
+    const yes = selfApproved || allowance ? true : personApproves(name, request, sendArgs);
+    if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
     if (!yes) refuse("the person at the terminal did not approve this payload");
+    afterApprovalTestHook();
+    // Nothing the request depends on may have changed while the person read it.
+    if (fingerprint(prep) !== before) refuse("the registry, spec, environment, engine, session or executable changed after approval; nothing was sent");
+    if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+    const live = draftOnly(op, args);
+    if (live) refuse(`${live}; nothing was sent`);
+    const ungraded = gradeGate(op, request, args);
+    if (ungraded) refuse(`no passing grade for this campaign: ${ungraded}. Run gtme-grade on it first; nothing was sent`);
+    if (restriction) {
+      try {
+        require("./lib/clay-campaign-restriction").verifyBeforeWrite(await restrictionSnapshot(sendArgs), restriction.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      if (fingerprint(prep) !== before) refuse("Write dependencies changed during the protective recheck; nothing was sent");
+    }
+    if (senderIsolation) {
+      try {
+        require("./lib/clay-campaign-sender-isolation").verifySenderIsolationBeforeWrite(
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }), senderIsolation.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      if (fingerprint(prep) !== before) refuse("Write dependencies changed during sender isolation recheck; nothing was sent");
+    }
+    let sender = prep;
+    if (recoveryResume) {
+      try {
+        const policy = require("./lib/clay-campaign-recovery-resume");
+        policy.verifyResumeBeforeWrite(await policy.collectResumeSnapshot(recoveryRead, sendArgs), recoveryResume.plan);
+      } catch (error) { refuse(`${error.message}; nothing was sent`); }
+      // The recheck reads go through the same Clay session, which refreshes
+      // its cookie file (2026-10-16: the first resume refused on exactly that).
+      // Reload the session and require everything else to be unchanged.
+      const fresh = await prepareWrite(op, s, request);
+      if (fresh.error) refuse(fresh.error);
+      fresh.files = [...(fresh.files || []), path.join(ROOT, "bin/lib/clay-campaign-recovery-resume.js")];
+      if (stableFingerprint(fresh) !== beforeStable) refuse("Write dependencies other than the session changed during the resume recheck; nothing was sent");
+      sender = fresh;
+    }
+    const t0 = Date.now();
+    const r = await sender.send();
+    const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
+    verdict(r.ok ? "sent" : "failed", r.ok ? "" : `${r.class}: ${r.reason}`);
+    if (!r.ok) {
+      // HTTP status alone hid Clay's launch refusal on 2026-10-14. Keep the
+      // response private and report only its scalar error fields.
+      const providerError = {};
+      for (const key of ["code", "message", "error", "errorCode"]) {
+        if (typeof r.data?.[key] === "string") providerError[key] = r.data[key].slice(0, 500);
+      }
+      out({ ok: false, op: name, class: r.class, reason: r.reason, providerError, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    }
+    if (restriction) {
+      try {
+        const proof = require("./lib/clay-campaign-restriction").verifyRestriction(restriction.snapshot, restriction.plan, await restrictionSnapshot(sendArgs));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Restriction write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
+    }
+    if (recoveryResume) {
+      try {
+        const proof = require("./lib/clay-campaign-recovery-resume").verifyResume(
+          recoveryResume.snapshot, recoveryResume.plan,
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, reason: `Resume write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
+    }
+    if (senderIsolation) {
+      try {
+        const proof = require("./lib/clay-campaign-sender-isolation").verifySenderIsolation(
+          senderIsolation.snapshot, senderIsolation.plan,
+          await recoveryRead("campaign", { ws: sendArgs.ws, campaign: sendArgs.campaign }));
+        out({ ok: proof.verified, op: name, sent: true, protection: proof, readyToResume: false, tried }, proof.verified ? EXIT.ok : EXIT.failed);
+      } catch (error) {
+        out({ ok: false, op: name, sent: true, readyToResume: false, reason: `Sender isolation write attempted; readback is unverified: ${error.message}`, tried }, EXIT.failed);
+      }
+    }
+    // A write never read back after a real call reads back now, every time,
+    // until a person sets verified:true in registry.json.
+    const rb = op.verified === false ? await readback(op, sendArgs) : null;
+    out({ ok: true, op: name, surface: s.type, call: surfaceKey(op, s), ms: tried[0].ms, sha256: shownHash, ...(rb ? { verified: false, readback: rb } : {}), tried, data: r.data }, EXIT.ok);
   }
-  const cands = plan(op, args, flags.surface);
-  if (!cands.length) {
-    out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
+  if (name === "rows" && norm.values.after !== undefined && norm.values.view !== undefined) {
+    out(...(await rowsAfter(norm.values)));
   }
   const tried = [];
   let last;
   for (const cand of cands) {
     const r = await attempt(op, cand, flags);
     last = r;
-    tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
-    // A write is sent once, through one surface: never fall through to another.
-    if (isWrite(op)) break;
+    tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}), ...(r.whole ? { whole: r.whole } : {}) });
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
   }
+  // A truncated prefix cannot establish current conversation state.
+  if (last.ok && last.truncated) {
+    out({ ok: false, op: name, class: "incomplete", reason: `every available surface returned incomplete data: ${last.truncated}`, truncated: last.truncated, tried, ui: uiRoute(op, args) }, EXIT.failed);
+  }
   const best = last.ok ? last : null;
   if (best) {
-    const { ok, surface, call, tier, ms, engine_ms, data, truncated, healed, cursor } = best;
+    const { ok, surface, call, tier, ms, engine_ms, truncated, healed, cursor } = best;
+    const data = op.narrow === "cells" && norm.values.fields ? narrowCells(best.data, norm.values.fields) : best.data;
     out({ ok, op: name, surface, call, ...(tier ? { tier } : {}), ms, ...(engine_ms !== undefined ? { engine_ms } : {}), ...(truncated ? { truncated } : {}), ...(healed ? { healed } : {}), ...(cursor ? { cursor } : {}), tried, data }, EXIT.ok);
   }
   out({ ok: false, op: name, class: last.class, reason: last.reason, ...(last.next ? { next: last.next } : {}), tried, ui: uiRoute(op, args) }, EXIT.failed);
+}
+
+// ── verify-emails: one workflow test run per address ────────────────────────
+// Replaces zeutara-gtme scripts/zb_verify.py, which called the clay CLI from a
+// loop no guard could price or gate (2026-10-16: launch-guard and
+// clay-native-guard each refused it, so Monday's 141 addresses sat unverified).
+// Every run is a frozen workflow-test-run request built before approval, the
+// batch is priced with workflow-cost, and the ok covers the whole list shown.
+const VERIFY_WORKFLOWS = { 1372623: "wf_0tmevkaRdsp2XHUwD8X" };
+// zb_verify.py polled 40 times 3s apart and its 2026-10-10 runs finished inside
+// that; never measured closer.
+const VERIFY_POLL_MS = Number(testEnv("CHEWBACCA_CLAY_POLL_MS")) || 3000;
+const VERIFY_POLL_TRIES = 40;
+// Guessed, never measured: zb_verify ran 8 CLI processes, but here every run
+// shares one Clay session file, so fewer at once.
+const VERIFY_WORKERS = 4;
+const VERDICT_FIELDS = ["email", "verification", "sub_status"];
+const RETRY_VERDICTS = new Set(["", "error", "timeout"]);
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  const [head = [], ...body] = rows.filter((r) => r.some((x) => x.trim() !== ""));
+  const keys = head.map((h) => h.trim().toLowerCase());
+  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i] ?? ""])));
+}
+
+const csvCell = (v) => (/[",\r\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+
+function writeVerdicts(file, rows) {
+  const text = [VERDICT_FIELDS.join(","), ...rows.map((r) => VERDICT_FIELDS.map((k) => csvCell(r[k] ?? "")).join(","))].join("\n");
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${text}\n`);
+  fs.renameSync(tmp, file);
+}
+
+async function readOp(opName, args) {
+  const op = opByName.get(opName);
+  const cand = plan(op, args, "api-anything")[0];
+  if (!cand) return { ok: false, class: "input", reason: `${opName} has no surface for these args` };
+  return attempt(op, cand, {});
+}
+
+async function verifyEmails(kv, flags) {
+  const name = "verify-emails";
+  const op = opByName.get(name);
+  const unit = opByName.get("workflow-test-run");
+  const args = withDefaults(op, kv);
+  if (args.workflow === undefined && VERIFY_WORKFLOWS[args.ws]) args.workflow = VERIFY_WORKFLOWS[args.ws];
+  const known = new Set(op.args.map((a) => a.replace("?", "")));
+  const stray = Object.keys(kv).filter((k) => !known.has(k));
+  if (stray.length) out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ")}` }, EXIT.usage);
+  const missing = ["csv", "out", "workflow"].filter((k) => args[k] === undefined);
+  if (missing.length) out({ ok: false, op: name, class: "input", reason: `${name} needs ${missing.map((k) => `${k}=`).join(", ")}${missing.includes("workflow") ? ` (no default verify workflow for ws ${args.ws})` : ""}` }, EXIT.usage);
+  const norm = normalizeArgs(args);
+  if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
+  const bad = badArg(norm.values, op);
+  if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
+  const { ws, workflow, csv, out: outFile } = norm.values;
+  const verdict = (decision, reason) => { try { verdictLog.record("send", `clay ${name}`, decision, 0, reason, `clay ${name}`); } catch { /* a missing row, never a failed write */ } };
+  let request = null;
+  const refuse = (reason) => {
+    verdict(process.env.CHEWBACCA_NO_SEND === "1" ? "held" : "refuse", reason);
+    out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, ...(request ? { request } : {}) }, EXIT.refused);
+  };
+  // Refused before any read, the way every other write is; --dry-run still prices it.
+  if (!flags.dryRun && process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
+  if (!flags.dryRun && !flags.allowWrites) refuse("a write needs --allow-writes");
+
+  let source;
+  try { source = parseCsv(fs.readFileSync(csv, "utf8")); } catch (e) { out({ ok: false, op: name, class: "input", reason: `csv could not be read: ${e.message}` }, EXIT.usage); }
+  if (source.length && !("email" in source[0])) out({ ok: false, op: name, class: "input", reason: "csv has no email column" }, EXIT.usage);
+  const all = [...new Set(source.map((r) => String(r.email || "").trim().toLowerCase()).filter(Boolean))];
+  const notEmail = all.filter((e) => !ARG_SHAPES.email.test(e));
+  let prior = [];
+  // No out file yet is a first run. Any other read failure would make every
+  // paid-for verdict look unpaid, so it refuses instead.
+  try { prior = parseCsv(fs.readFileSync(outFile, "utf8")); } catch (e) {
+    if (e.code !== "ENOENT") out({ ok: false, op: name, class: "input", reason: `out could not be read: ${e.message}` }, EXIT.usage);
+  }
+  const done = new Map(prior.filter((r) => r.email && !RETRY_VERDICTS.has(String(r.verification || "").trim())).map((r) => [r.email.trim().toLowerCase(), r]));
+  // A verified=valid column (monday_wave.py's tier files carry one) is a
+  // verdict already paid for: 42 of the 141 Monday rows on 2026-10-17.
+  const markedValid = new Set(source.filter((r) => String(r.verified || "").trim().toLowerCase() === "valid").map((r) => String(r.email || "").trim().toLowerCase()));
+  const todo = all.filter((e) => !notEmail.includes(e) && !done.has(e) && !markedValid.has(e)).sort();
+  const summary = { op: name, ws, workflow, in_csv: all.length, already_verified: all.filter((e) => done.has(e)).length,
+    marked_valid_in_csv: all.filter((e) => markedValid.has(e) && !done.has(e)).length, not_an_email: notEmail };
+  if (!todo.length) out({ ok: true, ...summary, ran: 0, out: outFile, sent: false }, EXIT.ok);
+
+  // Every request built and frozen before anything is priced or approved.
+  const s = unit.surfaces[0];
+  const frozen = todo.map((email) => {
+    const vals = { ws, workflow, email };
+    const bound = bind(s, vals);
+    if (!bound) out({ ok: false, op: name, class: "input", reason: `no request could be built for ${email}` }, EXIT.usage);
+    try { return deepFreeze(dryRequest(s, bound, validatedSet(vals), vals)); } catch (e) { out({ ok: false, op: name, class: "input", reason: `${email}: ${e.message}` }, EXIT.usage); }
+  });
+
+  // The price check: Clay's own per-run estimate, times the runs.
+  const cost = await readOp("workflow-cost", { ws, workflow });
+  const est = cost.ok ? cost.data?.creditEstimate : null;
+  if (!est || !Number.isFinite(Number(est.dataCreditCost)) || !Number.isFinite(Number(est.actionExecutionCost))) {
+    out({ ok: false, op: name, class: "refused", reason: `the workflow's price could not be read (${cost.reason || "no creditEstimate"}); nothing was sent`, ...summary }, EXIT.refused);
+  }
+  const perRun = { data: Number(est.dataCreditCost), action: Number(est.actionExecutionCost) };
+  const total = { data: Math.round(perRun.data * todo.length * 100) / 100, action: Math.round(perRun.action * todo.length * 100) / 100 };
+  request = { workflow, ws, runs: todo.length, per_run_credits: perRun, estimated_credits: total, out: outFile, emails: todo };
+  if (flags.dryRun) out({ ok: true, ...summary, dry_run: true, sent: false, kind: "write", gate: op.gate, request }, EXIT.ok);
+  if (showable({ op: name, request }).length > SHOW_MAX) out({ ok: false, op: name, class: "input", reason: `${todo.length} addresses is too long a list to read before approving; split the csv` }, EXIT.usage);
+
+  const maxCredits = norm.values.max_credits === undefined ? null : Number(norm.values.max_credits);
+  if (maxCredits !== null && total.data + total.action > maxCredits) refuse(`${todo.length} runs cost about ${total.data} data + ${total.action} action credits, over max_credits=${maxCredits}; nothing was sent`);
+  const bal = await readOp("credits", { ws });
+  if (bal.ok && Number.isFinite(Number(bal.data?.balance)) && Number(bal.data.balance) < total.data) refuse(`the workspace has ${bal.data.balance} data credits, under the ${total.data} this needs; nothing was sent`);
+  if (bal.ok && Number.isFinite(Number(bal.data?.actionExecutionBalance)) && Number(bal.data.actionExecutionBalance) < total.action) refuse(`the workspace has ${bal.data.actionExecutionBalance} action credits, under the ${total.action} this needs; nothing was sent`);
+  // Only a verify workflow: the default is one, and a workflow= pointed at
+  // anything else (a sender, an enrichment) is refused before it runs.
+  const wf = await readOp("workflow", { ws, workflow });
+  const wfName = String(wf.data?.workflow?.name ?? "");
+  if (!wf.ok || !/verif/i.test(wfName)) refuse(`${workflow} is ${wfName ? `"${wfName}"` : "unreadable"}, not an email verify workflow; nothing was sent`);
+
+  // The allowance covers the batch only for the workspace's listed verify
+  // workflow, and only when the whole estimate fits what is left today. Any
+  // other workflow= needs Caleb's ok: a name is set by whoever made it.
+  const listed = VERIFY_WORKFLOWS[ws] === workflow;
+  const allowance = listed ? allowanceCheck(op, args) : null;
+  if (allowance && !allowance.ok) refuse(allowance.reason);
+  if (allowance) {
+    const a = allowanceFor(ws);
+    const spent = Number(((ALLOWANCE_SPEND && readJson(ALLOWANCE_SPEND, {})) || {})[ws]?.spent) || 0;
+    if (spent + total.data + total.action > a.daily_credits) refuse(`BLOCKED: ${todo.length} runs at about ${total.data + total.action} credits don't fit the ${a.daily_credits}-credit allowance with ${spent} spent today; nothing was sent`);
+    process.stderr.write(allowance.note);
+  }
+  const prep0 = await prepareWrite(unit, s, frozen[0]);
+  if (prep0.error) refuse(prep0.error);
+  // Every read and send refreshes the session file, so the recheck covers
+  // everything but it: registry, spec, environment, engine and executable.
+  const sessionFiles = new Set((prep0.files || []).filter((f) => !f.startsWith(ROOT + path.sep)));
+  const stable = (p) => fingerprint({ ...p, files: (p.files || []).filter((f) => !sessionFiles.has(f)) });
+  const before = stable(prep0);
+  const shownHash = sha256(showable({ op: name, request }));
+  const yes = allowance ? true : personApproves(name, request, args);
+  if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or a prompt from him in chat within the last 2 hours (his standing \"do everything yourself\")");
+  if (!yes) refuse("the person at the terminal did not approve this payload");
+  afterApprovalTestHook();
+  if (stable(prep0) !== before) refuse("the registry, spec, environment, engine or executable changed after approval; nothing was sent");
+  if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+  verdict("sent", "");
+
+  const results = [...done.values()].map((r) => ({ email: r.email.trim().toLowerCase(), verification: r.verification, sub_status: r.sub_status ?? "" }));
+  // Retried rows are replaced, never duplicated.
+  const retried = new Set(todo);
+  const keep = prior.filter((r) => r.email && !done.has(r.email.trim().toLowerCase()) && !retried.has(r.email.trim().toLowerCase()))
+    .map((r) => ({ email: r.email.trim().toLowerCase(), verification: r.verification, sub_status: r.sub_status ?? "" }));
+  results.push(...keep);
+  const verifyOne = async (email, req) => {
+    const prep = await prepareWrite(unit, s, req);
+    if (prep.error) return { verification: "error", sub_status: prep.error.slice(0, 120) };
+    if (stable(prep) !== before) return { verification: "error", sub_status: "dependencies changed after approval; not sent" };
+    const sent = await prep.send();
+    const runId = sent.ok ? sent.data?.workflowRun?.id : null;
+    if (!runId || !ID.test(String(runId))) return { verification: "error", sub_status: String(sent.reason || "no run id came back").slice(0, 120) };
+    for (let i = 0; i < VERIFY_POLL_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, VERIFY_POLL_MS));
+      const got = await readOp("workflow-run-detail", { ws, workflow, run: runId });
+      const steps = got.ok ? (Array.isArray(got.data) ? got.data : got.data?.workflowRunSteps || []) : [];
+      const step = steps.find((x) => String(x?.nodeName || "").startsWith("Verify") && ["completed", "failed"].includes(x?.status));
+      if (step) {
+        const res = step.stepOutputs?.result || {};
+        return { verification: String(res.status || "error"), sub_status: String(res.sub_status || "") };
+      }
+    }
+    return { verification: "timeout", sub_status: "" };
+  };
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const i = next++;
+      let r;
+      try { r = await verifyOne(todo[i], frozen[i]); } catch (e) { r = { verification: "error", sub_status: String(e.message || e).slice(0, 120) }; }
+      results.push({ email: todo[i], ...r });
+      writeVerdicts(outFile, results);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(VERIFY_WORKERS, todo.length) }, worker));
+  const counts = {};
+  for (const r of results) counts[r.verification] = (counts[r.verification] || 0) + 1;
+  const failed = results.filter((r) => RETRY_VERDICTS.has(r.verification)).length;
+  out({ ok: failed === 0, ...summary, ran: todo.length, sha256: shownHash, estimated_credits: total, counts, out: outFile,
+    ...(failed ? { next: `${failed} came back error or timeout; rerun the same command to retry only those` } : {}) }, failed ? EXIT.failed : EXIT.ok);
 }
 
 async function measure(name, kv) {
@@ -474,6 +2289,24 @@ function doctor() {
   out({ ok: checks.every((c) => c.ok), checks }, checks.every((c) => c.ok) ? EXIT.ok : EXIT.failed);
 }
 
+// Import a Chrome profile's Clay cookies into the --session engine home. Local
+// only: it reads the profile's cookie store and writes one session file.
+function sessionLogin(profile) {
+  if (!SESSION_NAME) out({ ok: false, class: "usage", reason: "session-login needs --session NAME" }, EXIT.usage);
+  if (!/^(Default|Profile \d{1,3})$/.test(String(profile || ""))) {
+    out({ ok: false, class: "usage", reason: 'name the Chrome profile: Default or "Profile N"' }, EXIT.usage);
+  }
+  fs.mkdirSync(ENGINE_HOME, { recursive: true });
+  // A fresh engine home knows no sites until the Clay spec is copied in.
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  syncSpec();
+  const r = spawnSync("api-anything", ["login", registry.engine.site, "--profile", `Chrome/${profile}`], {
+    encoding: "utf8", env: { ...process.env, API_ANYTHING_HOME: ENGINE_HOME }, timeout: 120000,
+  });
+  const ok = r.status === 0;
+  out({ ok, session: SESSION_NAME, profile, home: ENGINE_HOME, ...(ok ? {} : { reason: (r.stderr || r.stdout || String(r.error)).trim().slice(0, 300) }) }, ok ? EXIT.ok : EXIT.failed);
+}
+
 const HELP = `chewbacca clay: Clay without opening Clay
 
   chewbacca clay ops                     every op with its surfaces, gate, measured ms
@@ -481,11 +2314,70 @@ const HELP = `chewbacca clay: Clay without opening Clay
   chewbacca clay route <op> [k=v ...]    the order it would try, without calling
   chewbacca clay measure <op> [k=v ...]  time each surface once and record it (reads only)
   chewbacca clay doctor                  engine pin, session, spec
+  chewbacca clay allowance               each workspace's standing daily credit allowance and today's spend
+  chewbacca clay allowance-set ws=<id> daily=<credits> [client=<name>] [until=YYYY-MM-DD]
+                                         set one (needs Caleb: a terminal, or his chat message naming the number;
+                                         with until= at most 7 days out, a message naming the client and
+                                         saying to spend what it takes is enough)
+  chewbacca clay allowance-clear ws=<id> remove one
 
   --surface cli|api-anything|bin         force one surface
-  --allow-writes                         a write; a person must type the op name at a terminal
+  --allow-writes                         a write; Caleb's ok at a terminal or in chat, or, for rows, columns
+                                         and run-cells, the workspace's standing allowance with room left
+  --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
+  --full                                 a read the 20,000-char display cap cut: refetch it whole (GET on
+                                         api.clay.com/v3 only), for exports
 
-ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line of JSON.`;
+  chewbacca clay batch [--full]          many reads in one process: stdin is one JSON array of args per
+                                         line, e.g. ["rows-by-id","ws=1","table=t_x","rows=r_a,r_b"]; one
+                                         JSON line out per line in, same order; writes are refused
+  --session NAME                         use a second Clay login (api-anything only); import it once with
+                                         chewbacca clay --session NAME session-login "Profile N"
+
+ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
+~/.chewbacca/gtm/clients.json; with none or several it refuses. Every clay CLI
+call runs in that workspace alone, whatever workspace the CLI is switched to,
+so an op that runs through the CLI takes ws= too. Output is one line of JSON.`;
+
+// Reads only, one JSON array of args per stdin line ("rows-by-id","ws=1",...),
+// one JSON line out per line in, in order. A write, a flag that changes what
+// is sent (--allow-writes), or a non-op command is refused for that line.
+async function batch(outer) {
+  if (outer.allowWrites) out({ ok: false, class: "refused", reason: "batch runs reads only" }, EXIT.refused);
+  const lines = fs.readFileSync(0, "utf8").split("\n").filter((l) => l.trim());
+  BATCH = true;
+  let worst = EXIT.ok;
+  for (const line of lines) {
+    try {
+      let argv;
+      try {
+        argv = JSON.parse(line);
+      } catch {
+        argv = null;
+      }
+      if (!Array.isArray(argv) || !argv.every((a) => typeof a === "string")) out({ ok: false, class: "usage", reason: "each batch line is a JSON array of strings" }, EXIT.usage);
+      const { pos, kv, flags } = parseArgv(argv);
+      const op = opByName.get(pos[0]);
+      if (!op || pos.length !== 1) out({ ok: false, class: "usage", reason: `batch takes one read op per line, not ${pos.join(" ")}` }, EXIT.usage);
+      if (flags.allowWrites || isWrite(op)) out({ ok: false, op: op.name, class: "refused", reason: "batch runs reads only" }, EXIT.refused);
+      await runOp(op.name, kv, { ...flags, full: flags.full || outer.full, surface: flags.surface || outer.surface });
+      out({ ok: false, op: op.name, class: "error", reason: "the op ended without a result" }, EXIT.failed);
+    } catch (e) {
+      if (!(e instanceof BatchLine)) {
+        try {
+          out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed);
+        } catch (e2) {
+          if (!(e2 instanceof BatchLine)) throw e2;
+          worst = Math.max(worst, e2.code);
+          continue;
+        }
+      }
+      worst = Math.max(worst, e.code ?? EXIT.failed);
+    }
+  }
+  BATCH = false;
+  process.exit(worst);
+}
 
 (async () => {
   const { pos, kv, flags } = parseArgv(process.argv.slice(2));
@@ -496,6 +2388,11 @@ ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line
   }
   if (cmd === "ops") out(listOps(), EXIT.ok);
   if (cmd === "doctor") doctor();
+  if (cmd === "session-login") sessionLogin(rest[0]);
+  if (["allowance", "allowance-set", "allowance-clear"].includes(cmd)) allowanceCommand(cmd, kv);
+  // The clay CLI is signed in to one account of its own, so a second session
+  // reads through api-anything only, or the CLI would answer for the wrong login.
+  if (SESSION_NAME) flags.surface = "api-anything";
   if (cmd === "route") {
     const op = opByName.get(rest[0]);
     if (!op) out({ ok: false, class: "usage", reason: `unknown op ${rest[0] ?? ""}` }, EXIT.usage);
@@ -504,5 +2401,7 @@ ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line
     out({ ok: true, op: op.name, kind: op.kind, gate: op.gate, order, ui: uiRoute(op, args) }, EXIT.ok);
   }
   if (cmd === "measure") await measure(rest[0], kv);
+  if (cmd === "verify-emails") await verifyEmails(kv, flags);
+  if (cmd === "batch") await batch(flags);
   await runOp(cmd, kv, flags);
 })().catch((e) => out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed));

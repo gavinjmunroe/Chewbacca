@@ -34,10 +34,10 @@ const PROTOCOL = "2025-06-18";
 
 // ── Tools ────────────────────────────────────────────────────────────────────
 //
-// Read-only, every one. A browser client reaching into a laptop is exactly the
-// place not to expose a write, and everything valuable here is a question
-// anyway. The descriptions matter more than the code: they are the only thing
-// the model reads when deciding whether to call.
+// The five named tools below read. Writes come through kit_write, kit_confirm
+// and kit_undo further down, each with an undo or a two-step send. The
+// descriptions matter more than the code: they are the only thing the model
+// reads when deciding whether to call.
 const TOOLS = [
   {
     name: "who_do_i_know",
@@ -81,18 +81,235 @@ const TOOLS = [
     },
     run: (a) => cli("coursework", ["due", "--days", String(a.days || 14)]),
   },
+];
+
+// ── The rest of the kit ──────────────────────────────────────────────────────
+//
+// HockeyStack "killed its UI" on 2026-10 with about 20 MCP tools for one
+// product and no approval on deletes; Salesforce Headless 360 shipped 60+.
+// The kit has 190 commands and this server exposed 5 of them. A few tools
+// reach the rest without listing 190 schemas into every agent's context (the
+// context-bloat complaint about MCP): find_capability searches both
+// registries, kit_read runs one entry from config/data/mcp-reads.json, and
+// kit_write runs one from config/data/mcp-writes.json. A read entry is a fixed
+// argv plus typed params and never writes; a write lives in the writes
+// registry, where it either carries an undo or sends only on kit_confirm.
+// Caleb, 2026-10-11: "Never read only, find a way to write too".
+// CHEWBACCA_MCP_READS, CHEWBACCA_MCP_WRITES and CHEWBACCA_MCP_BIN point the
+// tests at fixtures; whoever can set this process's environment already runs
+// code as the person.
+const READS_FILE = process.env.CHEWBACCA_MCP_READS || path.join(BIN, "..", "config", "data", "mcp-reads.json");
+const WRITES_FILE = process.env.CHEWBACCA_MCP_WRITES || path.join(BIN, "..", "config", "data", "mcp-writes.json");
+const { createWrites, STATE: WRITES_STATE } = require("./lib/mcp-writes");
+
+// Choices a write entry names by source, so they can't drift from the tool
+// that enforces them: the apps `people send` can reach, and every op the GTM
+// front door's registry marks as a write.
+function choicesFor(from) {
+  if (from === "people.apps") return require("./lib/people/apps").APPS;
+  if (from === "clay.writes") {
+    try {
+      const reg = JSON.parse(fs.readFileSync(path.join(BIN, "..", "library", "clay-api", "registry.json"), "utf8"));
+      return reg.ops.filter((o) => o.kind !== "read" || String(o.gate || "").startsWith("write")).map((o) => o.name);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+const writes = createWrites({ bin: process.env.CHEWBACCA_MCP_BIN || BIN, registryFile: WRITES_FILE, choicesFor });
+
+// Who is connected, for the write log: the client's own name from
+// initialize, and which transport it came in on.
+const WHO = { client: "", transport: "stdio" };
+const who = (a) => ({ ...WHO, asked_by: a.asked_by });
+function reads() {
+  try {
+    const got = JSON.parse(fs.readFileSync(READS_FILE, "utf8"));
+    return Array.isArray(got.reads) ? got.reads : [];
+  } catch {
+    return [];
+  }
+}
+
+// A model's argument came from whatever page it last read: a value that looks
+// like a flag would reach the CLI as one, so it is refused, not quoted.
+// Lengths and the day cap are guessed, never measured.
+function argFor(spec, value) {
+  if (spec.type === "number") {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 365) throw new Error("expected a whole number from 1 to 365");
+    return String(n);
+  }
+  const s = String(value);
+  if (spec.type === "choice") {
+    if (!(spec.choices || []).includes(s)) throw new Error(`expected one of ${(spec.choices || []).join(", ")}`);
+    return s;
+  }
+  if (!s.trim() || s.length > 200 || s.startsWith("-") || /[\x00-\x1f]/.test(s))
+    throw new Error("expected plain text under 200 characters that does not start with a dash");
+  // A positional value lands where some CLIs read a subcommand: `people calls
+  // sync` files calls and `people texts sync` imports every app's messages.
+  // One bare write verb is refused even after a fixed subcommand, so an entry
+  // that forgets this can't be turned into a write.
+  if (!spec.flag && WRITE_VERBS.has(s.trim().toLowerCase()))
+    throw new Error(`"${s.trim()}" is a command word, not a value`);
+  return s;
+}
+
+const WRITE_VERBS = new Set(
+  "add apply append assign clear comment create delete done drop edit forget import ingest kill link login logout merge move note off on purge push reindex remove reset rm run send serve set snapshot start stop submit sync tick unimport update write".split(" "),
+);
+
+function readArgv(entry, args) {
+  const argv = [...(entry.argv || [])].map((a) => (a === "~" ? require("node:os").homedir() : a));
+  for (const [name, spec] of Object.entries(entry.params || {})) {
+    const value = args ? args[name] : undefined;
+    if (value === undefined || value === null || value === "") {
+      if (spec.required) throw new Error(`${name} is required`);
+      continue;
+    }
+    const v = argFor(spec, value);
+    if (spec.flag) argv.push(spec.flag, v);
+    else argv.push(v);
+  }
+  return argv;
+}
+
+const STOP = new Set("a about am an and any are at be can do does for from get have i if in is it me my of on or show so the there this to what whats which who with you your".split(" "));
+const words = (s) => (String(s || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => !STOP.has(w));
+
+TOOLS.push(
   {
-    name: "course_ai_policy",
+    name: "find_capability",
     description:
-      "What a specific course allows regarding AI help. One term can carry three different rules: banned outright, allowed with disclosure, or ideation only. ALWAYS call this before helping with graded work for a named course. An unrecorded policy means banned.",
+      "Search everything this person's Chewbacca kit can read for them: classes, deadlines, grades, attendance and Brightspace; the people they know, who they owe a reply, promises, birthdays, message threads and calls; their calendar, recent meetings and decisions, and whether anything is recording; every coding agent and job on their Mac, which need them and which died; the team board and backlog; GTM clients, accounts and credits; Mac data (notes, reminders, mail, browser history) and Screen Time; Google Docs and Office files. It also finds what the kit can change: todos, notes, reminders, calendar holds, notes on people, files, and messages to send. Returns matching capability ids with what each does and its parameters. Call this first, then kit_read with a read id or kit_write with a write id.",
     inputSchema: {
       type: "object",
-      properties: { course: { type: "string", description: "Course code, e.g. WRIT 150" } },
-      required: ["course"],
+      properties: { query: { type: "string", description: "What you want to know, in plain words" } },
+      required: ["query"],
     },
-    run: (a) => cli("coursework", ["policy", String(a.course), "ai"]),
+    run: async (a) => {
+      const q = words(a.query);
+      // Five letters is a crude stem: "recording" finds "recorded". Two-letter
+      // words only match whole ("ai" must not find "air").
+      const hit = (list, w) =>
+        list.some((h) => h === w || (w.length > 2 && h.length > 2 && (h.startsWith(w) || w.startsWith(h))) || (w.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+      const every = [...reads(), ...writes.entries().map((w) => ({ ...w, write: true }))];
+      // A write id's verb half (ledger.ADD, file.WRITE) says what it does, not
+      // what it touches, so it doesn't get the id's double weight: with it,
+      // "can I use AI on the WRIT essay" ranked file.write first (2026-10-11).
+      const all = every.map((r) => ({
+        r,
+        id: words(r.write ? r.id.split(".")[0] : r.id),
+        hay: words(`${r.about} ${r.asks || ""} ${r.tool || ""}`),
+      }));
+      // A word that matches half the registry ("people", "time") says little
+      // about which one; idf weights it down. With 16 entries every word was
+      // rare, so it only mattered once the registry passed 80 (2026-10-11).
+      const idf = Object.fromEntries(
+        q.map((w) => [w, Math.log((all.length + 1) / (1 + all.filter((x) => hit(x.id, w) || hit(x.hay, w)).length)) + 1]),
+      );
+      const scored = all
+        .map(({ r, id, hay }) => {
+          // The id names what the capability is; a match there counts double.
+          return { r, score: q.reduce((n, w) => n + idf[w] * ((hit(id, w) ? 2 : 0) + (hit(hay, w) ? 1 : 0)), 0) };
+        })
+        .filter((x) => x.score > 0)
+        .sort((x, y) => y.score - x.score)
+        .slice(0, 6);
+      const list = (scored.length ? scored.map((x) => x.r) : every).map((r) => {
+        const params = Object.entries(r.params || {})
+          .map(([k, v]) => {
+            const choices = v.choices || (v.choices_from ? choicesFor(v.choices_from) : null);
+            return `${k}${v.required ? "" : "?"}: ${v.type}${choices ? " (" + choices.join("|") + ")" : ""}`;
+          })
+          .join(", ");
+        const how = !r.write ? "" : r.kind === "outward" ? "  [kit_write drafts it, kit_confirm sends it]" : "  [kit_write, undo with kit_undo]";
+        return `${r.id}: ${r.about}${params ? "  params: " + params : ""}${how}`;
+      });
+      return (scored.length ? "" : "Nothing matched those words; everything there is:\n") + list.join("\n");
+    },
   },
-];
+  {
+    name: "kit_read",
+    description:
+      "Run one read-only capability from the person's Chewbacca kit by its id (get ids from find_capability). Never writes, sends or spends anything.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "A capability id from find_capability, e.g. coursework.due" },
+        params: { type: "object", description: "That capability's params, if any" },
+      },
+      required: ["id"],
+    },
+    run: async (a) => {
+      const entry = reads().find((r) => r.id === String(a.id));
+      if (!entry) return `No capability ${String(a.id).slice(0, 60)}. Call find_capability first.`;
+      let argv;
+      try {
+        argv = readArgv(entry, a.params || {});
+      } catch (e) {
+        return `${entry.id}: ${e.message}`;
+      }
+      const out = await cli(entry.tool, argv);
+      return entry.private === "meetings" ? redactMeetings(out) : out;
+    },
+  },
+  {
+    name: "kit_write",
+    description:
+      "Make a change for the person through their Chewbacca kit, by a write id from find_capability: add or update a todo, write or edit an Apple Note, set or tick off a reminder, hold time on their calendar, note something about a person, write or edit a file, send a text, email or Slack message, or a Clay write. A change on their own Mac runs now and returns an undo id for kit_undo. Anything that reaches another person or spends money only returns a draft showing exactly what goes out and to whom; it is sent only by kit_confirm.",
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "A write id from find_capability, e.g. ledger.add" },
+        params: { type: "object", description: "That write's params" },
+        asked_by: { type: "string", description: "Who asked for this and where, e.g. 'Caleb, in Claude Desktop'. It is logged." },
+      },
+      required: ["id", "asked_by"],
+    },
+    // A ledger task can be named after a meeting's action item, so its echo
+    // goes through the same privacy check as the ledger reads.
+    run: async (a) => {
+      const out = await writes.write(a, who(a));
+      return String(a.id).startsWith("ledger.") ? redactMeetings(out) : out;
+    },
+  },
+  {
+    name: "kit_confirm",
+    description:
+      "Send a draft that kit_write made. Only call this after the person has seen that draft's recipient and text, and read you the six-digit send code shown on their own screen. You never see that code any other way; never guess it. A draft works once, expires after 15 minutes, and is refused if where it would go has changed. The kit's own gates still apply: quiet hours for that person, Caleb's ok in chat within 2 hours for Clay writes, and CHEWBACCA_NO_SEND.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        draft_id: { type: "string", description: "The draft id kit_write returned, d_..." },
+        approval_code: { type: "string", description: "The six-digit send code the person read to you off their screen" },
+        to_address: { type: "string", description: "Only when the draft says the address is not a saved contact: that address, once the person says it's right" },
+        asked_by: { type: "string", description: "Who said to send it and where. It is logged." },
+      },
+      required: ["draft_id", "approval_code", "asked_by"],
+    },
+    run: (a) => writes.confirm(a, who(a)),
+  },
+  {
+    name: "kit_undo",
+    description:
+      "Put back a change kit_write made, by the undo id it returned (u_...). It refuses if something else changed the same thing since, so that change isn't lost.",
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        undo_id: { type: "string", description: "The undo id kit_write returned, u_..." },
+        asked_by: { type: "string", description: "Who asked for the undo. It is logged." },
+      },
+      required: ["undo_id"],
+    },
+    run: (a) => writes.undo(a, who(a)),
+  },
+);
 
 // ── Running a CLI safely ─────────────────────────────────────────────────────
 //
@@ -112,12 +329,37 @@ function cli(name, args) {
   });
 }
 
+// A read that can print a meeting (a walk, the calendar, ledger rows made
+// from action items) goes through meeting_privacy.redact, the same check the
+// glass uses, before any agent sees it. On 2026-10-11 the panel printed a
+// psychiatric intake by name; an agent in a browser is a wider audience than
+// the glass. If the check can't run, nothing is shown.
+function redactMeetings(text) {
+  return new Promise((resolve) => {
+    const withheld = "Withheld: the privacy check on meeting titles could not run.";
+    const child = execFile(
+      "python3",
+      ["-I", path.join(BIN, "lib", "meeting_privacy.py"), "--redact"],
+      { timeout: 10000, maxBuffer: 8 * 1024 * 1024 },
+      (err, out) => resolve(err ? withheld : String(out)),
+    );
+    child.stdin.on("error", () => {});
+    child.stdin.end(String(text));
+  });
+}
+
 // ── JSON-RPC ─────────────────────────────────────────────────────────────────
-async function handle(msg) {
+const WRITE_TOOLS = new Set(["kit_write", "kit_confirm", "kit_undo"]);
+
+async function handle(msg, ctx = {}) {
   const { id, method, params } = msg || {};
   const reply = (result) => ({ jsonrpc: "2.0", id, result });
   const fail = (code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
+  if (method === "initialize") {
+    const info = params?.clientInfo || {};
+    WHO.client = `${String(info.name || "unnamed client").slice(0, 60)} ${String(info.version || "").slice(0, 20)}`.trim();
+  }
   if (method === "initialize")
     return reply({
       protocolVersion: PROTOCOL,
@@ -129,16 +371,19 @@ async function handle(msg) {
 
   if (method === "tools/list")
     return reply({
-      tools: TOOLS.map(({ name, description, inputSchema }) => ({
+      tools: TOOLS.map(({ name, description, inputSchema, annotations }) => ({
         name,
         description,
         inputSchema,
+        annotations: annotations || { readOnlyHint: true },
       })),
     });
 
   if (method === "tools/call") {
     const tool = TOOLS.find((t) => t.name === params?.name);
     if (!tool) return fail(-32602, `no tool named ${params?.name}`);
+    if (ctx.http && WRITE_TOOLS.has(tool.name) && !ctx.authorized)
+      return reply({ content: [{ type: "text", text: `Writes over HTTP need the bearer token in ${HTTP_TOKEN_FILE}. Nothing was written.` }], isError: true });
     try {
       const text = await tool.run(params.arguments || {});
       return reply({ content: [{ type: "text", text }] });
@@ -178,11 +423,45 @@ function serveStdio() {
 // Bound to 127.0.0.1 only. This serves somebody's entire relationship history
 // and message archive; a bind to 0.0.0.0 would put that on the local network,
 // and on a campus wifi that is the whole building.
+//
+// Writes over HTTP also need a bearer token from an owner-only file. The
+// Origin and Host checks stop a web page; they don't stop another account on
+// the same Mac, which can reach 127.0.0.1 too and must not write as this one.
+const HTTP_TOKEN_FILE = path.join(WRITES_STATE, "http-token");
+function httpToken() {
+  try {
+    return fs.readFileSync(HTTP_TOKEN_FILE, "utf8").trim();
+  } catch {
+    fs.mkdirSync(WRITES_STATE, { recursive: true, mode: 0o700 });
+    const token = require("node:crypto").randomBytes(32).toString("hex");
+    fs.writeFileSync(HTTP_TOKEN_FILE, token + "\n", { mode: 0o600 });
+    return token;
+  }
+}
+function bearerOk(header, token) {
+  const got = Buffer.from(String(header || "").replace(/^Bearer\s+/i, ""));
+  const want = Buffer.from(token);
+  return got.length === want.length && require("node:crypto").timingSafeEqual(got, want);
+}
+
 function serveHttp(port) {
+  WHO.transport = "http";
+  const token = httpToken();
   http
     .createServer(async (req, res) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-protocol-version");
+      // A web page can POST to 127.0.0.1 from the person's own browser. With
+      // `Access-Control-Allow-Origin: *` any site they visited could read their
+      // people and messages through this port (found 2026-10-11, before the
+      // kit_read tools widened what it serves). A browser always sends Origin;
+      // an MCP client does not. A rebinding DNS name shows up as a foreign Host.
+      const host = String(req.headers.host || "").replace(/:\d+$/, "");
+      const allowed = String(process.env.CHEWBACCA_MCP_ORIGINS || "").split(",").filter(Boolean);
+      if (!["127.0.0.1", "localhost"].includes(host) || (req.headers.origin && !allowed.includes(req.headers.origin)))
+        return res.writeHead(403, { "content-type": "text/plain" }).end("refused: browser origin or foreign host");
+      if (req.headers.origin) {
+        res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+        res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-protocol-version");
+      }
       if (req.method === "OPTIONS") return res.writeHead(204).end();
       if (req.method === "GET")
         return res
@@ -198,7 +477,7 @@ function serveHttp(port) {
       req.on("end", async () => {
         let out;
         try {
-          out = await handle(JSON.parse(body));
+          out = await handle(JSON.parse(body), { http: true, authorized: bearerOk(req.headers.authorization, token) });
         } catch {
           out = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } };
         }
@@ -229,71 +508,114 @@ function serveHttp(port) {
 // programs depend on, and a corrupted claude_desktop_config.json means their
 // existing servers stop working, which is a far worse outcome than this tool
 // not being registered.
-function register() {
-  const home = require("node:os").homedir();
-  const self = path.join(BIN, "chewbacca-mcp");
+function register(asJson) {
+  const os = require("node:os");
+  const home = os.homedir();
+  // The link the person's setup made (~/.local/bin/chewbacca-mcp), never the
+  // file it points at: __dirname resolves symlinks, and on a kit install that
+  // is ~/.chewbacca/kit/snapshots/<sha>/bin, a folder the next update prunes.
+  // A checkout path in another app's config is the failure setup/SKILL.md
+  // already paid for once.
+  const linked = path.join(home, ".local/bin/chewbacca-mcp");
+  const script = fs.existsSync(linked) ? linked
+    : path.isAbsolute(process.argv[1] || "") ? process.argv[1] : path.join(BIN, "chewbacca-mcp");
+  // A Dock-launched app's PATH is /usr/bin:/bin, so `#!/usr/bin/env node`
+  // finds no node there. Name node outright, and prefer brew's stable link
+  // over process.execPath, which is a versioned Cellar path that breaks on the
+  // next `brew upgrade`.
+  const node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].find((p) => fs.existsSync(p)) || process.execPath;
+  const apps = (process.env.CHEWBACCA_APPS_DIR || "/Applications").split(":").concat([path.join(home, "Applications")]);
+  const hasApp = (name) => apps.some((d) => fs.existsSync(path.join(d, name)));
+  const entry = { command: node, args: [script] };
+  // Where an existing entry points. Kept when that file still exists, so a
+  // working registration someone made by hand is never rewritten.
+  const target = (e) => (e && Array.isArray(e.args) && e.args.length ? e.args[0] : e && e.command) || "";
   const done = [];
+  const say = (host, state, detail) => done.push({ host, state, detail: detail || "" });
 
+  // First time only (COPYFILE_EXCL), the way REA keeps <config>.rea.backup:
+  // a rerun that replaced a stale entry used to copy over the backup, so it
+  // held Chewbacca's own entry and the person's original config was gone.
   const backup = (f) => {
     try {
-      fs.copyFileSync(f, f + ".before-chewbacca");
+      fs.copyFileSync(f, f + ".before-chewbacca", fs.constants.COPYFILE_EXCL);
     } catch {}
   };
 
-  // Claude Desktop and Claude Code both take JSON with an mcpServers map.
-  for (const [label, file, key] of [
-    ["Claude Desktop", path.join(home, "Library/Application Support/Claude/claude_desktop_config.json"), "mcpServers"],
-    ["Claude Code", path.join(home, ".claude.json"), "mcpServers"],
+  // Claude Desktop, Claude Code and Cursor all take JSON with an mcpServers
+  // map. A config that does not exist yet is created when the app is on this
+  // Mac: a fresh Claude Desktop has no claude_desktop_config.json until its
+  // developer settings are opened once, so "only if the file exists" skipped
+  // exactly the new person this is for.
+  const claudeDir = path.join(home, "Library/Application Support/Claude");
+  for (const [label, file, present] of [
+    ["Claude Desktop", path.join(claudeDir, "claude_desktop_config.json"), hasApp("Claude.app") || fs.existsSync(claudeDir)],
+    ["Claude Code", path.join(home, ".claude.json"), fs.existsSync(path.join(home, ".claude.json"))],
+    ["Cursor", path.join(home, ".cursor/mcp.json"), hasApp("Cursor.app") || fs.existsSync(path.join(home, ".cursor"))],
   ]) {
-    if (!fs.existsSync(file)) continue;
+    if (!present) continue;
     try {
-      const raw = fs.readFileSync(file, "utf8");
-      const cfg = JSON.parse(raw);
-      cfg[key] = cfg[key] || {};
-      if (cfg[key].chewbacca && cfg[key].chewbacca.command === self) {
-        done.push(`${label}: already registered`);
+      const raw = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      const cfg = raw.trim() ? JSON.parse(raw) : {};
+      cfg.mcpServers = cfg.mcpServers || {};
+      const had = cfg.mcpServers.chewbacca;
+      if (had && fs.existsSync(target(had))) {
+        say(label, "already");
         continue;
       }
-      backup(file);
-      cfg[key].chewbacca = { command: self };
-      fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
-      done.push(`${label}: registered`);
+      if (raw) backup(file);
+      cfg.mcpServers.chewbacca = entry;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
+      say(label, "registered", had ? "replaced an entry whose file is gone" : "");
     } catch (e) {
-      done.push(`${label}: SKIPPED, its config did not parse (${e.message})`);
+      say(label, "skipped", `its config did not parse (${e.message})`);
     }
   }
 
-  // Codex uses TOML. Appending a table is safe where rewriting is not: this
-  // file is hand-edited and a naive round-trip would drop its comments.
-  const codex = path.join(home, ".codex/config.toml");
-  if (fs.existsSync(codex)) {
+  // Codex uses TOML, and so does the Codex inside the ChatGPT app. Appending
+  // a table is safe where rewriting is not: this file is hand-edited and a
+  // naive round-trip would drop its comments.
+  const codexDir = path.join(home, ".codex");
+  const codex = path.join(codexDir, "config.toml");
+  if (fs.existsSync(codexDir) || hasApp("Codex.app") || hasApp("ChatGPT.app")) {
     try {
-      const raw = fs.readFileSync(codex, "utf8");
+      const raw = fs.existsSync(codex) ? fs.readFileSync(codex, "utf8") : "";
       if (raw.includes("[mcp_servers.chewbacca]")) {
-        done.push("Codex: already registered");
+        say("Codex", "already");
       } else {
-        backup(codex);
-        fs.appendFileSync(
-          codex,
-          `\n[mcp_servers.chewbacca]\ncommand = "${self}"\nargs = []\n`,
-        );
-        done.push("Codex: registered");
+        if (raw) backup(codex);
+        fs.mkdirSync(codexDir, { recursive: true });
+        fs.appendFileSync(codex,
+          `\n[mcp_servers.chewbacca]\ncommand = ${JSON.stringify(node)}\nargs = [${JSON.stringify(script)}]\n`);
+        say("Codex", "registered", hasApp("ChatGPT.app") ? "also the Codex inside the ChatGPT app" : "");
       }
     } catch (e) {
-      done.push(`Codex: SKIPPED (${e.message})`);
+      say("Codex", "skipped", e.message);
     }
   }
+  // ChatGPT's own chat (not its Codex) takes only connectors at a public
+  // https address, run in OpenAI's cloud. It cannot start a program on this
+  // Mac, so there is nothing to write; say so rather than claim it.
+  if (hasApp("ChatGPT.app")) {
+    say("ChatGPT chat", "not-possible", "ChatGPT's chat only connects to servers at a public https address");
+  }
 
-  if (!done.length) {
-    console.log("No MCP client found. Install Claude Desktop, Claude Code or Codex first.");
+  if (asJson) {
+    console.log(JSON.stringify({ command: node, script, hosts: done }, null, 2));
     return;
   }
-  for (const line of done) console.log("  " + line);
+  if (!done.length) {
+    console.log("No MCP client found. Install Claude, Cursor, Codex or ChatGPT first.");
+    return;
+  }
+  const words = { already: "already registered", registered: "registered", skipped: "SKIPPED", "not-possible": "not possible" };
+  for (const d of done) console.log(`  ${d.host}: ${words[d.state]}${d.detail ? ` (${d.detail})` : ""}`);
   console.log("\nRestart the app and the tools are there. Nothing to paste.");
 }
 
 const argv = process.argv.slice(2);
 const hi = argv.indexOf("--http");
-if (argv.includes("--register")) register();
+if (argv.includes("--register")) register(argv.includes("--json"));
 else if (hi !== -1) serveHttp(Number(argv[hi + 1] || 7788));
 else serveStdio();

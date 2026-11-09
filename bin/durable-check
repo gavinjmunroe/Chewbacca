@@ -1,9 +1,31 @@
 #!/usr/bin/env python3
-"""Check direct corrections for a subsequent policy write in this session.
+"""A correction must land a gate or a test in the same turn, or say why it can't.
 
 This conservative text heuristic does not establish intent or prove learning.
-Runtime adapters must supply the real user prompt, never hook feedback. Writes
-are evidence of a policy change, not evidence that the change fixes the problem.
+Runtime adapters must supply the real user prompt, never hook feedback. In
+Claude Code the Stop payload carries no prompt, so the prompt is read from the
+transcript the payload names (--transcript).
+
+WHY IT CHANGED, 2026-10-11. Another tab asked "Why does the repeat mistake keep
+happening???". Two measurements answered it:
+
+  * This check had never fired in Claude Code. Its Stop payload has no
+    user_message, so the hook exited 0 on all 23 runs in the log that day.
+  * Its detector caught 14 of 141 corrections Caleb typed in 14 days of
+    transcripts (a model labelled the 470 candidate messages). "fix chewbs",
+    "never tell me", "doesn't sound like me" and "taking so long" all missed.
+
+And when it did run, any write to a skill or memory satisfied it, which is the
+exact failure feedback_enforce_dont_document names: the lesson goes into prose
+and fires never. `chewbacca lessons` counted 171 of 231 corrections as prose
+only on 2026-10-11.
+
+So now a correction is satisfied by one of:
+  enforced  a write to code that runs: a hook, a test, bin/, tools/, a githook
+  why       `chewbacca lessons why "<reason>"` from this session, after the prompt
+Prose alone (a skill, a rule, a memory, a doc) is refused once, with that said.
+Every decision is appended to ~/.chewbacca/lessons/corrections.jsonl, which
+`chewbacca lessons` reads, so the loop shows up in the count.
 """
 
 from __future__ import annotations
@@ -15,14 +37,27 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
-WRITE_LOG = Path(os.environ.get("CHEWBACCA_WRITE_LOG") or
-                 (Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca").expanduser() / "write-log.tsv")).expanduser()
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
+
+HOME = Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca").expanduser()
+WRITE_LOG = Path(os.environ.get("CHEWBACCA_WRITE_LOG") or HOME / "write-log.tsv").expanduser()
+LESSONS = Path(os.environ.get("CHEWBACCA_LESSONS_DIR") or HOME / "lessons").expanduser()
+WHY_LOG = LESSONS / "why-not.jsonl"
+LEDGER = LESSONS / "corrections.jsonl"
 
 # Generic fault words and questions such as "why did you" also occur in
 # ordinary status requests (BACKLOG's 2026-09-23 integration handoff).
 # Require a direct correction instead of treating those words as intent.
+#
+# The second half was added 2026-10-11 from the 127 corrections the first half
+# missed in 14 days of his messages. Each phrase is his: "fix chewbs" (his
+# usual spelling, 9 misses), "never tell me", "i should never have to",
+# "doesn't sound like me", "taking so long" (8 complaints), "why ru not",
+# "do it for me", "always push", "what did I say".
 CORRECTION = re.compile(
     r"\b(that'?s (?:not|wrong)|not what i|"
     r"(?:i|you|u) didn'?t (?:ask|say|want|tell)|"
@@ -30,7 +65,19 @@ CORRECTION = re.compile(
     r"ur being|you'?re being|shouldn'?t hv to|shouldn'?t have to|"
     r"what is wrong with you|1% the way|"
     r"(?:this|that|it|your (?:reply|writing|answer)) is (?:ai slop|slop writing)|"
-    r"(?:this|that|it) doesn'?t seem authentic)\b", re.I)
+    r"(?:this|that|it) doesn'?t seem authentic|"
+    r"never (?:tell|forget|use|open|put|assume|be|make me|ask me)|"
+    r"(?:i )?should(?:n'?t)? (?:never|ever) (?:have|hv|be|say|take|make|open)|"
+    r"should never|never happens? again|never (?:read only|again)|"
+    r"(?:doesn'?t|don'?t|does not) sound like me|"
+    r"(?:taking|takes?|took) (?:way )?(?:so|that|this|too) long|"
+    r"why (?:ru|r u|are(?:n'?t)? (?:u|you) not|aren'?t (?:u|you)|do (?:u|you) keep|is my mac)|"
+    r"do it (?:for me|urself|yourself)|"
+    r"what did i (?:say|tell)|i (?:just|alr|already) (?:said|told)|"
+    r"(?:don'?t|dont) (?:ever|assume|show)|"
+    r"always (?:push|clean|take|do|make|use|land)|"
+    r"(?:you|u|ur|you'?re)(?: back to| still) (?:repeating|saying|doing|asking)|"
+    r"repeating (?:yourself|urself|ourselves))\b", re.I)
 DIRECT_REACTION = re.compile(r"^(?:(?:bro|bruh|dawg)\s+)?wtf[!? .]*$", re.I)
 
 # Explicit repair requests also stand on their own without another complaint.
@@ -38,7 +85,7 @@ DIRECT_REACTION = re.compile(r"^(?:(?:bro|bruh|dawg)\s+)?wtf[!? .]*$", re.I)
 EXPLICIT = re.compile(
     r"(?:^|[.!?;,\n]|\band(?: then)?)\s*"
     r"(?:(?:bro|bruh|dawg|please|wtf)\s+)*(?:(?:can|could|would) you\s+)?"
-    r"(?:fix (?:chewbacca|the kit|ts)|make ts perfect)\b", re.I)
+    r"(?:fix (?:chewbacca|chewbs?|chewie|the kit|ts|vscode)|make ts perfect)\b", re.I)
 
 
 def correction_text(text):
@@ -48,56 +95,213 @@ def correction_text(text):
     return re.sub(r'`[^`]*`|"[^"\n]*"|“[^”\n]*”', "", text).strip()
 
 
-# Policy surfaces. A write here changes what the next session will do.
-POLICY = (
-    "/.claude/rules/", "/.claude/hooks/", "/skills/", "/second-brain/memory/",
-    "/tests/", "BACKLOG.md", "/methods/", "CLAUDE.md", "AGENTS.md",
-    "/bin/", "/docs/", "settings.json",
+def kind_of(user_text):
+    """'repair' for an explicit fix request, 'correction', or '' for neither."""
+    text = correction_text(user_text or "")
+    if EXPLICIT.search(text):
+        return "repair"
+    if CORRECTION.search(text) or DIRECT_REACTION.fullmatch(text):
+        return "correction"
+    return ""
+
+
+# Code that runs. A write here can refuse the mistake next time.
+ENFORCING = ("/.claude/hooks/", "/tests/", "/.githooks/", "settings.json")
+# Inside a kit checkout only: a random project's bin/ or tools/ is not the kit.
+KIT_CODE = ("bin", "tools", "mac", "apps")
+# Words in a file. A write here is remembered, not enforced.
+PROSE = (
+    "/.claude/rules/", "/skills/", "/second-brain/memory/", "/team/memory/",
+    "BACKLOG.md", "/methods/", "CLAUDE.md", "AGENTS.md", "/docs/",
+    "/config/instructions/",
 )
 
 
-def wrote_policy(session_id, since=None, log=WRITE_LOG):
-    """Paths in a policy surface written by this session."""
-    if not log.exists() or not session_id:
+def _is_kit(root):
+    return (root / "bin" / "durable-check").is_file() or root == Path(__file__).resolve().parents[1]
+
+
+def surface(path):
+    """'enforced', 'prose' or '' for one written path."""
+    if any(m in path for m in ENFORCING) and not path.endswith(".md"):
+        return "enforced"
+    target = Path(path)
+    for i, part in enumerate(target.parts[:-1]):
+        if part in KIT_CODE and _is_kit(Path(*target.parts[:i])) and not path.endswith(".md"):
+            return "enforced"
+    if any(m in path for m in PROSE):
+        return "prose"
+    return ""
+
+
+def session_writes(session_id, since=None, log=WRITE_LOG):
+    """Paths this session wrote at or after `since`, newest first.
+
+    The log is 37 MB on this Mac (2026-10-11) and is appended in time order, so
+    it is read backwards and stops once it is well past `since`. Reading the
+    whole file on every Stop was most of this check's 191 ms average.
+    """
+    if not session_id or not log.exists():
         return []
-    out = []
+    out, older = [], 0
     try:
-        for line in log.read_text(encoding="utf-8", errors="ignore").splitlines():
-            parts = line.split("\t")
-            if len(parts) < 3:
-                continue
-            ts, sid, path = parts[0], parts[1], parts[2]
-            if sid != session_id:
-                continue
-            try:
-                observed = float(ts)
-            except ValueError:
-                continue
-            if not math.isfinite(observed) or (since is not None and observed < since):
-                continue
-            kit = Path(__file__).resolve().parents[1]
-            target = Path(path).resolve()
-            runtime_surface = any(root == target.parent or root in target.parents
-                                  for root in (kit / "tools", kit / "config" / "instructions"))
-            if runtime_surface or any(m in path for m in POLICY):
-                out.append(path)
+        with log.open("rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            pos, tail = fh.tell(), b""
+            while pos > 0:
+                step = min(1 << 18, pos)
+                pos -= step
+                fh.seek(pos)
+                chunk = fh.read(step) + tail
+                lines = chunk.split(b"\n")
+                tail = lines.pop(0) if pos > 0 else b""
+                for raw in reversed(lines):
+                    parts = raw.decode("utf-8", "ignore").split("\t")
+                    if len(parts) < 3:
+                        continue
+                    try:
+                        observed = float(parts[0])
+                    except ValueError:
+                        continue
+                    if not math.isfinite(observed):
+                        continue
+                    if since is not None and observed < since:
+                        # Rows land a few at a time out of order; 500 older rows
+                        # in a row means the turn's writes are all behind us.
+                        # Guessed, never measured.
+                        older += 1
+                        if older > 500:
+                            return out
+                        continue
+                    older = 0
+                    if parts[1] == session_id:
+                        out.append(parts[2])
     except OSError:
-        return []
+        return out
     return out
 
 
-def check(user_text, session_id, since=None, log=WRITE_LOG):
+def wrote_policy(session_id, since=None, log=WRITE_LOG):
+    """Paths in a policy surface (enforcing or prose) written by this session."""
+    return [p for p in session_writes(session_id, since, log) if surface(p)]
+
+
+def why_rows(session_id, since=None, why_log=None):
+    why_log = why_log or WHY_LOG
+    rows = []
+    try:
+        for line in why_log.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("session") == session_id and (since is None or r.get("t", 0) >= since):
+                rows.append(r)
+    except OSError:
+        pass
+    return rows
+
+
+def decide(user_text, session_id, since=None, log=WRITE_LOG, why_log=None):
+    """(outcome, paths): outcome is '', 'enforced', 'why', 'prose' or 'none'."""
+    if not kind_of(user_text):
+        return "", []
+    written = session_writes(session_id, since, log)
+    enforced = [p for p in written if surface(p) == "enforced"]
+    if enforced:
+        return "enforced", enforced
+    if why_rows(session_id, since, why_log):
+        return "why", []
+    prose = [p for p in written if surface(p) == "prose"]
+    return ("prose", prose) if prose else ("none", [])
+
+
+def check(user_text, session_id, since=None, log=WRITE_LOG, why_log=None):
     """Returns (refuse, reason)."""
-    user_text = correction_text(user_text or "")
-    explicit = bool(EXPLICIT.search(user_text))
-    if not (explicit or CORRECTION.search(user_text) or DIRECT_REACTION.fullmatch(user_text)):
+    outcome, _ = decide(user_text, session_id, since, log, why_log)
+    if outcome in ("", "enforced", "why"):
         return False, ""
-    hits = wrote_policy(session_id, since, log)
-    if hits:
-        return False, ""
-    why = ("The user requested a kit repair." if explicit
-           else "That read as a correction.")
-    return True, why
+    lead = ("The user requested a kit repair." if kind_of(user_text) == "repair"
+            else "That read as a correction.")
+    if outcome == "prose":
+        return True, lead + " Only prose changed (a skill, rule, memory or doc)."
+    return True, lead + " Nothing durable changed in this session."
+
+
+def _epoch(stamp):
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def last_prompt(transcript, budget=1 << 20):
+    """(text, epoch) of the last thing a person typed, from the transcript tail.
+
+    Hook and system injections ride in user rows too; his own words never start
+    with a tag, and tool results are not typing (scope-guard.sh reads it the
+    same way).
+    """
+    try:
+        with open(transcript, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - budget))
+            data = fh.read().decode("utf-8", "ignore")
+    except OSError:
+        return "", None
+    for line in reversed(data.splitlines()):
+        if not transcript_rows.maybe_user_line(line):
+            continue
+        try:
+            row = transcript_rows.as_user_row(json.loads(line))
+        except ValueError:
+            continue
+        if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain") or row.get("isCompactSummary"):
+            continue
+        content = (row.get("message") or {}).get("content")
+        if isinstance(content, list):
+            if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+                continue
+            text = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+        elif isinstance(content, str):
+            text = content
+        else:
+            continue
+        text = text.strip()
+        if not text or text.startswith("<") or text.startswith("[Request interrupted"):
+            continue
+        return text, _epoch(row.get("timestamp"))
+    return "", None
+
+
+def record(outcome, session_id, prompt_key, user_text, paths, ledger=None):
+    ledger = ledger or LEDGER
+    try:
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"t": round(time.time(), 3), "session": session_id, "prompt": prompt_key,
+                                 "said": (user_text or "")[:160], "outcome": outcome,
+                                 "paths": paths[:5]}) + "\n")
+    except OSError:
+        pass
+
+
+MESSAGE = """
+A direct correction was detected. This is a heuristic check, not a verified
+recurring error. Writing the lesson into prose does not stop it next time
+(feedback_enforce_dont_document: 171 of 231 corrections were prose only).
+
+Before ending the turn, do one of:
+  * land a gate or a test: a hook that refuses it, a test that fails on it, or
+    a fix to the tool's core so it can't happen. Cite the dated incident.
+    And change how it tries to be good, not only what it refuses: the tool,
+    default or first step that now produces the right move on its own (Caleb,
+    2026-10-11: "reengineer the way in which it tries to be good").
+  * if code can't catch it, record why, from this session:
+        chewbacca lessons why "<which lesson>: <why code can't catch it>"
+
+Never narrate this to the user."""
 
 
 def main():
@@ -105,22 +309,27 @@ def main():
     ap.add_argument("--session", default="")
     ap.add_argument("--since", type=float, default=0.0)
     ap.add_argument("--log", type=Path, default=WRITE_LOG)
+    ap.add_argument("--transcript", default="")
+    ap.add_argument("--prompt-id", default="")
+    ap.add_argument("--record-only", action="store_true",
+                    help="write the outcome to the ledger, never refuse")
     a = ap.parse_args()
-    user_text = sys.stdin.read()
-    refuse, why = check(user_text, a.session, a.since or None, a.log)
-    if not refuse:
+    user_text = "" if sys.stdin.isatty() else sys.stdin.read()
+    since = a.since or None
+    if not user_text.strip() and a.transcript:
+        user_text, at = last_prompt(a.transcript)
+        since = since or at
+    outcome, paths = decide(user_text, a.session, since, a.log)
+    if not outcome:
         return 0
-    print(f"durable-check: {why} Nothing durable changed in this session.",
-          file=sys.stderr)
-    print("""
-A direct correction was detected, but no subsequent policy write was found
-in this session. This is a heuristic check, not a verified recurring error.
-
-Change a policy surface before ending the turn: a rule, a hook, a skill, a
-test, a memory, or the backlog. Then say which one and why, in a line.
-
-If the correction genuinely needs no durable change, say so explicitly and
-say why.""", file=sys.stderr)
+    key = a.prompt_id or f"{a.session}:{since or 0:.0f}"
+    if a.session:
+        record(outcome, a.session, key, user_text, paths)
+    if a.record_only or outcome in ("enforced", "why"):
+        return 0
+    _, why = check(user_text, a.session, since, a.log)
+    print(f"durable-check: {why}", file=sys.stderr)
+    print(MESSAGE, file=sys.stderr)
     return 1
 
 

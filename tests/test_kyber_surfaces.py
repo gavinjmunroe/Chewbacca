@@ -392,6 +392,13 @@ def socket_protocol(tmp: Path) -> None:
         time.sleep(0.05)
     check("the daemon subscribes with listen first", bool(got) and re.fullmatch(r"listen( token=[0-9a-f]{64})?", got[0]) is not None, got[:2])
     d.open_surface("needs-you")
+    # The open's own lines arrive on the reader thread; counted before they
+    # landed, they read as part of the refresh (failed once at load 28,
+    # 2026-10-11, on lines from the open's full draw).
+    deadline = time.time() + 5
+    while not any(x.startswith("r needs-you") for x in got) and time.time() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.2)
     before = len(got)
     d.refresh("needs-you")
     time.sleep(0.2)
@@ -695,7 +702,106 @@ def payload_parse() -> None:
         check("a forged, doubled or unquoted row opens nothing", d.open == {}, list(d.open))
 
 
+def stale_daemon_is_retired():
+    """2026-10-11 5:51pm: a daemon from that morning's kit snapshot answered
+    "That surface didn't open." for the realm surface it had never heard of."""
+    sent = []
+    alive = {"up": True}
+
+    def fake_ask(body, timeout=2.0):
+        sent.append(body["cmd"])
+        if body["cmd"] == "quit":
+            alive["up"] = False
+            return {"ok": True}
+        return {"ok": True} if alive["up"] else None  # an old daemon's ping has no code
+
+    real_ask, real_running = ks.ask, ks.running
+    ks.ask, ks.running = fake_ask, lambda: alive["up"]
+    try:
+        ks.retire_stale()
+        check("a daemon on other code is told to quit", sent == ["ping", "quit"] and not alive["up"], sent)
+        sent.clear()
+        alive["up"] = True
+        ks.ask = lambda body, timeout=2.0: (sent.append(body["cmd"]) or {"ok": True, "code": ks.CODE})
+        ks.retire_stale()
+        check("a daemon on this code is left running", sent == ["ping"], sent)
+    finally:
+        ks.ask, ks.running = real_ask, real_running
+
+
+def kit_move_hands_over(tmp: Path):
+    """2026-10-11 8:11pm: the agents icon opened the retired Swift card. The
+    daemon had started on snapshot 902977c0, the kit moved on and pruned it,
+    and nothing called `start` to retire it. Now the daemon itself hands over
+    once the kit has moved and the glass has been quiet."""
+    now = {"t": 100.0}
+    d = ks.Daemon(FakeHud(), state_path=tmp / "state.json", activity_path=tmp / "activity.jsonl",
+                  badges_path=tmp / "badges.json", spaces=dict(ks.DEFAULT_SPACES), clock=lambda: now["t"],
+                  spawn=lambda fn: None, ingest=lambda c: {})
+    check("a kit that hasn't moved never hands over", not ks.handover_due(d, False))
+    check("a kit move while the glass was just used waits", not ks.handover_due(d, True))
+    now["t"] += ks.HANDOVER_QUIET_S
+    check("a kit move after quiet hands over", ks.handover_due(d, True))
+    d.command({"cmd": "ping"})
+    check("a ping is not use: the next start's check doesn't hold the handover off", ks.handover_due(d, True))
+    d.handle_line("e apps row=agents")
+    check("a press on the glass holds it off again", not ks.handover_due(d, True))
+    now["t"] += ks.HANDOVER_QUIET_S
+    d.command({"cmd": "list"})
+    check("so does a client command", not ks.handover_due(d, True))
+
+
+def first_frame_follows_the_model(tmp: Path):
+    """2026-10-11 17:55: "Show my agents" drew the agents card as a title
+    over an empty status line, about 90 points tall, while it waited on the
+    engine. Its layout follows its model (agents.py _replan), and the daemon
+    laid it out before asking the model, so "Loading..." had a value and no
+    component. The first frame now carries what the model says to draw."""
+
+    class Planned(surfaces.Provider):
+        name = "planned"
+        title = "Planned"
+
+        def __init__(self):
+            super().__init__()
+            self.plan = {}
+
+        def shape(self):
+            return json.dumps(self.plan, sort_keys=True)
+
+        def fetch(self, ctx):
+            return {"rows": 1}
+
+        def layout(self):
+            parts = [surfaces.comp(self.cid("s"), "Screen", title=self.title)]
+            order = []
+            if self.plan.get("note"):
+                parts.append(surfaces.comp(self.cid("note"), "Text", value=surfaces.Bind(self.p("note"))))
+                order.append("note")
+            return parts + [f"> {self.cid('s')} " + " ".join(self.cid(i) for i in order), f"r {self.cid('s')}"]
+
+        def model(self, data, error, values, ctx):
+            out = {self.p("note"): "Loading" if data is None else ""}
+            self.plan = {"note": bool(out[self.p("note")])}
+            return out
+
+    hud = FakeHud()
+    d = ks.Daemon(hud, ctx=Context(), state_path=tmp / "state.json", activity_path=tmp / "activity.jsonl",
+                  badges_path=tmp / "badges.json", spaces=dict(ks.DEFAULT_SPACES), clock=lambda: 0.0,
+                  spawn=lambda fn: None, ingest=lambda c: {}, make=lambda kind, *a: Planned())
+    d.open_surface("agents", save=False)
+    lines = hud.take()
+    check("the first frame draws the component its model asked for",
+          any(line.startswith("c planned-note Text") for line in lines), lines)
+    check("and binds it to the value it was sent", 'd /planned/note "Loading"' in lines, lines)
+
+
 def main() -> int:
+    stale_daemon_is_retired()
+    with tempfile.TemporaryDirectory() as d:
+        first_frame_follows_the_model(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        kit_move_hands_over(Path(d))
     payload_parse()
     listener_ignores_surface_actions()
     check("idle glass ingests every five minutes, open glass every minute",

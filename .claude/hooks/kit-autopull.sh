@@ -34,13 +34,22 @@ LOG="$LOG_DIR/autopull.log"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 note() { echo "$(date -u +%FT%TZ) $*" >> "$LOG" 2>/dev/null || true; }
 
-say() {
-  MSG="$1" python3 <<'PY'
+# Everything said is collected and printed once on exit: the hook's stdout is
+# one JSON document, and the hook sync below can speak before the pull does.
+SAID=""
+say() { SAID="${SAID:+$SAID
+
+}$1"; }
+flush() {
+  [ -n "$SAID" ] || return 0
+  MSG="$SAID" python3 -I <<'PY'
 import json, os
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
       "additionalContext": os.environ.get("MSG", "")}}))
 PY
 }
+type hook_unbuffer >/dev/null 2>&1 && hook_unbuffer  # stderr goes straight to the host from here on
+trap flush EXIT
 
 # ── Which repo ────────────────────────────────────────────────────────────────
 # Resolved exactly as kit-autopush resolves it, and for the same reason: an
@@ -65,6 +74,135 @@ fi
 [ -n "$REPO" ] || exit 0
 [ -d "$REPO/.git" ] || exit 0
 cd "$REPO" || exit 0
+
+# ── PATH tools run from a clean runtime of origin/main ────────────────────────
+# ~/.local/bin used to link into this checkout's working tree, which is where
+# every tab keeps its uncommitted edits, so the tools on PATH were whatever the
+# dirty tree held. On 2026-10-10 the installed `chewbacca` refused writes main
+# had allowed for hours because this checkout could not fast-forward. Now the
+# links go through ~/.chewbacca/kit/current, a locked worktree of origin/main
+# that nothing edits, and this rebuilds it: fetch (at most every
+# CHEWBACCA_RUNTIME_FETCH_AGE seconds), new snapshot, atomic swap, then link
+# any new tool and move any link still pointing in here. A launchd job runs the
+# same update every 15 minutes between sessions. The script comes from the
+# runtime when there is one, else from the ref, never from this working tree.
+RUNTIME_SHA=""
+_kr="$(mktemp -d 2>/dev/null)"
+if [ -n "$_kr" ]; then
+  _krs="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/kit_runtime.py"
+  if [ -f "$_krs" ]; then
+    cp "$_krs" "$_kr/kit_runtime.py" 2>/dev/null
+  else
+    git -c core.fsmonitor=false show origin/main:tools/kit_runtime.py > "$_kr/kit_runtime.py" 2>/dev/null || rm -f "$_kr/kit_runtime.py"
+  fi
+  if [ -s "$_kr/kit_runtime.py" ]; then
+    KR_OUT="$(python3 -I "$_kr/kit_runtime.py" update --repo "$REPO" --fetch \
+              --max-age "${CHEWBACCA_RUNTIME_FETCH_AGE:-300}" \
+              --link-bin "${CHEWBACCA_BIN_DIR:-$HOME/.local/bin}" --json 2>&1)"
+    note "kit-runtime: $(printf '%s' "$KR_OUT" | tr '\n' ' ')"
+    RUNTIME_SHA="$(printf '%s' "$KR_OUT" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print("" if d.get("error") else d.get("sha") or "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+    case "$KR_OUT" in
+      *'"result": "updated"'*) say "PATH tools now run from origin/main ${RUNTIME_SHA:0:12} (runtime ~/.chewbacca/kit/current)." ;;
+    esac
+  fi
+  rm -rf "$_kr"
+fi
+
+# ── Installed hooks follow origin/main ────────────────────────────────────────
+# Same commit as the runtime when there is one, so hooks and tools never come
+# from two different versions of the kit.
+# Read from the ref, not the working tree, so this works on the dirty shared
+# checkout the pull below refuses. On 2026-10-09 17 live hooks were stale and
+# 2 missing hours after a hand sync. Every overwritten copy is backed up under
+# ~/.chewbacca/runtime/hooks-backup-*. Runs before the throttle: it is local
+# and takes well under a second.
+# The script comes from the ref too: the shared checkout is usually dirty and
+# behind, so its working tree may not have it yet.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/hooks_sync.py 2>/dev/null; then
+  SYNC="$(git -c core.fsmonitor=false show origin/main:tools/hooks_sync.py \
+          | python3 -I - apply --include-local --repo "$REPO" --ref "${RUNTIME_SHA:-origin/main}" \
+            --live "${CHEWBACCA_HOOKS_DIR:-$HOME/.claude/hooks}" 2>&1)"
+  note "hooks-sync: $(printf '%s' "$SYNC" | tr '\n' ' ')"
+  case "$SYNC" in
+    *updated*) say "Installed hooks were behind origin/main and were updated in place (backups in ~/.chewbacca/runtime):
+$(printf '%s' "$SYNC" | grep updated)" ;;
+  esac
+fi
+
+# ── New tools reach PATH ──────────────────────────────────────────────────────
+# A symlink follows the repo, so fixes to linked tools land on pull, but a NEW
+# tool has no link until setup reruns, and nobody reruns it. On 2026-10-10 26
+# tools setup.sh links were "command not found" on this Mac, text-command among
+# them (Kyber runs it from ~/.local/bin). This only adds missing links; it never
+# replaces a file. Same ref-not-tree reasoning as the hook sync above.
+# Only when there is no runtime: the runtime update above already linked.
+if [ -z "$RUNTIME_SHA" ] && git -c core.fsmonitor=false cat-file -e origin/main:tools/tools_link.py 2>/dev/null; then
+  _tl="$(mktemp -d 2>/dev/null)"
+  if [ -n "$_tl" ] && git -c core.fsmonitor=false show origin/main:tools/tools_link.py > "$_tl/tools_link.py" 2>/dev/null; then
+    LINKED="$(git -c core.fsmonitor=false show origin/main:setup.sh 2>/dev/null \
+              | python3 -I "$_tl/tools_link.py" apply --repo "$REPO" --setup - \
+                --live "${CHEWBACCA_BIN_DIR:-$HOME/.local/bin}" 2>&1)"
+    note "tools-link: $LINKED"
+    case "$LINKED" in
+      linked\ [1-9]*) say "New kit tools were not on PATH and are now: ${LINKED#linked }" ;;
+    esac
+  fi
+  [ -n "$_tl" ] && rm -rf "$_tl"
+fi
+
+# ── Retired instructions in the installed CLAUDE.md ──────────────────────────
+# The managed block only refreshes when setup reruns, so a rule removed from
+# main kept firing on every installed Mac. The course AI-policy gate was the
+# first (2026-10-11). Local, idempotent, from the ref like the syncs above.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/claude_md_scrub.py 2>/dev/null; then
+  _cs="$(mktemp -d 2>/dev/null)"
+  if [ -n "$_cs" ] && git -c core.fsmonitor=false show origin/main:tools/claude_md_scrub.py > "$_cs/claude_md_scrub.py" 2>/dev/null; then
+    note "claude-md-scrub: $(python3 -I "$_cs/claude_md_scrub.py" "${CHEWBACCA_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}" 2>&1)"
+  fi
+  [ -n "$_cs" ] && rm -rf "$_cs"
+fi
+
+# ── Merge drivers ─────────────────────────────────────────────────────────────
+# SHA256SUMS.txt and README's counts block merge through drivers named in
+# .gitattributes (tools/merge_regen.py). Git config is never cloned, so a
+# checkout set up before the drivers existed would fall back to conflicting
+# on both, which is what every tab hit on 2026-10-09. Local, idempotent, and
+# from the ref like hooks_sync above, so it works on a dirty checkout.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/merge_regen.py 2>/dev/null &&
+   [ -f "$REPO/tools/merge_regen.py" ]; then
+  python3 -I "$REPO/tools/merge_regen.py" install --repo "$REPO" >/dev/null 2>&1 ||
+    note "merge drivers: install failed"
+fi
+
+# ── Compact team index ────────────────────────────────────────────────────────
+# Teammates import ~/.chewbacca/team-memory-index.md, a compact copy of
+# team/memory/MEMORY.md (tools/team_index.py), instead of the 11,636-token
+# full index. Rebuilt here from this checkout so a line another tab added
+# shows up by the next session. Only where setup already wrote one: a
+# stranger's install never imports team memory, so it never gets the file.
+_ti_dst="${CHEWBACCA_HOME:-$HOME/.chewbacca}/team-memory-index.md"
+_ti_tool="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/team_index.py"
+[ -f "$_ti_tool" ] || _ti_tool="$REPO/tools/team_index.py"
+if [ -f "$_ti_dst" ] && [ -f "$_ti_tool" ] && [ -f "$REPO/team/memory/MEMORY.md" ]; then
+  python3 -I "$_ti_tool" write --src "$REPO/team/memory/MEMORY.md" --dst "$_ti_dst" >/dev/null 2>&1 ||
+    note "team index: rebuild failed"
+fi
+# Recall mode (reengineer-flat-plan step 14): when tools/recall_gate.py's last
+# sealed check passed, the team index becomes a stub and the host stops loading
+# memory/MEMORY.md; otherwise both load whole. Reads one stamp, writes only
+# what it owns, and changes nothing while the gate holds its last answer.
+_rg_tool="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/recall_gate.py"
+[ -f "$_rg_tool" ] || _rg_tool="$REPO/tools/recall_gate.py"
+if [ -f "$_ti_dst" ] && [ -f "$_rg_tool" ]; then
+  python3 -I "$_rg_tool" apply --src "$REPO/team/memory/MEMORY.md" >/dev/null 2>&1 || note "recall gate: apply failed"
+fi
 
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.

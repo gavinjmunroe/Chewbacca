@@ -674,7 +674,7 @@ function linkedinAudit(m, flags = {}) {
   say();
 }
 
-// The handoff to Clay. Karthik's shape, so the same payload that proves the
+// The handoff to Clay. amber-id's shape, so the same payload that proves the
 // workbook works is the one the API takes later without a rewrite.
 function linkedinClay(m, flags) {
   const limit = Number(flags.limit || 5);

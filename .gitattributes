@@ -1,0 +1,11 @@
+# Generated files merge through drivers instead of conflicting. On 2026-10-09
+# about ten tabs pushed main and nearly every merge stopped on these two.
+# The drivers are registered by setup.sh and the kit-autopull session hook;
+# see tools/merge_regen.py. An unregistered driver falls back to git's
+# default text merge.
+SHA256SUMS.txt merge=chewbacca-sums
+README.md merge=chewbacca-readme
+# Memory indexes are one line per file, appended by many tabs. Two tabs that
+# each add a line at the end conflicted on every rebase on 2026-10-10; union
+# keeps both lines (ledger d72fce61).
+team/memory/MEMORY.md merge=union

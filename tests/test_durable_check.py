@@ -3,8 +3,15 @@
 
 from __future__ import annotations
 
+import os
+import tempfile as _tempfile
+
+# Never the real ledger: durable-check appends every decision to it.
+os.environ["CHEWBACCA_LESSONS_DIR"] = _tempfile.mkdtemp(prefix="durable-lessons-")
+
 import importlib.machinery
 import importlib.util
+import json
 import sys
 import subprocess
 import tempfile
@@ -45,6 +52,16 @@ CORRECTIONS = [
     "Can you fix chewbacca?",
     "No, that's not what I asked for.",
     "Stop asking me to run commands manually.",
+    # 2026-10-11: his real corrections the old detector missed (14 of 141).
+    "Bro we hv NALANA never forget retard fix chewbs",
+    "Bro never tell me to do smth you can do fix chewb",
+    "That doesn't sound like me bruv",
+    "Wtf taking so long?????",
+    "Why ru repeating yourself again???",
+    "Wait NOTHING on chewb should ever be read only that is stupid",
+    "bro what did I say ALWAYS CLEAN UP DOMAIN NAME",
+    "Bro do it for me",
+    "Always push to main.",
 ]
 
 # Original ordinary requests plus synthetic status and diagnostic regressions.
@@ -127,6 +144,66 @@ def test_writes_before_the_correction_do_not_count():
         log = log_with(tmp, "s1", ["/Users/x/chewbacca/skills/a/SKILL.md"], ts=old)
         refuse, _ = d.check("Bro wtf", "s1", since=time.time() - 60, log=log)
         assert refuse, "a write from an hour before the correction must not count"
+
+
+def test_prose_alone_is_refused_and_code_or_a_reason_is_not():
+    """2026-10-11: a skill or memory edit is remembering, not enforcing."""
+    d = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        log = log_with(tmp, "s1", ["/Users/x/code/chewbacca/skills/a/SKILL.md",
+                                   "/Users/x/second-brain/memory/feedback_x.md"])
+        refuse, why = d.check("Bro do it for me", "s1", log=log, why_log=Path(tmp) / "none.jsonl")
+        assert refuse and "prose" in why.lower(), why
+        why_log = Path(tmp) / "why.jsonl"
+        why_log.write_text(json.dumps({"t": time.time(), "session": "s1", "reason": "taste, no rule"}) + "\n")
+        refuse, _ = d.check("Bro do it for me", "s1", log=log, why_log=why_log)
+        assert not refuse, "a recorded reason from this session must satisfy it"
+        other = Path(tmp) / "other.jsonl"
+        other.write_text(json.dumps({"t": time.time(), "session": "s2", "reason": "x"}) + "\n")
+        refuse, _ = d.check("Bro do it for me", "s1", log=log, why_log=other)
+        assert refuse, "another session's reason must not count"
+        log = log_with(tmp, "s1", ["/Users/x/code/chewbacca/tests/test_new.py"])
+        refuse, _ = d.check("Bro do it for me", "s1", log=log, why_log=Path(tmp) / "none.jsonl")
+        assert not refuse, "a test write is enforcement"
+
+
+def test_reads_the_prompt_from_a_claude_transcript():
+    """Claude Code's Stop payload has no user_message; the hook exited 0 on all
+    23 runs logged 2026-10-11. The transcript has the prompt and its time."""
+    d = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp) / "t.jsonl"
+        rows = [
+            {"type": "user", "message": {"content": "add a toggle"}, "timestamp": "2026-10-11T10:00:00Z"},
+            {"type": "user", "message": {"content": "Bro fix chewbs"}, "timestamp": "2026-10-11T10:05:00Z"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "on it"}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "content": "x"}]}},
+            {"type": "user", "message": {"content": "<task-notification>done</task-notification>"}},
+        ]
+        t.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        text, at = d.last_prompt(str(t))
+        assert text == "Bro fix chewbs", text
+        assert abs(at - 1791713100) < 2, at
+
+
+def test_guard_refuses_a_claude_shaped_stop_once_and_records_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp) / "t.jsonl"
+        t.write_text(json.dumps({"type": "user", "message": {"content": "Bro fix chewbs"},
+                                 "timestamp": "2026-10-11T10:05:00Z"}) + "\n")
+        env = dict(os.environ, CHEWBACCA_WRITE_LOG=str(Path(tmp) / "w.tsv"),
+                   CHEWBACCA_LESSONS_DIR=str(Path(tmp) / "lessons"), CHEWBACCA_LOG_DIR=str(Path(tmp) / "logs"),
+                   TMPDIR=tmp)
+        guard = ROOT / ".claude/hooks/durable-guard.sh"
+        first = subprocess.run(["bash", str(guard)], text=True, capture_output=True, env=env, input=json.dumps(
+            {"hook_event_name": "Stop", "session_id": "s9", "transcript_path": str(t), "stop_hook_active": False}))
+        assert first.returncode == 2, (first.returncode, first.stderr)
+        assert "chewbacca lessons why" in first.stderr
+        again = subprocess.run(["bash", str(guard)], text=True, capture_output=True, env=env, input=json.dumps(
+            {"hook_event_name": "Stop", "session_id": "s9", "transcript_path": str(t), "stop_hook_active": True}))
+        assert again.returncode == 0, "refuses at most once per prompt"
+        rows = [json.loads(x) for x in (Path(tmp) / "lessons/corrections.jsonl").read_text().splitlines()]
+        assert [r["outcome"] for r in rows] == ["none", "none"], rows
 
 
 def test_missing_log_is_safe():

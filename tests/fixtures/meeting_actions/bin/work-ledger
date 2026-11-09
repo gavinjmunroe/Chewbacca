@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""This checkout's own work ledger behind a logging shim, so the test reads
+back through the real code; CHEWBACCA_HOME points it at a temp database."""
+import json
+import os
+import runpy
+import sys
+from pathlib import Path
+
+with (Path(os.environ["FAKE_STATE"]) / "calls.jsonl").open("a") as fh:
+    fh.write(json.dumps(["work-ledger"] + sys.argv[1:]) + "\n")
+sys.argv[0] = "work_ledger.py"
+runpy.run_path(str(Path(__file__).resolve().parents[4] / "tools" / "work_ledger.py"), run_name="__main__")

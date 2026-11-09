@@ -1,7 +1,8 @@
 #!/usr/bin/env -S uv run --script --quiet
 # /// script
 # requires-python = ">=3.10,<3.13"
-# dependencies = ["librosa", "numpy<2.4", "pillow", "opencv-python-headless"]
+# dependencies = ["librosa", "numpy<2.4", "pillow", "opencv-python-headless",
+#                 "beat-this", "torch", "soxr", "einops", "rotary-embedding-torch"]
 # ///
 """Cut footage to a song in a measured style, then measure the result.
 
@@ -23,8 +24,11 @@ the shot should carry, measured as optical flow across every clip, so calm
 stretches of the song get calm footage and the drop gets the violent stuff.
 Footage is never reused and never taken from a dark or soft stretch.
 
-Writes the video, NAME.edl.json (every slot: source, in point, speed, flash)
-and then runs edit-dna on the result, printing how its numbers compare with
+Beats and bar starts come from Beat This, whose weights (81 MB) download on
+the first run; without them it falls back to librosa and says so.
+
+Writes the video, NAME.edl.json (every slot: source, in point, speed, flash;
+the tracker and the bar starts) and then runs edit-dna on the result, printing how its numbers compare with
 the reference it was built from. The song must be a file; to cut to a sound
 you will add in the Instagram app, fetch any reel using it with
 `edit-dna URL` and use its audio.
@@ -38,6 +42,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+# Stress test, 2026-11-05: importing these took past 15 s just to print --help.
+if __name__ == "__main__" and ("-h" in sys.argv or "--help" in sys.argv):
+    print((__doc__ or "edit-cut: cut footage to a song in a measured style.").strip())
+    sys.exit(0)
 
 import cv2
 import librosa
@@ -142,6 +151,32 @@ def scan(path):
             "luma": g.reshape(n, -1).mean(1) / 255}
 
 
+def track(y, sr, env):
+    """Beats and bar starts, as seconds, and which tracker found them.
+
+    Beat This (CPJKU, MIT) first. On nine reference edits the editors' cuts
+    hit its beats 1.72 times as often as chance, against 1.21 for librosa
+    moved back to the attack, and sat a median 6 ms from them where
+    librosa's moved beats wandered from 24 ms early to 50 ms late
+    (research/edits/BEATS.md, 2026-09-27). Its 81 MB of weights download
+    from cloud.cp.jku.at on first use; without them, librosa and no bar
+    starts.
+    """
+    try:
+        from beat_this.inference import Audio2Beats
+        beats, down = Audio2Beats(checkpoint_path="final0", device="cpu", dbn=False)(y, sr)
+        return np.asarray(beats, float), np.asarray(down, float), "beat_this final0"
+    except (ImportError, OSError, RuntimeError) as exc:
+        print(f"edit-cut: Beat This unavailable ({exc}), tracking with librosa", file=sys.stderr)
+    bpm = float(np.atleast_1d(librosa.feature.tempo(y=y, sr=sr))[0])
+    _, bf = librosa.beat.beat_track(y=y, sr=sr, bpm=bpm, trim=False)
+    # A tracked beat is the peak of its onset; a cut belongs on the attack. On
+    # a 120 BPM click track the peaks sat 53 ms after the clicks, and moved
+    # back to the preceding low in onset strength they sat 9 ms before.
+    bf = librosa.onset.onset_backtrack(bf, env)
+    return librosa.frames_to_time(bf, sr=sr), np.array([]), "librosa"
+
+
 def music(path, start, seconds):
     sr = 22050
     # Tempo comes from up to TEMPO_CONTEXT seconds of the song, not just the
@@ -154,16 +189,12 @@ def music(path, start, seconds):
     y = y_all[: int((seconds + 2) * sr)]
     if len(y) < sr * 4:
         sys.exit("edit-cut: the song is under 4 s from --song-start")
-    bpm = float(np.atleast_1d(librosa.feature.tempo(y=y_all, sr=sr))[0])
-    _, bf = librosa.beat.beat_track(y=y_all, sr=sr, bpm=bpm, trim=False)
-    # A tracked beat is the peak of its onset; a cut belongs on the attack. On
-    # a 120 BPM click track the peaks sat 53 ms after the clicks, and moved
-    # back to the preceding low in onset strength they sat 9 ms before.
     env = librosa.onset.onset_strength(y=y_all, sr=sr)
     env_t = librosa.times_like(env, sr=sr)
-    bf = librosa.onset.onset_backtrack(bf, env)
-    beats = librosa.frames_to_time(bf, sr=sr)
+    beats, downbeats, tracker = track(y_all, sr, env)
+    bpm = 60 / float(np.median(np.diff(beats))) if len(beats) > 1 else 0.0
     beats = beats[beats <= seconds + 1]
+    downbeats = downbeats[downbeats <= seconds]
     if len(beats) < 8:
         sys.exit("edit-cut: no steady beat found; pick a song with a pulse or a different --song-start")
     period = float(np.median(np.diff(beats)))
@@ -200,7 +231,8 @@ def music(path, start, seconds):
         cand = grid[[int(np.argmin(np.abs(grid - rise_end)))]]
     hits = [env[(env_t >= g - 0.02) & (env_t <= g + 0.08)].max(initial=0.0) for g in cand]
     drop = float(cand[int(np.argmax(np.array(hits) >= 0.8 * max(hits)))])
-    return {"grid": grid, "beats": beats, "period": period, "bpm": bpm, "drop": drop,
+    return {"grid": grid, "beats": beats, "downbeats": downbeats, "tracker": tracker,
+            "period": period, "bpm": bpm, "drop": drop,
             "level": lambda x: float(np.interp(x, t, level))}
 
 
@@ -419,6 +451,7 @@ def main():
             s["flash_source"] = clips[s.pop("flash_clip")]["path"]
     edl = {"style": args.style, "song": args.song, "song_start": args.song_start, "seconds": args.seconds,
            "drop": round(m["drop"], 3), "beat": round(m["period"], 4), "seed": args.seed,
+           "tracker": m["tracker"], "downbeats": [round(float(x), 3) for x in m["downbeats"]],
            "slots": [{**{k: v for k, v in s.items() if k != "clip"},
                       **({"source": clips[s["clip"]]["path"]} if "clip" in s else {})} for s in slots]}
     for s in edl["slots"]:

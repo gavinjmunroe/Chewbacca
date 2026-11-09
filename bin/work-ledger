@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Manage shared private task commitments from a checkout or installation."""
-from pathlib import Path
-import runpy
+import sys
+
+# python puts this script's folder first on sys.path, so a json.py dropped into
+# bin/ would run on the next import. The launch guard lets work-ledger near
+# Clay (2026-10-28 review), so bin/ is never an import root.
+del sys.path[0]
+
+from pathlib import Path  # noqa: E402
+import runpy  # noqa: E402
 
 runpy.run_path(str(Path(__file__).resolve().parent.parent / 'tools' / 'work_ledger.py'),
               run_name='__main__')

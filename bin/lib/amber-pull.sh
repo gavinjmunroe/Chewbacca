@@ -1,7 +1,7 @@
 #!/bin/bash
 # What the Amber authors shipped since you last looked.
 #
-# Chewbacca's people layer is a port of Amber's, with their permission, so their
+# Chewbacca's people layer started from Amber's (copied in at amber/), so their
 # architecture decisions are upstream of ours. This tells you what moved without
 # you having to remember to go look.
 #

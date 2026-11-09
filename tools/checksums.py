@@ -22,7 +22,7 @@ OUT = REPO / "SHA256SUMS.txt"
 # and a checksum file that churns on every doc edit is one people stop reading.
 # bin/lib/people/* is named on its own because a glob does not recurse, and
 # bin/people is a dispatcher that runs nothing without the modules there.
-PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "tools/*.py", ".claude/hooks/*.sh",
+PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "bin/lib/surfaces/*", "bin/jev-patches/*", "tools/*.py", ".claude/hooks/*.sh",
             "config/runtimes/*.json")
 
 

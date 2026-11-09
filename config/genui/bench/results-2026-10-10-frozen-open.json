@@ -1,0 +1,1203 @@
+{
+  "summary": {
+    "requests": 20,
+    "valid": 20,
+    "valid_first_try": 20,
+    "fallbacks": 0,
+    "model_calls": 2,
+    "no_model_under_1s": 18,
+    "no_source_answers": 2,
+    "tiers": {
+      "0": {
+        "answered": 1,
+        "valid": 1,
+        "complete_ms": {
+          "median": 64.2,
+          "p90": 64.2,
+          "max": 64.2
+        }
+      },
+      "1": {
+        "answered": 17,
+        "valid": 17,
+        "complete_ms": {
+          "median": 226.7,
+          "p90": 466.1,
+          "max": 562.6
+        },
+        "jev_ms": {
+          "median": 130.1,
+          "p90": 362.6,
+          "max": 509.8
+        }
+      },
+      "2": {
+        "answered": 2,
+        "valid": 2,
+        "complete_ms": {
+          "median": 13816.2,
+          "p90": 18183.4,
+          "max": 18183.4
+        },
+        "jev_ms": {
+          "median": 110.8,
+          "p90": 142.3,
+          "max": 142.3
+        }
+      }
+    }
+  },
+  "rows": [
+    {
+      "n": 1,
+      "request": "compare my three classes' grades",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.6,
+      "first_component_ms": 562.6,
+      "model_done_ms": 562.6,
+      "complete_ms": 562.6,
+      "queries": [
+        "grades"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"GRADES\"",
+        "> s tb",
+        "c tb Table caption=\"Standing by course\" columns=[{\"field\":\"course\",\"label\":\"Course\"},{\"field\":\"standing\",\"label\":\"Standing\"},{\"field\":\"graded\",\"label\":\"Graded\"}] rows=@/q/grades/rows"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 509.8,
+      "choice": {
+        "archetype": "compare",
+        "archetype_p": 1.0,
+        "source": "grades",
+        "source_p": 1.0,
+        "head_start": "grades"
+      },
+      "why": {
+        "plan": {
+          "key": "grades",
+          "companions": [],
+          "archetype": "compare"
+        },
+        "slots": {},
+        "features": {
+          "n": 5,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": true
+        },
+        "picked": [
+          "Table: rows with several fields and no magnitude to rank"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 2,
+      "request": "who have I not texted back this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 372.7,
+      "model_done_ms": 372.7,
+      "complete_ms": 372.7,
+      "queries": [
+        "unreplied"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"WAITING ON YOU\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Threads\" value=@/q/unreplied/count",
+        "c ev Events caption=\"They wrote last\" items=@/q/unreplied/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 99.7,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 1.0,
+        "source": "unreplied",
+        "source_p": 0.75,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "unreplied",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {
+          "days": 7,
+          "days_text": "this week"
+        },
+        "features": {
+          "n": 7,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 7 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 3,
+      "request": "show my client's outbound campaign numbers",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 105.3,
+      "model_done_ms": 105.3,
+      "complete_ms": 105.3,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: campaign needs a name and the request has none"
+      ],
+      "jev_ms": 104.3,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 0.69,
+        "source": "campaign",
+        "source_p": 1.0,
+        "head_start": "campaign"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Which campaign? Say the client's name.",
+      "gate": {
+        "ok": false,
+        "by": "code",
+        "why": "campaign needs a name and the request has none",
+        "other": "campaign",
+        "say": "Which campaign? Say the client's name.",
+        "path": "ask"
+      },
+      "answer": {}
+    },
+    {
+      "n": 4,
+      "request": "plan my Tuesday",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.1,
+      "first_component_ms": 398.8,
+      "model_done_ms": 398.8,
+      "complete_ms": 398.8,
+      "queries": [
+        "day:tuesday"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TUESDAY\"",
+        "> s ev",
+        "c ev Events caption=\"Tuesday: classes, deadlines, events\" items=@/q/day:tuesday/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 100.1,
+      "choice": {
+        "archetype": "plan",
+        "archetype_p": 1.0,
+        "source": "day",
+        "source_p": 0.96,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "day:tuesday",
+          "companions": [],
+          "archetype": "plan"
+        },
+        "slots": {
+          "day": "tuesday",
+          "day_text": "tuesday"
+        },
+        "features": {
+          "n": 1,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 1 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 5,
+      "request": "what's due before my midterm",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 138.0,
+      "model_done_ms": 138.0,
+      "complete_ms": 138.0,
+      "queries": [
+        "before-exam"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"BEFORE THE EXAM\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Due before it\" value=@/q/before-exam/count",
+        "c ev Events caption=\"Next exam first, then what lands before it\" items=@/q/before-exam/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 136.7,
+      "choice": {
+        "archetype": "before-after",
+        "archetype_p": 0.9,
+        "source": "before-exam",
+        "source_p": 0.98,
+        "head_start": "before-exam"
+      },
+      "why": {
+        "plan": {
+          "key": "before-exam",
+          "companions": [],
+          "archetype": "before-after"
+        },
+        "slots": {},
+        "features": {
+          "n": 11,
+          "groups": 3,
+          "spread": 1.67,
+          "distinct": 3,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 11 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 6,
+      "request": "what's due this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 209.8,
+      "model_done_ms": 209.8,
+      "complete_ms": 209.8,
+      "queries": [
+        "due:7"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"DUE IN 7 DAYS\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Due\" value=@/q/due:7/count",
+        "c ev Events caption=\"Next 7 days, overdue first\" items=@/q/due:7/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 135.1,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.94,
+        "source": "due",
+        "source_p": 0.98,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "due:7",
+          "companions": [
+            "overdue"
+          ],
+          "archetype": "timeline"
+        },
+        "slots": {
+          "days": 7,
+          "days_text": "this week"
+        },
+        "features": {
+          "n": 8,
+          "groups": 3,
+          "spread": 1.5,
+          "distinct": 2,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 8 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 7,
+      "request": "am I behind on anything",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 0.5,
+      "model_done_ms": 0.5,
+      "complete_ms": 64.2,
+      "queries": [
+        "overdue"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"OVERDUE\"",
+        "> s wm we",
+        "c wm Metric label=\"Past due\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c we Events caption=\"Still marked todo\" items=@/q/overdue/events"
+      ],
+      "display_problems": [],
+      "tier": 0,
+      "tier_notes": [],
+      "jev_ms": null,
+      "choice": {
+        "entry": "overdue",
+        "kind": "exemplar",
+        "score": 1.0
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 8,
+      "request": "how busy is my week, day by day",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 152.6,
+      "model_done_ms": 152.7,
+      "complete_ms": 152.7,
+      "queries": [
+        "week:7"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"NEXT 7 DAYS\"",
+        "> s m0 b",
+        "c m0 Metric label=\"Total\" value=@/q/week:7/count",
+        "c b Bars caption=\"By day\" rows=@/q/week:7/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 105.9,
+      "choice": {
+        "archetype": "breakdown",
+        "archetype_p": 0.83,
+        "source": "week",
+        "source_p": 0.88,
+        "head_start": "week"
+      },
+      "why": {
+        "plan": {
+          "key": "week:7",
+          "companions": [],
+          "archetype": "breakdown"
+        },
+        "slots": {
+          "days": 7,
+          "days_text": "this week"
+        },
+        "features": {
+          "n": 14,
+          "groups": 5,
+          "spread": 6.0,
+          "distinct": 3,
+          "series": true,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Bars: 5 ranked magnitudes"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 9,
+      "request": "who should I reach out to",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 279.2,
+      "model_done_ms": 279.2,
+      "complete_ms": 279.2,
+      "queries": [
+        "reconnect"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"REACH OUT\"",
+        "> s b",
+        "c b Bars caption=\"Days since you last talked\" rows=@/q/reconnect/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 104.8,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.6,
+        "source": "reconnect",
+        "source_p": 0.99,
+        "head_start": "reconnect"
+      },
+      "why": {
+        "plan": {
+          "key": "reconnect",
+          "companions": [],
+          "archetype": "entity"
+        },
+        "slots": {},
+        "features": {
+          "n": 9,
+          "groups": 9,
+          "spread": 1.17,
+          "distinct": 9,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": true
+        },
+        "picked": [
+          "Bars: ranked magnitudes"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 10,
+      "request": "what promises have I made to people",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 143.5,
+      "model_done_ms": 143.6,
+      "complete_ms": 143.6,
+      "queries": [
+        "tasks"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"PROMISES\"",
+        "> s tb",
+        "c tb Table caption=\"Open promises\" columns=[{\"field\":\"task\",\"label\":\"Task\"},{\"field\":\"who\",\"label\":\"Who\"},{\"field\":\"status\",\"label\":\"Status\"}] rows=@/q/tasks/rows"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 142.4,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 0.98,
+        "source": "tasks",
+        "source_p": 1.0,
+        "head_start": "tasks"
+      },
+      "why": {
+        "plan": {
+          "key": "tasks",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {},
+        "features": {
+          "n": 2,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Table: 3 fields that vary across rows"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 11,
+      "request": "when are my exams",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 226.6,
+      "model_done_ms": 226.7,
+      "complete_ms": 226.7,
+      "queries": [
+        "exams:90"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"EXAMS IN 90 DAYS\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Exams\" value=@/q/exams:90/count",
+        "c ev Events caption=\"Exams in the next 90 days\" items=@/q/exams:90/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 130.1,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.96,
+        "source": "exams",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "exams:90",
+          "companions": [],
+          "archetype": "timeline"
+        },
+        "slots": {},
+        "features": {
+          "n": 8,
+          "groups": 3,
+          "spread": 2.0,
+          "distinct": 2,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 8 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 12,
+      "request": "what do I have tomorrow",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 188.6,
+      "model_done_ms": 188.6,
+      "complete_ms": 188.7,
+      "queries": [
+        "day:tomorrow"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TOMORROW\"",
+        "> s st",
+        "c st Status message=@/q/day:tomorrow/note level=info"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 144.6,
+      "choice": {
+        "archetype": "plan",
+        "archetype_p": 0.68,
+        "source": "day",
+        "source_p": 0.94,
+        "head_start": "day"
+      },
+      "why": {
+        "plan": {
+          "key": "day:tomorrow",
+          "companions": [],
+          "archetype": "plan"
+        },
+        "slots": {
+          "day": "tomorrow",
+          "day_text": "tomorrow"
+        },
+        "features": {
+          "n": 0,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Status: nothing came back; the note says why"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 13,
+      "request": "how does the HUD get data from a query onto the screen",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.1,
+      "first_component_ms": 15989.8,
+      "model_done_ms": 18183.3,
+      "complete_ms": 18183.4,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"QUERY TO SCREEN\"",
+        "> s d t",
+        "c d Diagram aspect=2.8 parts=[{\"t\":\"node\",\"x\":0.1,\"y\":0.5,\"w\":0.16,\"h\":0.3,\"label\":\"Query\"},{\"t\":\"arrow\",\"x\":0.18,\"y\":0.5,\"x2\":0.27,\"y2\":0.5},{\"t\":\"node\",\"x\":0.35,\"y\":0.5,\"w\":0.16,\"h\":0.3,\"label\":\"View\"},{\"t\":\"arrow\",\"x\":0.43,\"y\":0.5,\"x2\":0.52,\"y2\":0.5},{\"t\":\"node\",\"x\":0.6,\"y\":0.5,\"w\":0.16,\"h\":0.3,\"label\":\"Pointer\"},{\"t\":\"arrow\",\"x\":0.68,\"y\":0.5,\"x2\":0.77,\"y2\":0.5},{\"t\":\"node\",\"x\":0.87,\"y\":0.5,\"w\":0.18,\"h\":0.3,\"label\":\"Component\"}]",
+        "c t Text value=\"The panel holds only pointers like @/q/due/events; the display resolves each one and fills the bound prop.\" tone=muted"
+      ],
+      "display_problems": [],
+      "tier": 2,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 110.8,
+      "choice": {
+        "archetype": "connections",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 1,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 14,
+      "request": "show my BISC 101 deadlines",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 1.0,
+      "first_component_ms": 387.7,
+      "model_done_ms": 387.7,
+      "complete_ms": 387.7,
+      "queries": [
+        "course:BISC101"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"BISC 101\"",
+        "> s st",
+        "c st Status message=@/q/course:BISC101/note level=info"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 177.2,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.98,
+        "source": "course",
+        "source_p": 1.0,
+        "head_start": "course"
+      },
+      "why": {
+        "plan": {
+          "key": "course:BISC101",
+          "companions": [],
+          "archetype": "timeline"
+        },
+        "slots": {
+          "course": "BISC101",
+          "course_text": "bisc 101"
+        },
+        "features": {
+          "n": 0,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Status: nothing came back; the note says why"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 15,
+      "request": "what's on my calendar this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 451.8,
+      "model_done_ms": 451.9,
+      "complete_ms": 452.0,
+      "queries": [
+        "calendar:7"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"CALENDAR IN 7 DAYS\"",
+        "> s st",
+        "c st Status message=@/q/calendar:7/note level=warning"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 116.5,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.5,
+        "source": "calendar",
+        "source_p": 0.67,
+        "head_start": "week"
+      },
+      "why": {
+        "plan": {
+          "key": "calendar:7",
+          "companions": [],
+          "archetype": "timeline"
+        },
+        "slots": {
+          "days": 7,
+          "days_text": "this week"
+        },
+        "features": {
+          "n": null,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Status: the source returned no count"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 16,
+      "request": "how many things are due in the next two weeks, by class",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 1.0,
+      "first_component_ms": 202.7,
+      "model_done_ms": 202.8,
+      "complete_ms": 202.8,
+      "queries": [
+        "due:14"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"DUE IN 14 DAYS\"",
+        "> s m0 b",
+        "c m0 Metric label=\"Total\" value=@/q/due:14/count",
+        "c b Bars caption=\"By course\" rows=@/q/due:14/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 124.6,
+      "choice": {
+        "archetype": "breakdown",
+        "archetype_p": 0.91,
+        "source": "due",
+        "source_p": 0.84,
+        "head_start": "before-exam"
+      },
+      "why": {
+        "plan": {
+          "key": "due:14",
+          "companions": [],
+          "archetype": "breakdown"
+        },
+        "slots": {
+          "days": 14,
+          "days_text": "next two weeks"
+        },
+        "features": {
+          "n": 16,
+          "groups": 3,
+          "spread": 1.75,
+          "distinct": 3,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Bars: 3 ranked magnitudes"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 17,
+      "request": "what's the plan for today",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 363.8,
+      "model_done_ms": 363.8,
+      "complete_ms": 363.8,
+      "queries": [
+        "day:today"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TODAY\"",
+        "> s st",
+        "c st Status message=@/q/day:today/note level=info"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 362.6,
+      "choice": {
+        "archetype": "plan",
+        "archetype_p": 1.0,
+        "source": "day",
+        "source_p": 0.93,
+        "head_start": "day"
+      },
+      "why": {
+        "plan": {
+          "key": "day:today",
+          "companions": [],
+          "archetype": "plan"
+        },
+        "slots": {
+          "day": "today",
+          "day_text": "today"
+        },
+        "features": {
+          "n": 0,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Status: nothing came back; the note says why"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 18,
+      "request": "show me everything I owe anyone, school and people",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 466.1,
+      "model_done_ms": 466.1,
+      "complete_ms": 466.1,
+      "queries": [
+        "needs"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"NEEDS YOU\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Waiting\" value=@/q/needs/count",
+        "c ev Events caption=\"Blocked first, then due soon\" items=@/q/needs/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 112.9,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 0.79,
+        "source": "needs",
+        "source_p": 0.98,
+        "head_start": "needs"
+      },
+      "why": {
+        "plan": {
+          "key": "needs",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {},
+        "features": {
+          "n": 34,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 34 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 19,
+      "request": "which class has the most work coming up",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 134.4,
+      "model_done_ms": 134.4,
+      "complete_ms": 134.4,
+      "queries": [
+        "due:14"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"DUE IN 14 DAYS\"",
+        "> s b",
+        "c b Bars caption=\"By course\" rows=@/q/due:14/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 131.9,
+      "choice": {
+        "archetype": "compare",
+        "archetype_p": 0.9,
+        "source": "due",
+        "source_p": 0.65,
+        "head_start": "due"
+      },
+      "why": {
+        "plan": {
+          "key": "due:14",
+          "companions": [],
+          "archetype": "compare"
+        },
+        "slots": {},
+        "features": {
+          "n": 16,
+          "groups": 3,
+          "spread": 1.75,
+          "distinct": 3,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Bars: 3 ranked magnitudes"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {}
+    },
+    {
+      "n": 20,
+      "request": "give me a spot to jot a note about the Amber pitch",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 5658.1,
+      "model_done_ms": 7518.8,
+      "complete_ms": 13816.2,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"GIVE SPOT TO JOT\"",
+        "c q Text value=\"give me a spot to jot a note about the Amber pitch\" tone=muted",
+        "c a Text value=\"Jot it in ~/Notes/amber-pitch.md; I can't create files from here, so run: mkdir -p ~/Notes && open -e ~/Notes/amber-pitch.md after touching it.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 2,
+      "tier_notes": [
+        "tier 1: Jev unsure of the source: calendar at 0.44"
+      ],
+      "jev_ms": 142.3,
+      "choice": {
+        "archetype": "none",
+        "archetype_p": 0.41,
+        "source": "calendar",
+        "source_p": 0.44,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 1,
+      "no_source": true,
+      "say": "Jot it in ~/Notes/amber-pitch.md; I can't create files from here, so run: mkdir -p ~/Notes && open -e ~/Notes/amber-pitch.md after touching it.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "campaign:Amber: Jev: campaign answers it at 0.05",
+        "say": "Jot it in ~/Notes/amber-pitch.md; I can't create files from here, so run: mkdir -p ~/Notes && open -e ~/Notes/amber-pitch.md after touching it.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "Jot it in ~/Notes/amber-pitch.md; I can't create files from here, so run: mkdir -p ~/Notes && open -e ~/Notes/amber-pitch.md after touching it.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"GIVE SPOT TO JOT\"",
+          "c q Text value=\"give me a spot to jot a note about the Amber pitch\" tone=muted",
+          "c a Text value=\"Jot it in ~/Notes/amber-pitch.md; I can't create files from here, so run: mkdir -p ~/Notes && open -e ~/Notes/amber-pitch.md after touching it.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 6297.1,
+        "model_ms": 6296.8,
+        "first_draw_ms": 6297.0
+      }
+    }
+  ]
+}

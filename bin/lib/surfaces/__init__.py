@@ -66,6 +66,9 @@ class Result:
     preset: dict = field(default_factory=dict)
     # Re-read the sources now (a sent reply changes what is waiting).
     reingest: bool = False
+    # Draw the layout again: for a surface whose layout() depends on its own
+    # state, such as which tab is showing.
+    relayout: bool = False
 
 
 Runner = Callable[[list], "tuple[int, str, str]"]
@@ -244,6 +247,11 @@ class Provider:
 
     def __init__(self) -> None:
         self.actions: dict[str, Callable[[Context, object, dict], Result]] = {}
+        # Redraw from the current model without a fetch. The daemon sets it
+        # when the surface opens; a provider whose answer arrives on its own
+        # thread (a search) calls it so the answer shows as it lands, not at
+        # the next refresh.
+        self.poke: Callable[[], None] = lambda: None
 
     def p(self, key: str) -> str:
         """A pointer under this surface's own prefix. Pointers are namespaced
@@ -281,8 +289,9 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
     return empty
 
 
-KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
-         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps")
+KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
+         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
+         "doc", "setup", "realm", "outbound", "decisions", "live", "notifications")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -292,18 +301,32 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, decisions, engine, files, github, live, meetings, music, notes, notifications, oss, outbound, setup, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    if kind == "realm":
+        from . import realm_app  # noqa: PLC0415  Carlton's own interface, served by bin/realm-ui
+
+        return realm_app.RealmApp()
 
     if kind == "engine":
         return engine.EngineSurface(arg)
     if kind == "oss":
         return oss.Oss(arg)
+    if kind == "dash-notes":
+        import notes_surface  # noqa: PLC0415  bin/lib: one note by title, its dash lines, one appended
+
+        return notes_surface.DashNotes()
+    if kind == "doc":
+        import docs_surface  # noqa: PLC0415  bin/lib: one Google or local document, and an approved edit
+
+        return docs_surface.DocSurface()
     table = {
-        "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
+        "needs-you": walks.NeedsYou, "missing": walks.Missing, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
-        "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps,
+        "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps, "setup": setup.Setup,
+        "outbound": outbound.Outbound, "decisions": decisions.Decisions, "live": live.Live,
+        "notifications": notifications.Notifications,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -319,6 +342,8 @@ def registry() -> dict[str, Provider]:
 
 ALIASES = {
     "needs": "needs-you", "needsyou": "needs-you", "needs_you": "needs-you", "attention": "needs-you",
+    "miss": "missing", "missed": "missing", "what-am-i-missing": "missing", "slipping": "missing",
+    "notification": "notifications", "notifs": "notifications", "banners": "notifications",
     "todo": "tasks", "todos": "tasks", "task": "tasks", "lanes": "tasks",
     "day": "today", "calendar": "today", "agenda": "today", "schedule": "today",
     "texts": "conversations", "messages": "conversations", "imessage": "conversations", "mail": "conversations",
@@ -330,12 +355,19 @@ ALIASES = {
     "open-source": "oss", "opensource": "oss", "oss-apps": "oss", "engines": "oss",
     "changes": "code", "diff": "code", "diffs": "code", "repos": "code",
     "note": "notes", "apple-notes": "notes",
+    "docs": "doc", "document": "doc", "google-doc": "doc", "sheet": "doc", "spreadsheet": "doc", "docx": "doc",
     "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
     "granola": "meetings", "anarlog": "meetings", "meeting": "meetings", "calls": "meetings", "call": "meetings",
     "notes-from-meetings": "meetings", "meeting-notes": "meetings",
+    "on-this-call": "live", "live-call": "live", "this-call": "live", "copilot": "live", "meeting-copilot": "live",
     # VS Code was opened to talk to Claude; the code panel only reads diffs.
     "vscode": "agents", "vs-code": "agents", "claude": "agents", "sessions": "agents", "agent": "agents",
-    "agent-sessions": "agents", "realm": "agents",
+    "agent-sessions": "agents", "carlton": "realm", "realm-app": "realm",
+    "set-up": "setup", "onboarding": "setup", "onboard": "setup", "welcome": "setup",
+    "clay": "outbound", "campaign": "outbound", "campaigns": "outbound", "cold-email": "outbound",
+    "cold-emails": "outbound", "sequence": "outbound",
+    "decide": "decisions", "decision": "decisions", "only-you": "decisions", "my-calls": "decisions",
+    "decision-inbox": "decisions",
 }
 
 

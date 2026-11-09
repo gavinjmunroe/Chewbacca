@@ -1,0 +1,286 @@
+{
+ "about": "Third sealed set, written 2026-10-10 for open answers (the HUD always answers) and committed before any answer code. None repeats a request from requests.json, sealed-2026-10-10.json or sealed-2026-10-10b.json. `kind`: live (a fact that changes: weather, prices, scores, news, hours), knowledge (stable, the model knows it), local (a query on this Mac answers it), tricky (the two known gaps, a personal question nothing on this Mac holds, and a live word about a local subject). `accept` lists the paths that count as right: weather (Open-Meteo), web (glass search with sources), model (the HUD's model, no tools), panel (bound only to queries in `expect`), ask (a clarifying question for a query in `expect`), needs (one line naming the connection it would take). A reply of the form \"I don't have X on this Mac\" is a refusal on every row. The author also builds the answer path, so this is held out by commit order, not blind. Do not edit to improve a score; add a new sealed file instead.",
+ "sealed": "2026-10-10",
+ "requests": [
+  {
+   "request": "what's the weather in Chicago tomorrow",
+   "kind": "live",
+   "accept": [
+    "weather",
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "show me the weather this weekend",
+   "kind": "live",
+   "accept": [
+    "weather",
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's Apple stock at right now",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "pull up the price of Ethereum",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "who won the Lakers game last night",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's the latest news on the Fed",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "when does the USC bookstore close today",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's the exchange rate from dollars to euros",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "show me the Premier League standings",
+   "kind": "live",
+   "accept": [
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "is it going to rain in Seattle today",
+   "kind": "live",
+   "accept": [
+    "weather",
+    "web"
+   ],
+   "expect": []
+  },
+  {
+   "request": "how does photosynthesis work",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's the difference between mitosis and meiosis",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "who wrote The Brothers Karamazov",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "explain what a p-value is",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what is the capital of Australia",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "how many bones are in the human body",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what does the Krebs cycle produce",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "pull up the quadratic formula",
+   "kind": "knowledge",
+   "accept": [
+    "model"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's due for WRIT 150",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "course",
+    "due"
+   ]
+  },
+  {
+   "request": "show me what's overdue",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "overdue",
+    "due"
+   ]
+  },
+  {
+   "request": "what's on my calendar Thursday",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "day",
+    "calendar",
+    "week"
+   ]
+  },
+  {
+   "request": "how am I doing in my classes",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "grades"
+   ]
+  },
+  {
+   "request": "who do I need to text back",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "unreplied",
+    "needs",
+    "conversations"
+   ]
+  },
+  {
+   "request": "who haven't I talked to in a while",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "reconnect",
+    "conversations"
+   ]
+  },
+  {
+   "request": "what did I promise people",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "tasks",
+    "needs"
+   ]
+  },
+  {
+   "request": "how many days until my next exam",
+   "kind": "local",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "exams",
+    "before-exam"
+   ]
+  },
+  {
+   "request": "pull up that thing Karthik sent",
+   "kind": "tricky",
+   "accept": [
+    "panel",
+    "ask"
+   ],
+   "expect": [
+    "person",
+    "conversations",
+    "unreplied",
+    "needs"
+   ]
+  },
+  {
+   "request": "Zeutara bounce rate",
+   "kind": "tricky",
+   "accept": [
+    "panel"
+   ],
+   "expect": [
+    "campaign"
+   ]
+  },
+  {
+   "request": "how much did I spend on food this week",
+   "kind": "tricky",
+   "accept": [
+    "needs"
+   ],
+   "expect": []
+  },
+  {
+   "request": "what's the score in my BISC class",
+   "kind": "tricky",
+   "accept": [
+    "panel",
+    "ask"
+   ],
+   "expect": [
+    "grades",
+    "course"
+   ]
+  }
+ ]
+}

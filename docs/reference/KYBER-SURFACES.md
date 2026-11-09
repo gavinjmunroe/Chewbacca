@@ -1,0 +1,633 @@
+# Kyber surfaces
+
+Live panels on the HUD glass that stand in for the apps Caleb opens all day.
+Every source is ingested into one typed graph, and every panel is a walk over
+it, drawn by `bin/kyber-surfaces` with no model. The HUD's own wire format is
+[hud/CLAUDE.md](../../hud/CLAUDE.md); this page is what the surfaces daemon sends
+and accepts on top of it.
+
+## The pieces
+
+| File                                   | Job                                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bin/lib/osgraph.py`                   | The store (`~/.chewbacca/os-graph.sqlite`), the ontology with domain and range checks, and fusion through the people store                              |
+| `bin/lib/osgraph_ingest.py`            | One ingester per source: iMessage (chat.db, read only), Mail, coursework, Calendar, the backlog CSVs, people-store promises, Reminders, Claude sessions |
+| `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
+| `bin/lib/osgraph_missing.py`           | What am I missing: findings joining commitments to prerequisites and to each other, written back as edges                                                |
+| `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
+| `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
+| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                    |
+| `bin/lib/surfaces/agents.py`           | Claude sessions on the Realm engine: read, start, send, answer a permission, interrupt, fork                                                            |
+| `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
+| `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
+| `config/data/surfaces/apps.json`       | Each Mac app, what replaces it, and an honest status                                                                                                    |
+
+## Ontology
+
+Nodes: Person, Thread, Message, MailItem, Event, Assignment, Task, Project,
+Space, Track, File, Day.
+
+| Edge              | From                              | To                               |
+| ----------------- | --------------------------------- | -------------------------------- |
+| SENT_BY           | Message, MailItem                 | Person                           |
+| IN_THREAD         | Message                           | Thread                           |
+| PARTICIPANT       | Thread                            | Person                           |
+| AWAITS_REPLY_FROM | Thread, MailItem                  | Person                           |
+| DUE_ON            | Assignment, Task, Event           | Day                              |
+| OWED_BY, OWED_TO  | Task (and Assignment for OWED_BY) | Person                           |
+| BELONGS_TO        | anything but a Space              | Space                            |
+| ABOUT             | anything but a Project            | Project                          |
+| ATTENDS           | Person                            | Event                            |
+| MENTIONS          | anything                          | anything                         |
+| EXTRACTED_FROM    | Task                              | Message, MailItem, Event, Thread |
+| BLOCKED_BY        | Event, Assignment, Task           | Assignment, Task, Thread, MailItem |
+| CONFLICTS_WITH    | Event                             | Event                            |
+| OVERDUE_SINCE     | Assignment, Task, Thread, MailItem | Day                             |
+| LAPSED_ON         | Task                              | Day                              |
+| ANNOUNCES         | Message                           | Day                              |
+
+The last five are written only by the `missing` walk, one edge per finding,
+with `props.provenance` and a confidence (see "What am I missing" below).
+
+Every node and edge carries `source`, `observed_at` and `confidence`. An edge
+whose ends break this table fails its whole snapshot. `kyber-surfaces graph`
+re-checks every stored edge.
+
+**Fusion.** A phone or email becomes a Person only through the people store's
+`identities` table (phones meet on their last ten digits). A value two people
+both claim resolves to nobody. A first name never picks a person: a backlog
+owner written "Sagar" is its own unresolved node, shown beside the real Sagar
+as "unconfirmed as them", never merged.
+
+## What the daemon sends
+
+A surface is drawn once: `@ <name> at=<region> w=<width>`, its `c` lines,
+`>`, `r`, and a `d` for every bound pointer. After that a refresh sends
+`@ <name>` and only the `d` lines whose value changed. Pointers are namespaced
+`/<surface>/...` because a Field's `v` event names the pointer and not the
+surface. The needs-you surface also carries `d /badges/needsYou <n>`, and the
+daemon writes the same count to `~/.bob/badges.json` after every ingest.
+
+Placement is by column (left, middle, right), one surface per column first,
+because a tall panel anchored low covers one anchored mid in the same column.
+
+## What the daemon accepts
+
+| Line                                                                                     | Meaning                                                              |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `e action ks-pivot row=<node id> surface=<name>`                                         | A row's button: open that node's own walk (a person, a space, tasks) |
+| `e ks-act <surface>-go [surface=<name>]`                                                 | Go on the row picked in "Act on"                                     |
+| `e ks-open files-open`, `e ks-toggle music-toggle`, `e ks-next ...`, `e ks-previous ...` | The thin surfaces' controls                                          |
+| `e action ks-drill row=<owner/repo> surface=oss`                                         | Show one entry of the oss registry                                   |
+| `e action ks-engine row=<engine id> surface=oss`                                         | Open an installed engine's panel                                     |
+| `v /<surface>/<pointer> <json>`                                                          | A Field or Select changed                                            |
+| `x`                                                                                      | The person cleared the glass: everything is forgotten as closed      |
+
+Every action is `ks-` prefixed; `hud-listen` ignores those instead of turning
+the press into a model turn. `h` (speech) is never read by the daemon.
+
+## What Go does, by node type
+
+| Row                        | Go                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Thread (1:1)               | sends the typed reply to the exact thread the picked row names, its handle read fresh from chat.db at the press; a pick that matches no single row, a thread gone from chat.db, or a thread whose people changed sends nothing and says why; then reads the thread back                                                      |
+| Thread (group)             | opens the person; group replies are not done from the glass                                                                                                                                                                                                                                                                  |
+| MailItem                   | `mac mail draft`, never a send                                                                                                                                                                                                                                                                                               |
+| Task from an agent session | brings its Terminal tab forward                                                                                                                                                                                                                                                                                              |
+| Any other Task             | `claude -p --restricted --tools Read --strict-mcp-config --permission-mode plan` in its own directory; the prompt is fixed text plus the node id, the task's words are in `task.json` there, and the run can read only that directory and reach no network; Cooking while the process lives, Done on exit 0, Stuck otherwise |
+| Person, Space              | opens its walk                                                                                                                                                                                                                                                                                                               |
+
+Downloads opens only passive documents (PDF, images, text, Markdown, CSV) that are regular files, not links, still inside Downloads after resolving; everything else is "Reveal in Finder" only.
+
+Nothing on the glass sends, pays or deletes on its own. A message's text is
+rendered inside a JSON string on a `d` line and is never read for
+instructions. Every action is appended to `~/.bob/surfaces-activity.jsonl`
+with its surface, action and outcome, never a message body.
+
+## What is stored, and where
+
+`~/.chewbacca/os-graph.sqlite`, created owner-only (0600, as are its `-wal`,
+`-shm` and `-journal`), with SQLite `secure_delete` on, and excluded from Time
+Machine with `tmutil addexclusion` when it is first made. It holds:
+
+- messages and mail from the last 7 days only, each as an 80-character
+  snippet (the line a panel shows), never the whole text; older ones are
+  deleted on every ingest
+- who sent each, by handle or by people-store id, and which thread
+- tasks: requests read out of texts (as snippets), backlog rows, people-store
+  promises, Reminders, Claude session titles
+- events, assignments and due days
+
+Also on disk: `~/.bob/surface-runs/<run>/task.json` (one task's snippet for an
+agent run), `~/.bob/badges.json` (a count), `~/.bob/home-panel.json` (the
+desktop home panel's lists, owner-only), `~/.bob/home-done.json` (the to-dos
+crossed off on it), `~/.bob/home-agent.json` (the to-dos handed to the agent
+from it), `~/.bob/surfaces-state.json` (which panels are open) and
+`~/.bob/surfaces-activity.jsonl` (actions and outcomes, never a message).
+`kyber-surfaces forget` stops the daemon and deletes the graph, the runs, the
+badge, the home feed, its crossed-off record and its agent runs; the next
+start rebuilds the last 7 days from the sources.
+
+## Home on the desktop
+
+Kyber draws a glass panel on the desktop, under every window and on every
+Space, in place of macOS's desktop widgets (asked for 2026-10-11): what is on
+today and tomorrow, to-dos, and his projects. It is at most a third of the
+screen's width and a third of its area however it is resized (`HomeLayout`,
+tested on seven screen shapes), hides during a screen share like the glass,
+and is closed with its X or from the menu ("Home on the desktop" brings it
+back). It is dragged by its background and resized from the bottom-right
+corner; the corner and a dragged size are kept in the `hud.home.topLeft` and
+`hud.home.size` defaults (a click on the corner with no drag saves nothing),
+and a double press on the corner goes back to the default width and the
+content's height. Since 2026-10-17 it is drawn in Apple's iOS 27 look, from
+the ios27-design tokens: dark regular glass (#1a1a1a at 0.73 over the blur,
+a 0.5-point #a6a6a6 rim, a widget's 26-point corner), SF Pro only
+(`HomeType`), Apple's dark label and fill colours (`HomeInk`), SF Symbols, and
+capsule buttons. State keeps the HUD's meaning hues, and every colour a word
+is drawn in holds 4.5:1 over the glass on a white wallpaper, hovered or not
+(`HomeTests.inkHoldsOnTheGlass`). The mark beside "Kyber" is a morphing orb
+run by Core Animation (`HomeMark.swift`).
+
+`defaults write dev.bobthebuilder.hud hud.home.lists -array todos projects`
+shows just those lists, in that order, with nothing of Kyber's (asked for
+2026-10-17: "i want just the to do panel on the creen, no extra kyber fluff",
+then "i want to-do, and current projects listed"). The names are `calendar`,
+`todos` and `projects`; the first list's title, count and plus sit beside the
+X, every title is the large one, and the mark, the name and the date are gone.
+The footer names a failed source only when a shown list is read from it
+(`HomeSection.sources`), and the to-dos' plus waits until the list is read.
+The key is per Mac and read when the panel opens, so it takes a relaunch, and
+each choice of lists keeps its own dragged size (`hud.home.size.todos.projects`),
+so a panel dragged tall for three lists never opens on two.
+
+The daemon writes `~/.bob/home-panel.json` after every ingest
+(`bin/lib/home_feed.py`, walks `osgraph_walks.home*`); `kyber-surfaces home`
+prints the same body and `--write` writes it. When the file is missing or more
+than six minutes old, Kyber runs `kyber-surfaces home --write` itself, so the
+panel does not depend on which daemon is running. A row press sends
+`e action ks-pivot row=<node id> surface="home"` and the daemon opens that
+node's walk; a project row opens Terminal in its folder.
+
+A to-do's ring crosses it off. It is struck through at once, and four seconds
+later Kyber runs `kyber-surfaces home --done <id>`, so a second press inside
+that wait takes it back with nothing written. `--done` finishes it in its own
+app where that app can be written: `mac reminders complete` for a reminder,
+`people task done` for a people-store task, and `status: done` on that one
+line of the coursework ledger for an assignment. Anything else (a backlog row,
+whose file belongs to a team repository, or a promise taken from a meeting) is
+crossed off on the panel only. Every cross-off is recorded in
+`~/.bob/home-done.json` (owner-only, out of Time Machine, deleted by
+`forget`), one at a time under a lock, and the last three crossed today stay
+struck through until the day ends. After that the app is the truth for a row
+it was written to (a repeating reminder comes back with its next date), and
+the record hides a panel-only row for as long as the row exists. `--undo <id>`
+puts it back: the ledger gets its old status again, a panel-only row is
+cleared, and a finished reminder or people task is refused, because neither
+can be reopened from here; the refusal shows under the lists. A write-back
+that fails is still crossed off on the panel that day, and the row says
+"Still open in Reminders".
+
+A to-do that is for someone ends in a lit "handle" (asked for 2026-10-11:
+"click a button and have an agent handle"). It is for someone when the people
+store's task is owed to them, or when a reminder's title names exactly one
+person in this week's graph: in full anywhere, or by first name in a shape
+that puts a person there, "Reagan's" or after "text", "ask", "with", "for" and
+the rest of `NAME_AFTER` in `bin/lib/osgraph_walks.py`. "Do Reagan's stuff" is
+Reagan Popoff; "Call Caleb" links nobody while there are two Calebs, "Pay
+Chase card" links nobody, and a title naming two people links neither. The
+press runs `kyber-surfaces home --handle <id>`, which records the run as
+working in `~/.bob/home-agent.json` and starts `home --work <id>` in its own
+session (`bin/lib/home_agent.py`). That run reads `people brief`, the last 24
+messages between them one-to-one, and the brain's memory files whose index
+line names them in full; any line shaped like a password, a code, a card or a
+key is withheld from all three. It asks `claude -p` with no tools for one JSON
+answer: a text, or "yours" with why (a payment, a call, a file, anything a text
+would only promise). The brief and the notes are background the text never
+quotes unless the thread shows the person already knows it. A text goes into
+`people texts drafts add <their id>`, which voice-checks it; a refusal gets one
+rewrite with what voice-check measured. The run records the draft's number and
+the stamp the queue wrote beside it, because the queue numbers from 1 again
+once it empties and a stale number can name someone else's draft.
+
+The row then shows the whole draft, who it goes to when that is not already
+the row's "for" line, and "send" and "drop"; the press reads "send and cross
+off" when the model said the text finishes the to-do, since Reminders and the
+people store cannot reopen one. Send runs `--send <id>`, which checks the queue
+still holds that number with that stamp and text, for that person, one-to-one,
+with no pinned address, group or app (anything else is cleared, never sent),
+then runs `people texts drafts send <n>`. A refusal from the people CLI ("Nothing
+was sent.") keeps the draft. A timeout or any other failure draws the row
+failed with "It may have gone out", and send is not offered again, because a
+second press could text them twice. Drop takes the draft out of the queue only
+under the same check. Nothing goes out without his press. Two of the five
+places go to to-dos for someone first, wherever their dates sort, since an
+undated one otherwise never reaches the panel. A row with a run out or a draft
+waiting is shown even past the five-row cap; an answer that is only his takes
+its place in the list like any other row. A run whose process died,
+or that ran past eight minutes, draws as failed, with "retry" and "clear".
+
+Projects are the pinned list when there is one, in its order, each showing the
+newest non-`chore:` commit by `git config user.email` across the repositories
+named for it. Without a pinned list they are git repositories directly under
+`~/dev`, `~/Developer`, `~/Projects`, `~/code` or `~/src` (plus this checkout)
+whose last such commit is inside 7 days. Personal choices go in
+`~/.chewbacca/home-panel.json`, never in this repo:
+
+```json
+{"projects": {"pinned": [{"title": "Consulting", "paths": ["~/dev/client-a", "~/dev/client-b"]}],
+              "roots": ["~/dev"], "hide": ["notes-repo"], "names": {"noah-agency": "noahstudio"}}}
+```
+
+## Identity
+
+A phone number is compared whole in E.164 (a bare ten digits is read as +1);
+an email exactly, case-folded in ASCII only, so a lookalike or plus-address is
+a different sender. A handle becomes a known person only through the people
+store, and nothing a message says ever adds one. A sender is labelled with
+the raw handle until then, never with the name they gave.
+
+Mail is fused to a person only when the address is one the people store holds
+AND DMARC passed for its domain, as reported by the receiving provider's own
+`Authentication-Results` line (iCloud, Google or Microsoft authserv-ids).
+Everything else shows as the raw address marked "unverified sender", in no
+one's timeline. Checking takes Mail.app about 10 s per message, so only mail
+from known addresses is checked, three per ingest, and the verdict is kept.
+
+"From me" comes only from chat.db's `is_from_me`; no text, display name or
+mail header makes anything Caleb's own. A node whose own id is free text (a
+mail's Message-ID, a backlog row, an event, a reminder, an agent session) is
+keyed by the full sha256 of the JSON-encoded source, kind and exact id, so two
+near-identical ids are two nodes. A mail's verified verdict is reused only for
+that exact Message-ID from that exact address.
+
+A reply typed on a person's panel goes to that person's thread only if, at the
+press, chat.db still has the thread as one-to-one with that one handle and the
+people store still says the handle is theirs.
+
+## Generated panels
+
+A request no fixed surface takes, shaped like a panel ("compare my three
+classes' grades", "who have I not texted back"), goes from `hud-listen` to
+`kyber-genui "<request>" --json` in a thread: exit 0 leaves the panel and the
+voice says one line; anything else hands the request to the model in words. A
+second half that acts ("and email Swain") keeps it with the model. A
+`genui-refresh` or `genui-close` press runs `kyber-genui event` with the
+pressed surface and never reaches the model. `config/surfaces/genui-queries.json`
+registers four walks kyber-genui may bind (`unreplied`, `needs`,
+`person:<name>`, `conversations`), each `kyber-surfaces walk <kind> --json`
+rows of label, network, age, reason and node id, and one row action,
+`ks-pivot`, which opens the row's own panel.
+
+Auto-memory: hud-listen's summary and classifier calls now run with
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (88,431 prompt tokens on, 78,858 to 79,353
+off, `claude -p --model haiku`, 2026-10-04). The answering agent keeps it: its
+spoken answers use the brain on purpose. Measured the same day with its lean
+flags, one turn, it costs about 7,700 tokens a cold turn (20,232 on, 12,537
+off in the one off-run that read no stray cache; two other off-runs reported
+111k and 206k cache reads with the same 810 to 3,252 new tokens, which is
+cache accounting, not prompt size).
+
+## Networks
+
+`person <name>` is one timeline across every network a message node came over,
+each line tagged with its network, and one composer whose "Reply on" defaults
+to the network that person used last. Only networks the person can actually
+be reached on are offered, and the button says what it will do ("Send on
+iMessage", "Draft in Mail").
+
+| Network  | Reads                                                                                                                         | Writes                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| iMessage | live: chat.db, read only, `attributedBody` decoded                                                                            | on a press, to the 1:1 thread resolved fresh, read back with `mac messages history` |
+| Mail     | live: unread mail from people via `mac mail unread`                                                                           | drafts only                                                                         |
+| WhatsApp | not yet: `wacli doctor` on 2026-10-04 says not authenticated, 0 messages; it needs the QR scanned on his phone                | not built until reads are verified                                                  |
+| Slack    | live since 2026-10-13: DMs, group DMs and channel @-mentions from slacrawl's store, read from a copy (bin/lib/ingest_slack.py) | not from the glass yet: `chewbacca slack` sends on a person's press                 |
+
+A new network is an ingester that writes Message and Thread nodes with
+`props.network` set, Persons fused through the people store, and nothing in
+the surfaces changes.
+
+## Engines
+
+An engine is an open source program already running on this Mac (Ollama,
+Tailscale) drawn as a panel from one entry in `config/data/surfaces/engines.json`:
+the repo it comes from, how to tell it is installed (absolute binary paths, or
+a localhost URL), one read (the binary plus fixed args, or a GET to 127.0.0.1)
+and which JSON keys become a row's title, subtitle and detail. Adding one is a
+JSON entry, not code. An entry whose repo is not in `config/data/oss-apps/apps.json`,
+or is not remixable, or that names any other host, is refused when the file
+loads. Nothing from the glass or from an engine's output reaches a command or
+a URL; redirects and proxies are not followed; output over 1 MB is refused;
+every string is stripped of control characters. Engine panels have no
+buttons. The `oss` panel lists every engine as running, installed, not
+installed (with the install hint as words) or refused, and Show opens only an
+installed one. Nothing is ever installed from the glass.
+
+`oss` opens empty; "what replaces Notion" opens it with the preset
+`{"/oss/q": "Notion"}` on the socket's `open` body. `engine <id>` takes the
+engine's id, as `engine ollama-models`.
+
+## Code
+
+`code` (`bin/lib/surfaces/code.py`, region center) lists every repo under
+the code root with uncommitted changes or a Claude or Codex session in it:
+branch, ahead and behind, files changed, and whether an agent is in it. Its
+actions are `ks-repo` (a repo's changed files), `ks-diff` (`git diff` in the
+Diff component) and `ks-preview` (the file in a File component, never
+`editable`). It is read only: git is asked for `status`, `diff`, `config
+--list`, `ls-tree` and `ls-files` with `--no-optional-locks`, and fsmonitor,
+external diff, textconv and repo-defined filter drivers are switched off.
+Preview refuses, and does not draw, any file whose path contains a Unicode
+control, format or bidi character (category C, Zl or Zp), and names the file,
+after `clean()`, in the refusal line. `tests/test_surface_code.py` runs 79
+checks.
+
+## Notes
+
+`notes` (`bin/lib/surfaces/notes.py`, `surfaces.notes.Notes`, region
+topLeft) shows the 6 newest Apple Notes with folder and age through `mac notes
+--json`, and previews the picked one. Its one action, `ks-append`, adds one
+line to the note id pinned at the pick, only when the note's fresh HTML is all
+on a plain-text allowlist and its attachment count is 0, one press at a time,
+and reads the note back afterward. Search, new notes, edits and deletes are
+not built, and notes with images, tables, attachments, links or bulleted
+lists are read only from the glass.
+
+## GitHub
+
+`github` (`bin/lib/surfaces/github.py`, region left) answers what github.com
+in Chrome was opened for: PRs waiting on his review, his own PRs failing CI or
+with changes requested, issues assigned to him, and whether main is green in
+each local repo. It is one `gh api graphql` call with repo names as
+variables; `allowed()` refuses any other argv, a REST call or a mutation. The
+one action, `ks-detail`, moves the pick to a fetched row and runs nothing.
+Only his 100 most recently updated open PRs are checked for failing CI, and
+any beyond that are counted as unchecked. Merging, approving, commenting,
+notifications, Discussions, Actions logs and re-running checks are not built.
+
+## Meetings
+
+`meetings` (`bin/lib/surfaces/meetings.py`, `surfaces.meetings.Meetings`,
+region right) replaces opening Granola to see what a call said. Chewbacca
+records meetings itself, so Anarlog is no longer a separate app anyone has to
+run:
+
+- `bin/room-capture start|stop|status` runs `mac/room-capture`, a SwiftPM
+  helper built on first use, which hears the microphone and the Mac's own
+  output (ScreenCaptureKit, `capturesAudio` with `excludesCurrentProcessAudio`)
+  and writes 15 s, 16 kHz mono WAV chunks to `~/.chewbacca/room-capture/chunks`
+  (0700). A second start is refused.
+- `bin/lib/meeting_capture.py` transcribes each chunk with the mlx-whisper
+  model `bin/room-listen` uses, deletes the chunk as soon as it is transcribed,
+  cuts a meeting after ten minutes of silence, names it after the calendar
+  event it overlaps (`mac calendar list --json`, when Calendars is readable),
+  and writes `~/.chewbacca/meetings/<id>.json` (0600).
+- **Audio and transcripts never leave the Mac**, with one switchable
+  exception: when a meeting ends its transcript goes through `claude -p` (the
+  local Claude Code CLI, which sends it to Anthropic) with every tool, MCP
+  server and setting off, to write a summary, a Decisions list and action
+  items. Both are marked as guesses. `CHEWBACCA_MEETING_SUMMARY=0` turns the
+  step off and nothing is sent.
+- The grants belong to the app running capture (the terminal, the editor, or
+  Kyber from the glass): Screen & System Audio Recording and Microphone.
+  `room-capture start` names any that are off and the command that walks them:
+  `chewbacca-permissions guide --for capture --only <id>`.
+
+Anarlog (MIT, github.com/fastrepl/anarlog) is still read as a fallback for
+anyone who used it. Nothing here opens its SQLite: every read is `anarlog
+--json` with `--source local` and `ANARLOG_ANALYTICS=0`, and only `doctor`,
+`meetings list`, `meetings get` and `meetings transcript` are ever run
+(`bin/lib/ingest_meetings.py`). Native meetings are read first; once any
+exist, an Anarlog that is missing or broken no longer blanks the panel.
+Aliases: `granola`, `anarlog`, `meeting`, `calls`, `notes-from-meetings`.
+Spoken: "show my meetings", "what did we decide", "what came out of my call".
+
+The list is the 6 newest meetings with who was there; Open shows the summary,
+the lines under its Decisions heading, the open action items and one 200-word
+transcript page with Next. Its actions are `ks-open`, `ks-next`, `ks-act`,
+`ks-add` and `ks-capture`, which runs `bin/room-capture start`, or `stop`
+while it records.
+
+**Every action item ends in one press, Go (`ks-act`, CHW-206).** What Go does
+is chosen by rule from the item's shape (`bin/lib/meeting_actions.py`), and
+the row says it before the press:
+
+- a message to a named person ("send the deck to Maggie", "follow up with
+  Jonah") becomes a text draft through `people texts drafts add`, with
+  voice-check inside it, but only when the item is his to send: one another
+  person owes ("Jonah will send the deck to Maggie") never reaches his queue.
+  Nothing sends; a draft goes out only when someone names its number. The
+  item is marked pressed in `acted.json` before the draft is written, so a
+  failed write can't let a second press draft it twice.
+- a day someone named ("Thursday at 3pm", or the summary's due date) becomes a
+  tentative event with no invitees: on Google through gws when its sign-in
+  already holds calendar write (`status: tentative`, `sendUpdates: none`, no
+  `attendees` key), else in Calendar through `mac calendar add` titled
+  "Draft: ...". With neither, the row names the missing consent and nothing is
+  created. A relative day ("next week") stays a task.
+- anything else becomes a work-ledger task under `~`, keyed
+  `meeting:<id>:<item>`, and is promoted into the OS graph as `ks-add` did.
+
+After the press the row reads "Done" with the line read back from where the
+thing landed (`events get`, `calendar list`, the drafts file, `work-ledger
+list`), and `~/.chewbacca/meetings/acted.json` (0600) remembers it, so a
+second press does nothing. Under the items, one line each says where the owner
+and the day came from: the transcript line's clock when a line says it, and
+"(guess)" when it was inferred, because the transcript has no speaker names
+("I'll" is a guess at you; a name is said only when the line names that person
+doing it). Only native capture keeps timed lines, so an Anarlog item says no
+line was found. `ks-add` still makes one promoted Task in the OS graph (source
+`meetings-promoted`, kind `promise`) and touches nothing else.
+
+**The consent line.** `room-capture start` and `room-listen` draw a
+`capture-<id>` surface on the glass, "Recording now: ..., transcribed on this
+Mac", and wait for Kyber to answer a `listen` sent after the drawing before
+the process that writes audio is started (`bin/lib/capture_consent.py`). With
+no glass the line goes to the terminal first. That first drawing has no Stop
+press, because the starter exits and couldn't hear one; the capture watcher
+(or room-listen) redraws the same surface on its own subscribed connection
+with Stop recording (`ks-capture-stop`), so every frame that shows Stop is
+owned by the process that can stop. Each capture has its own surface id
+(kept in `~/.chewbacca/room-capture/consent.id`), so a stop takes down its own
+line and a press only stops the capture it names. When recording ends the
+watcher takes the line down and deletes any half-written chunk the helper
+left; room-listen deletes its temp folder, untranscribed segment included.
+
+In the graph each meeting in the 7-day window is an Event, attendees with an
+email are Persons fused only through the people store's identities (never by
+first name), and each open action item is a Task EXTRACTED_FROM its meeting,
+kind `meeting-action`, marked as a guess with confidence 0.5, because a model
+wrote it (Claude's for a native meeting, Anarlog's for one of its own). `KYBER_MEETINGS_ME` (comma separated addresses)
+names his own emails, so an item assigned to him gets OWED_BY me. The
+`meetings` ingester runs with the daemon's others and keeps the message
+retention window; the transcript is never stored.
+
+With no meeting recorded yet the panel is a first-run state, never an error:
+the steps in order, one Start capture press, and Anarlog's own `doctor` line
+when it is installed. While capture runs the top line says "Recording now" and
+the button reads Stop capture.
+`bin/room-listen` still records the mic to `~/.chewbacca/room/live.txt`;
+meetings supersede it for calls and do not replace it.
+`tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
+CLI's JSON (`tests/fixtures/anarlog`); `tests/test_meeting_capture.py` runs
+native capture on fixture chunks with no audio and no model;
+`tests/test_meeting_actions.py` presses Go on a fixture meeting's three items
+through the daemon with fake gws, mac and people on PATH; and
+`tests/test_capture_consent.py` holds that the consent line is drawn before
+any audio is written.
+
+## Outbound
+
+`outbound` (`bin/lib/surfaces/outbound.py`, `surfaces.outbound.Outbound`,
+region top, `chrome=window`) replaces Clay's campaign pages for someone who has
+never opened Clay. One campaign, five tabs on a Segmented nav, and a tab press
+redraws the layout (`Result.relayout`):
+
+- **Flow**: the nine steps from offer to booked call as a Diagram, the first
+  waiting step filled, and any step in plain words: what it is, where it
+  happens, who does it, what goes wrong, what Chewbacca checks.
+- **Email**: every step of the sequence word for word, with Clay's tokens shown
+  as what they stand for (`[First name]`, `[AI line: Opener]`, `[one of: a /
+  b]`), its delay and thread, the copy rules checked (words against 100, links
+  in email 1, personal fields, the closing question), and Clay's spam checker
+  on a press.
+- **People**: leads in the campaign, where they are now, how they replied, and
+  what an open does and does not prove. Clay counts opens, not who opened.
+- **Numbers**: sent, replies without out-of-office, reply rate, bounce rate,
+  unsubscribes and booked, per day and per inbox, against the benchmarks in
+  `skills/gtm-engineering/references/demand-gen-playbooks.md`.
+- **Ask**: a question about the campaign, or a change to an email, answered by
+  `claude -p` with Read only (`osgraph_runs.TOOLSET`) in
+  `~/.chewbacca/gtm/outbound-ask/` over a 0600 snapshot of the last fetch.
+  A drafted change is kept only if it names a real, editable step, and shows
+  as a Diff.
+
+Sources: the Clay plugin's CLI, signed in (`campaigns list`, `get`,
+`analytics`, `sequence spam-check`), and the private
+`~/.chewbacca/gtm/outbound.json`: the label, which campaign to show, the
+team's notes until Clay is connected, and `apply_allowed`. Each missing source
+is named on the panel; with no Clay the notes are shown and say they are not
+live. Nothing sends, launches, enrolls or pays. Apply is the one write, a
+`campaigns sequence edit` refused unless `apply_allowed` is true, and read back
+with `get` before it says it landed.
+Aliases: `clay`, `campaign`, `campaigns`, `cold-email`, `cold-emails`,
+`sequence`. Spoken: "show me my campaign", "pull up clay", "open the cold
+emails". `tests/test_surface_outbound.py` runs against a fake `clay` in the
+shapes the CLI's own `--help` prints.
+
+## Agents
+
+`agents` (`bin/lib/surfaces/agents.py`, `surfaces.agents.Agents`, region
+center) replaces opening VS Code to talk to Claude. The engine is Realm
+(github.com/31Carlton7/realm, Carlton Aikins, with his permission given on
+2026-10-05), run headless by `bin/realm-engine` and reached only through
+`bin/lib/realm_client.py`, which proves the server by pid, port owner and
+realmHome before the first call and refuses a write not passed `write=True`.
+Aliases: `vscode`, `vs-code`, `claude`, `sessions`, `agent`, `realm`. Spoken:
+"show my agents", "pull up my claude sessions", "open the coding agents". A
+bare "show my sessions" and "show me Claude" stay with the model.
+
+With no Kyber, the same Realm page opens in a normal browser tab:
+`chewbacca agents` (or `realm-ui open`) starts the engine and the page server
+if they are down, trades the server's token for a one-time launch code (good
+once, for two minutes), and opens `http://127.0.0.1:47317/#launch=<code>`.
+`bridge.js` redeems the code from the page's own origin, drops it from the
+address bar and keeps the token in that tab's sessionStorage, so a reload
+works and a copied address carries nothing. An agent running it opens the tab
+in the background; a person at a terminal gets it in front. `realm-ui show`
+falls back to the browser tab when the glass isn't running.
+
+The list is every session the engine has, by space, with its state in words
+(waiting on you, working, failed, idle), what needs him first, and a header
+count ("3 sessions · 1 waiting on you · 1 working"). Open pins a session: its
+newest 14 turns in a Transcript, read by polling `sessions.events` after the
+last seq seen, every 2 s while it works and every 10 s idle (a whole fetch
+measured 0.06 to 0.21 s on 2026-10-05). A refresh that fails after the
+engine had answered keeps the last rows and drops every verb row.
+
+Every verb is a row button on an Events component, so the press carries the
+id that was drawn, and a verb that does not apply has no row and is not
+drawn. Each row says what it touches and whether it can be undone.
+
+| Verb             | Shown when                                      | Does                                                                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start the engine | the engine is down                              | `realm-engine start` (or build, then start, when Realm is not built); nothing else is offered                                                                                                                                       |
+| Send             | the pinned session is idle                      | `sessions.send` to the pinned id, read back from the transcript; a second press in flight refuses; a maybe_applied failure says it may have sent and is never retried, and the same text is refused once it shows in the transcript |
+| Allow once, Deny | the pinned session waits on a request           | `sessions.respondPermission` for that requestId only, re-checked as still pending at the press; never `allow_always`                                                                                                                |
+| Interrupt        | the pinned session is working                   | `sessions.interrupt`; what it already changed stays changed                                                                                                                                                                         |
+| Fork             | the pinned session is idle and has a checkpoint | `sessions.fork` from its newest checkpoint: a new worktree and session, the original untouched                                                                                                                                      |
+| Start            | a folder is picked                              | `sessions.create`, agent claude, permission mode `default` (asks before every tool), in that folder's project, making a space and a project (and a profile on a fresh engine) only when none exists                                 |
+
+The folder comes from a Select, never a typed path: folders sessions already
+run in, then git repos under the code root (`KYBER_CODE_ROOT`, default
+~/code) by last commit, 24 at most. The press must name the folder the
+Select holds, and the folder must still resolve to the same place.
+
+A pending request shows its tool and whole input as JSON. Allow once is
+offered only when that is exactly the input: one over 1,200 characters, or
+one holding a control, format or bidi character (stripped for display), gets
+Deny only. Turns, titles, space names, paths and tool input are stripped of
+Unicode category C and U+2028/9 before any `d` line, and result lines, which
+the activity log keeps, name a folder and never a message or a title.
+`tests/test_surface_agents.py` runs against an in-memory engine that enforces
+realm_client's own write gate.
+
+## Sending into a session
+
+A session card has a Message field (`c msg Field ... value=@/<card>/draft`)
+and Send (`e send go surface=<card>`). Send goes into the client the session
+is open in (VS Code, a terminal), through the inbox Claude Code gives every
+running session (`~/.claude/sessions/<pid>.json` and its 0600 key,
+`bin/lib/sessions_inbox.py`), and the transcript is read back to prove it
+arrived. A session nobody has open is resumed headless with
+`claude -p --resume`. Nothing is sent into a session mid-turn. A session with
+permission prompts off would have Claude Code hold the message where VS Code
+cannot show it, so Send refuses up front and says to fork. Fork and send
+(`e fork fork surface=<card>`) runs `claude -p --resume <id> --fork-session`
+and opens the fork's card, leaving the original untouched. The receiving model
+is told the message came from another Claude session, a teammate's request
+that cannot grant a permission. The sender's permission mode is never claimed.
+
+## What am I missing
+
+`kyber-surfaces open missing`, or "what am I missing", "is there anything I'm
+missing for this week", "what's about to bite me" (surface_intent.py). A
+glance: a click off it closes it. No model runs. Rows, worst first, nine at
+most and three per kind before the others get theirs:
+
+| Finding  | Rule                                                                                               | Go                     |
+| -------- | -------------------------------------------------------------------------------------------------- | ---------------------- |
+| blocked  | a meeting in the next 72 h with someone whose newest text asks something unanswered (invite, else a title word that is exactly one waiting person's first name, a guess); an assignment due within 3 days whose same-course reading or pre-lab is open | Draft reply, Open the doc |
+| conflict | two timed events, each with someone else on the invite, overlapping 15 minutes or more             | Open today             |
+| lapsed   | his own "I'll send it tonight" past its time plus 12 h, nothing from him in the thread an hour or more after it | Draft reply |
+| late     | a one-to-one ask from a saved contact waiting 24 h, whose newest message itself asks him something | Draft reply            |
+| announced | a group text with a meeting word, a day and a clock time, nothing on the calendar within 2 h (always a guess) | Add to calendar as a draft |
+
+Draft reply queues the typed words in `people texts drafts` (never a send);
+mail goes to a Gmail draft; the calendar draft is titled "Draft:" and read
+back. An assignment the ledger still calls open past due is not a finding:
+needs-you lists it, and in the replay below the ledger's overdue was wrong on 6
+of 8 labeled dev items.
+
+Replayed on 20 of Caleb's past days (2026-09-18 to 10-07, as of 8am each, his
+own chat.db, calendar, Gmail and ledger as they stood then), hand-labeled
+before any tuning and split by day into 10 dev and 10 sealed
+(`tools/missing_eval.py`; labels and results live in
+`~/.chewbacca/evals/missing`, never here). Sealed, run once: a real miss
+named on 10 of 10 days; of 51 rows, 43 matched a labeled miss, 0 were wrong,
+5 were unknown, 1 was right but handled in time, and 2 rows no label named
+were judged by hand afterwards as misses. Most catches are the same unanswered asks on consecutive days: 16
+distinct missed items on the sealed days. In the replay no two invites with
+other people ever overlapped and no group announcement was missed, so the
+conflict and announced rules are untested on real data.
+
+## Measured
+
+AWAITS_REPLY_FROM (does this thread really wait on Caleb?), hand-judged on his
+own chat.db on 2026-10-04: the first rule was right on 6 of 30 threads; the
+current rule was right on 8 of 12 held-out threads before its last fix, which
+corrected the three automated misses on that sample after the fact. The
+window stays at the 7-day pilot (`KYBER_SURFACES_DAYS` widens it). Details and
+the misses each rule answers are at the top of `tests/test_osgraph.py`.
+
+Built with Chewbacca

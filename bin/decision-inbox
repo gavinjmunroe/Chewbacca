@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""The decision inbox: what only Caleb can decide, with a take each, and receipts for the rest.
+
+    decision-inbox [show] [--day YYYY-MM-DD] [--json]   the feed as text (or JSON)
+    decision-inbox digest [--day D] [--write PATH]      one phone message, a draft: never sent
+    decision-inbox check [REPORT.md...] [--day D]       every line that hands Caleb a call ("ur
+                                                        call", "Caleb decides", BLOCKED:) with
+                                                        no "My take:" next to it; no files means
+                                                        that day's job reports. Exit 1 if any
+    decision-inbox scoreboard [--day D] [--write]       decisions, receipts, status asks and
+                                                        minutes in VS Code + Claude for a day;
+                                                        --write keeps it in
+                                                        ~/.chewbacca/inbox/scoreboard.jsonl
+                                                        so next week has a baseline to beat
+
+On the HUD it is `kyber-surfaces open decisions`, and "we good?" to the hyper
+bar opens it. The feed's one owner is bin/lib/decision_inbox.py.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+
+import decision_inbox as inbox  # noqa: E402
+
+HOME = Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca")
+SCOREBOARD = HOME / "inbox" / "scoreboard.jsonl"
+
+
+def show(feed: inbox.Feed) -> str:
+    lines = [f"Only you ({len(feed.decisions)})"]
+    for n, item in enumerate(feed.decisions, 1):
+        lines.append(f"  {n}. {item.text}")
+        lines.append(f"     My take: {item.recommendation}")
+        lines.append(f"     Options: {' / '.join(item.options)}. From {', '.join(item.sources)}")
+    if not feed.decisions:
+        lines.append("  Nothing needs you.")
+    held = [(i, r) for i, r in feed.held if i.kind == inbox.DECISION]
+    if held:
+        lines.append(f"Held back, no take written yet ({len(held)})")
+        for item, reason in held:
+            lines.append(f"  - {inbox.clip(item.text, 100)} [{reason}; {', '.join(item.sources)}]")
+    lines.append(f"Receipts ({len(feed.receipts)})")
+    for item in feed.receipts:
+        lines.append(f"  - {item.state}: {inbox.clip(item.text, 80)} | {item.proof}")
+    if feed.working:
+        lines.append(f"Still working ({len(feed.working)})")
+        lines.extend(f"  - {w}" for w in feed.working)
+    return "\n".join(lines)
+
+
+def scoreboard(feed: inbox.Feed, day: str) -> dict:
+    asks = inbox.status_asks(Path.home() / ".claude" / "projects", day)
+    watch = inbox.watching_minutes(day)
+    return {"day": day, "decisions": len(feed.decisions),
+            "held_without_take": sum(1 for i, _ in feed.held if i.kind == inbox.DECISION),
+            "receipts": len(feed.receipts), "status_asks": asks["status_asks"], "messages": asks["messages"],
+            "status_ask_examples": asks["examples"], "watching_minutes": watch.get("minutes"),
+            "watching_by_app": watch.get("by_app"), "screen_minutes": watch.get("total_minutes")}
+
+
+def keep(row: dict) -> None:
+    SCOREBOARD.parent.mkdir(parents=True, exist_ok=True)
+    rows = []
+    if SCOREBOARD.is_file():
+        for line in SCOREBOARD.read_text().splitlines():
+            try:
+                old = json.loads(line)
+            except ValueError:
+                continue
+            if old.get("day") != row["day"]:
+                rows.append(old)
+    rows.append(row)
+    rows.sort(key=lambda r: r.get("day", ""))
+    SCOREBOARD.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="decision-inbox", description=__doc__.splitlines()[0])
+    ap.add_argument("what", nargs="?", default="show", choices=("show", "digest", "scoreboard", "check"))
+    ap.add_argument("files", nargs="*", type=Path)
+    ap.add_argument("--day", default=date.today().isoformat())
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--write", nargs="?", const="", default=None)
+    args = ap.parse_args()
+    if args.what == "check":
+        reports = args.files or inbox.day_reports(HOME / "jobs", args.day)
+        bad = inbox.check_reports(reports)
+        for path, n, line in bad:
+            print(f"{path}:{n}: {inbox.clip(line, 160)}")
+        print(f"{len(bad)} call{'s' if len(bad) != 1 else ''} with no take in {len(reports)} report"
+              f"{'s' if len(reports) != 1 else ''}. Write \"My take: ...\" on the line or the one under it.",
+              file=sys.stderr)
+        return 1 if bad else 0
+    feed = inbox.build_feed(day=args.day, home=HOME)
+    if args.what == "digest":
+        text = inbox.digest(feed)
+        if args.write is not None:
+            Path(args.write or HOME / "inbox" / f"digest-{args.day}.txt").parent.mkdir(parents=True, exist_ok=True)
+            target = Path(args.write or HOME / "inbox" / f"digest-{args.day}.txt")
+            target.write_text(text + "\n")
+            print(f"Draft written to {target}. Not sent.", file=sys.stderr)
+        print(text)
+        return 0
+    if args.what == "scoreboard":
+        row = scoreboard(feed, args.day)
+        if args.write is not None:
+            keep(row)
+        print(json.dumps(row, indent=1))
+        return 0
+    print(json.dumps(feed.as_json(), indent=1) if args.json else show(feed))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

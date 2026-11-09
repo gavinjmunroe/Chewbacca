@@ -5,6 +5,7 @@ see mac/lib/terminal_events.py) and keeps exactly one state for the
 remembered tab: idle, running, waiting on you, or done. Pure: no I/O except
 `tail`, so the fold is tested with dicts.
 """
+from __future__ import annotations
 import json
 import os
 import sys

@@ -18,6 +18,7 @@ The folder alone could not tell two sessions in one repo apart: the eval's one
 miss, "the heads up display one", was a session the menu only knew as
 `Chewbacca`.
 """
+from __future__ import annotations
 import json
 import os
 import jev
@@ -228,9 +229,9 @@ def pick(said: str, board: dict, ask=None) -> dict:
     """
     rows = ordered(board)
     if not rows:
-        return {"session": None, "confidence": 1.0, "why": "no agents"}
+        return {"session": None, "confidence": 1.0, "why": "no agents"}  # exact, not a model score
     if len(rows) == 1:
-        return {"session": rows[0]["session"], "confidence": 1.0, "why": "only one agent"}
+        return {"session": rows[0]["session"], "confidence": 1.0, "why": "only one agent"}  # exact, not a model score
     if ask is None:
         def ask(state, questions):
             return jev.ask(state, questions, timeout=PICK_TIMEOUT_S, decision="agent-board")

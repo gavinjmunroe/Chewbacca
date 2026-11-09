@@ -23,8 +23,14 @@ END = '<!-- CHEWBACCA RUNTIME END -->'
 # These checks accept Claude's native JSON. Side-effect hooks (sync, push,
 # permission dialogs, app control) remain opt-in through their native setup.
 CLAUDE_CHECKS = {
-    'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
-    'PreToolUse': ['write-log.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
+    # chat-approval goes with injection-hold: it writes the record that lets the
+    # person's next message clear a hold, so one without the other holds forever.
+    'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh', 'chat-approval.sh'],
+    # brake-guard and destructive-guard: the full installer's brakes (its
+    # settings.json deny list) for an install that promises no permission
+    # changes. The 10/12 stranger run let `rm -rf ~` and a force push to main
+    # through on a runtime install.
+    'PreToolUse': ['write-log.sh', 'brake-guard.sh', 'destructive-guard.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'focus-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh', 'injection-hold.sh'],
     'PostToolUse': ['write-log.sh', 'prose-guard.sh', 'untrusted-screen.sh'],
     'Stop': ['slop-guard.sh', 'prayer-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
 }
@@ -37,11 +43,15 @@ CLAUDE_MATCHERS = {
     'write-log.sh': 'Write|Edit|Bash|NotebookEdit',
     'submit-guard.sh': 'mcp__chrome-devtools__.*|Bash|mcp__peekaboo__.*',
     'browser-ux-guard.sh': 'Bash|mcp__peekaboo__.*',
+    'focus-guard.sh': 'Bash',
+    'brake-guard.sh': 'Bash',
+    'destructive-guard.sh': 'Bash',
     'env-guard.sh': 'Write',
     'fusion-guard.sh': 'Write|Edit|MultiEdit',
     'ux-guard.sh': 'Write|Edit',
     'prose-guard.sh': 'Write|Edit',
-    'untrusted-screen.sh': 'WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*',
+    'untrusted-screen.sh': 'WebFetch|WebSearch|Bash|mcp__.*',
+    'injection-hold.sh': 'Bash|Write|Edit|MultiEdit|NotebookEdit|Artifact|SendMessage|CronCreate|RemoteTrigger|mcp__.*',
 }
 
 
@@ -72,6 +82,18 @@ def registry():
     return data
 
 
+def app_patterns(spec):
+    """The spec's bundled-binary globs. CHEWBACCA_APPLICATIONS_DIR stands in for
+    /Applications so a test can fake an installed ChatGPT.app."""
+    apps = os.environ.get('CHEWBACCA_APPLICATIONS_DIR')
+    out = []
+    for pattern in spec.get('app_binaries', []):
+        if apps and pattern.startswith('/Applications/'):
+            pattern = apps.rstrip('/') + pattern[len('/Applications'):]
+        out.append(os.path.expanduser(pattern))
+    return out
+
+
 def locate_binary(spec):
     """The runtime's executable: PATH first, then the copies apps bundle.
 
@@ -86,8 +108,8 @@ def locate_binary(spec):
     if found:
         return found
     import glob
-    for pattern in spec.get('app_binaries', []):
-        matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+    for pattern in app_patterns(spec):
+        matches = [m for m in glob.glob(pattern) if os.access(m, os.X_OK)]
         if matches:
             return max(matches, key=os.path.getmtime)
     return None
@@ -101,7 +123,10 @@ def detected(spec):
     """
     if locate_binary(spec):
         return True
-    return any(Path(os.path.expanduser(path)).exists() for path in spec.get('detect_paths', []))
+    apps = os.environ.get('CHEWBACCA_APPLICATIONS_DIR')
+    paths = [apps.rstrip('/') + path[len('/Applications'):] if apps and path.startswith('/Applications/') else path
+             for path in spec.get('detect_paths', [])]
+    return any(Path(os.path.expanduser(path)).exists() for path in paths)
 
 
 def selected(name):
@@ -149,8 +174,11 @@ def codex_capacity_config(original):
     """Insert missing defaults only when TOML parsing proves the exact change."""
     try:
         import tomllib
-    except ImportError as error:
-        raise ValueError('Codex capacity setup requires Python 3.11+; no adapter files changed') from error
+    except ImportError:
+        # No parser means no proof, so change nothing. Raising here failed the
+        # whole SessionStart connect on macOS's stock Python 3.9 (2026-10-09),
+        # a hook error on every new session for anyone with Codex installed.
+        return original
     try:
         data = tomllib.loads(original)
     except tomllib.TOMLDecodeError as error:
@@ -193,7 +221,72 @@ def codex_capacity_config(original):
                      'Use a standard [agents] table or set the desired values explicitly.')
 
 
+def vscode_user_dir():
+    """VS Code's user profile folder, home of its user-level mcp.json. The same
+    per-platform rule REA's setup uses (SupportedClients.js vscodeUserDirectory)."""
+    home = Path.home()
+    if sys.platform == 'darwin':
+        return home / 'Library/Application Support/Code/User'
+    if sys.platform == 'win32':
+        return Path(os.environ.get('APPDATA', str(home / 'AppData/Roaming'))) / 'Code/User'
+    return Path(os.environ.get('XDG_CONFIG_HOME', str(home / '.config'))) / 'Code/User'
+
+
+def vscode_instructions():
+    # Copilot's Agent Host reads *.instructions.md from here in every workspace.
+    return Path.home() / '.copilot/instructions/chewbacca.instructions.md'
+
+
+def vscode_profile_instructions():
+    # The Local agent reads user instructions from the VS Code profile instead
+    # (its prompts folder), so the file goes in both (review, 10/13).
+    return vscode_user_dir() / 'prompts/chewbacca.instructions.md'
+
+
+def install_vscode(brain, spec, team=False):
+    """VS Code has no lifecycle hooks, so everything a hook would load at
+    session start has to arrive as standing instructions instead. The file is
+    Chewbacca's own, so a rerun rewrites it whole."""
+    text = ('---\nname: Chewbacca\ndescription: Shared Chewbacca context, skills and guidance\n'
+            'applyTo: "**"\n---\n\n' + context.startup_block(Path(context.__file__).resolve(), brain)
+            + '\n\n' + instruction_block(spec, team) + '\n')
+    for path in (vscode_instructions(), vscode_profile_instructions()):
+        # Write through a dotfiles symlink, as merge_block does: replacing the
+        # link left undo restoring its target and the new file behind.
+        path = path.resolve() if path.is_symlink() else path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        context.atomic_write(path, text)
+    return vscode_instructions()
+
+
+BACKUP_SUFFIX = '.chewbacca.backup'
+
+
+def backup_once(path):
+    """Copy a config Chewbacca is about to change to <name>.chewbacca.backup,
+    beside it, the first time only. A rerun never replaces it, so the backup
+    always holds the file as it was before Chewbacca ever touched it. That is
+    REA's rule (`<config>.rea.backup`, copied with COPYFILE_EXCL): the receipt
+    already lets `remove` restore, but a person can only trust what they can
+    open and diff themselves."""
+    source = path.resolve() if path.is_symlink() else path
+    if not source.is_file():
+        return None
+    backup = source.with_name(source.name + BACKUP_SUFFIX)
+    if backup.exists():
+        return None
+    try:
+        fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return None
+    with os.fdopen(fd, 'wb') as out:
+        out.write(source.read_bytes())
+    return str(backup)
+
+
 def native_paths(key):
+    if key == 'vscode':
+        return [vscode_instructions(), vscode_profile_instructions(), vscode_user_dir() / 'mcp.json']
     if key == 'cursor':
         return [Path.home() / '.cursor/hooks.json', Path.home() / '.cursor/mcp.json']
     if key == 'gemini':
@@ -240,11 +333,66 @@ def remove(name):
     return results
 
 
-def instruction_block(spec):
+TEAM_LINE = 'Team memory (Amber, Chewbacca, Firm Foundation), loaded every session:'
+
+
+def is_teammate(target=None):
+    """Team memory holds client and teammate notes, so only teammates load it.
+
+    A 2026-10-09 install into an empty home put all 209 index lines of Amber's
+    client work into a stranger's every session. Teammates opt in with --team
+    or CHEWBACCA_TEAM=1; an install that already carries the line keeps it, so
+    nobody on the team loses it on the next setup.
+    """
+    if os.environ.get('CHEWBACCA_TEAM') == '1':
+        return True
+    saved = shared_home() / 'context.json'
+    try:
+        choice = json.loads(saved.read_text()).get('team')
+        if choice is not None:
+            return choice is True
+    except (OSError, ValueError):
+        pass
+    try:
+        return target is not None and TEAM_LINE in Path(target).read_text()
+    except OSError:
+        return False
+
+
+def team_index_path():
+    return shared_home() / 'team-memory-index.md'
+
+
+def write_team_index():
+    """Regenerate the compact team index that teammates import (tools/team_index.py).
+
+    The full team/memory/MEMORY.md was 11,636 tokens of every session on
+    2026-10-11, the largest single file loaded. The compact one keeps every
+    slug and every lesson whole. Returns its path, or None when it cannot be
+    written, so the block falls back to importing the full index.
+    """
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import team_index
+    try:
+        import recall_gate
+        mode = recall_gate.mode()
+    except Exception:  # no gate: the index loads whole
+        mode = 'whole'
+    try:
+        team_index.write(ROOT / 'team/memory/MEMORY.md', team_index_path(), mode)
+    except OSError:
+        return None
+    return team_index_path()
+
+
+def instruction_block(spec, team=False):
     notes = '\n'.join('- ' + note for note in spec['notes'])
+    index = team_index_path() if team_index_path().is_file() else ROOT / 'team/memory/MEMORY.md'
+    team_memory = f'{TEAM_LINE}\n@{index}\n\n' if team else '\n'
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
             f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
-            f'Shared skills: `{shared_home() / "skills"}`.\n\n{notes}\n\n'
+            f'Shared skills: `{shared_home() / "skills"}`.\n'
+            f'{team_memory}{notes}\n\n'
             f'{spec["model_discovery"]}\n{END}')
 
 
@@ -254,7 +402,9 @@ def export(name, destination):
     text = (ROOT / 'config/instructions/agent-neutral.md').read_text()
     text += '\n## Runtime integration\n\n' + '\n'.join('- ' + note for note in spec['notes']) + '\n'
     destination.mkdir(parents=True, exist_ok=True)
-    target = destination / spec['instruction_file']
+    # Cursor, Gemini and VS Code have no instruction file of their own; an
+    # export for them is the portable AGENTS.md.
+    target = destination / (spec['instruction_file'] or 'AGENTS.md')
     context.merge_block(target, BEGIN + '\n' + text + END, BEGIN, END)
     if name == 'perplexity-computer':
         package_skills(destination / 'skills')
@@ -329,7 +479,7 @@ def claude_hooks():
     return path
 
 
-def setup(name, brain=None, import_claude_skills=False, person_name=None):
+def setup(name, brain=None, import_claude_skills=False, person_name=None, team=False, no_team=False):
     planned = plan(name)
     if any(spec['install_mode'] != 'native' for spec in planned['runtimes']):
         raise ValueError('This target supports export only. Use agent export --runtime NAME --destination PATH; shell hooks need a supported local runtime.')
@@ -342,7 +492,17 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
     brain = (brain or context.brain_root(context.codex_home())).expanduser().resolve()
     created_context = context.initialize(brain, person_name)
     shared = shared_home()
-    context.atomic_write(shared / 'context.json', json.dumps({'brain_dir': str(brain)}) + '\n')
+    saved = {}
+    try:
+        saved = json.loads((shared / 'context.json').read_text())
+    except (OSError, ValueError):
+        pass
+    if team:
+        saved['team'] = True
+    if no_team:
+        saved['team'] = False
+    saved['brain_dir'] = str(brain)
+    context.atomic_write(shared / 'context.json', json.dumps(saved) + '\n')
     library = shared / 'skills'
     library_result = skills.install(ROOT / 'skills', library)
     if import_claude_skills:
@@ -356,6 +516,10 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
         key = spec['id']
         receipt = shared / 'runtime-installs' / (key + '.json')
         previous = json.loads(receipt.read_text()) if receipt.is_file() else {'files': [], 'links': []}
+        # A file Chewbacca created has nothing of the person's to keep.
+        created = {entry['path'] for entry in previous['files'] if entry['contents'] is None}
+        backups = [made for made in (backup_once(path) for path in native_paths(key)
+                                     if str(path.resolve()) not in created) if made]
         before = [snapshot(path) for path in native_paths(key)]
         if key == 'codex':
             import codex_hooks
@@ -375,6 +539,12 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
             skill_path = Path.home() / spec['skills_dir']
             activation = ('Start a new ' + spec['label'] + ' session; the bridge loads instructions, '
                           'the brain and the Claude Code hooks on its first event.')
+        elif key == 'vscode':
+            target = None
+            hook_path = install_vscode(brain, spec, not no_team and saved.get('team') is True)
+            skill_path = Path.home() / spec['skills_dir']
+            activation = ('Open a new Copilot chat in VS Code; it reads the instructions, skills and MCP '
+                          'servers there. VS Code runs no Chewbacca hooks, so the shared checks do not run in it.')
         else:
             home = claude_home()
             target = context.install_claude(brain)
@@ -382,7 +552,15 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
             skill_path = home / 'skills'
             activation = 'Reload the Claude session and verify a real event. Existing native hooks were preserved.'
         if target is not None:
-            context.merge_block(target, instruction_block(spec), BEGIN, END)
+            teammate = not no_team and is_teammate(target)
+            if teammate and saved.get('team') is not True:
+                # Found only by the line an earlier install wrote: save it, so a
+                # host added later (connect, --runtime both) gets it too.
+                saved['team'] = True
+                context.atomic_write(shared / 'context.json', json.dumps(saved) + '\n')
+            if teammate:
+                write_team_index()
+            context.merge_block(target, instruction_block(spec, teammate), BEGIN, END)
         import host_mcp
         mcp_added = host_mcp.sync([key]).get(key, [])
         existing_links = {p.name for p in skill_path.iterdir()} if skill_path.is_dir() else set()
@@ -400,7 +578,18 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
         context.atomic_write(receipt, json.dumps({'files': list(old_files.values()), 'links': links}) + '\n')
         result['runtimes'].append({'id': key, 'instructions': str(target) if target else 'session hook',
                                    'hooks': str(hook_path), 'skills': projection,
-                                   'mcp_added': mcp_added, 'activation': activation})
+                                   'mcp_added': mcp_added, 'activation': activation,
+                                   'backups': backups})
+    linked = link_cli() if planned['runtimes'] else None
+    result['cli'] = str(linked) if linked else None
+    if linked:
+        # Into the first runtime's receipt, so its undo removes the link too.
+        receipt = shared / 'runtime-installs' / (planned['runtimes'][0]['id'] + '.json')
+        data = json.loads(receipt.read_text())
+        data['links'].append({'path': str(linked), 'target': str(linked.resolve())})
+        context.atomic_write(receipt, json.dumps(data) + '\n')
+        on_path = str(linked.parent) in os.environ.get('PATH', '').split(':')
+        result['cli_on_path'] = on_path
     result['missing_dependencies'] = [binary for binary in ('bash', 'jq') if not shutil.which(binary)]
     result['missing_context_sources'] = [name for name in context.source_names(brain) if not (brain / name).is_file()]
     return result
@@ -512,6 +701,42 @@ def terminal_shims(bin_dir=None):
     return written
 
 
+def link_cli(bin_dir=None):
+    """`chewbacca` on the terminal's PATH, linked to this checkout's command.
+
+    2026-10-13, a client operator's install rehearsed in a scratch HOME:
+    `setup.sh --every-agent` wired five agents and put no `chewbacca` anywhere a
+    terminal looks, so the next line of every guide (`chewbacca gtme setup`)
+    said command not found. Never replaces anything already there: on a Mac
+    with the kit runtime, ~/.local/bin/chewbacca points at origin/main and a
+    checkout must not take it over. Returns the link it made, or None."""
+    bin_dir = bin_dir or Path.home() / '.local/bin'
+    link = bin_dir / 'chewbacca'
+    if link.exists() or link.is_symlink() or shutil.which('chewbacca'):
+        return None
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(ROOT / 'bin' / 'chewbacca')
+    return link
+
+
+def remember_hosts_at_setup():
+    """Every host already installed when the person chose a runtime counts as
+    seen, connected or not, so the SessionStart `connect --new-only` wires
+    only an app installed AFTER setup. Without this the 10/12 stranger run's
+    first session wrote Codex, Cursor and Gemini configs though setup was run
+    for claude-code alone. `agent connect` (no --new-only) still wires all."""
+    ledger = shared_home() / 'connected.json'
+    try:
+        known = set(json.loads(ledger.read_text()).get('hosts', []))
+    except (OSError, ValueError):
+        known = set()
+    try:
+        present = set(selected('all'))
+    except ValueError:
+        present = set()
+    context.atomic_write(ledger, json.dumps({'hosts': sorted(known | present)}) + '\n')
+
+
 def connect(new_only=False):
     """Wire every installed host from the same sources, then remember which.
 
@@ -536,6 +761,10 @@ def connect(new_only=False):
 def status(name):
     result = plan(name)
     for spec in result['runtimes']:
+        if spec['adapter'] == 'vscode':
+            spec['hook_configuration_present'] = vscode_instructions().is_file()
+            spec['hook_execution'] = 'none: VS Code runs no Chewbacca hooks'
+            continue
         if spec['adapter'] in ('cursor', 'gemini'):
             import host_install
             spec['hook_configuration_present'] = host_install.registered(spec['adapter'])
@@ -554,7 +783,7 @@ def status(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove', 'connect', 'which'))
+    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove', 'connect', 'which', 'shims'))
     parser.add_argument('--new-only', action='store_true', help='connect: only hosts not connected before')
     parser.add_argument('--quiet', action='store_true', help='connect: print nothing unless a host was connected')
     parser.add_argument('--runtime', default='auto')
@@ -563,6 +792,8 @@ def main():
     parser.add_argument('--json', action='store_true', help='machine-readable output')
     parser.add_argument('--destination', type=Path)
     parser.add_argument('--import-claude-skills', action='store_true')
+    parser.add_argument('--team', action='store_true', help='setup: load the shared team memory (Amber, Chewbacca, Firm Foundation teammates only)')
+    parser.add_argument('--no-team', action='store_true', help='setup: remove the shared team memory from this install')
     parser.add_argument('--model', help='native model ID or alias, validated by the selected runtime')
     args = parser.parse_args()
     if args.command == 'list':
@@ -570,7 +801,8 @@ def main():
     elif args.command == 'plan':
         output = plan(args.runtime)
     elif args.command == 'setup':
-        output = setup(args.runtime, args.brain_dir, args.import_claude_skills, args.name)
+        output = setup(args.runtime, args.brain_dir, args.import_claude_skills, args.name, args.team, args.no_team)
+        remember_hosts_at_setup()
     elif args.command == 'status':
         output = status(args.runtime)
     elif args.command == 'remove':
@@ -582,14 +814,20 @@ def main():
         if len(names) == 1:
             # Skip our own shim on PATH, or it would exec itself forever.
             import glob
-            for pattern in spec.get('app_binaries', []):
-                matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+            for pattern in app_patterns(spec):
+                matches = [m for m in glob.glob(pattern) if os.access(m, os.X_OK)]
                 if matches:
                     found = max(matches, key=os.path.getmtime)
                     break
         if not found:
             raise ValueError('no bundled copy of ' + args.runtime + ' found')
         print(found)
+        return 0
+    elif args.command == 'shims':
+        # setup.sh asks this before deciding a Mac has no agent: Codex from a
+        # ChatGPT or Codex app is a real agent with no `codex` on PATH.
+        for path in terminal_shims():
+            print(path)
         return 0
     elif args.command == 'connect':
         output = connect(args.new_only)
@@ -622,6 +860,21 @@ def main():
     return 0
 
 
+def agents_command():
+    """How this person starts the agents page: `chewbacca agents` when that
+    name on their PATH is this checkout, else the checkout's own path. A
+    runtime-only install puts nothing on PATH, so the 10/12 stranger run had no
+    `chewbacca` to type."""
+    found = shutil.which('chewbacca')
+    ours = ROOT / 'bin' / 'chewbacca'
+    try:
+        if found and Path(found).resolve() == ours.resolve():
+            return 'chewbacca agents'
+    except OSError:
+        pass
+    return shlex.quote(str(ours)) + ' agents'
+
+
 def describe(command, output):
     if command == 'setup':
         print('Shared context: ' + output['brain_dir'])
@@ -632,13 +885,26 @@ def describe(command, output):
             print('  ' + runtime['activation'])
             if runtime['skills']['conflicts']:
                 print('  Preserved conflicting skills: ' + ', '.join(runtime['skills']['conflicts']))
+            if runtime.get('mcp_added'):
+                print('  MCP servers added: ' + ', '.join(runtime['mcp_added']))
+            for made in runtime.get('backups', []):
+                print('  Backed up first: ' + made)
         if output['shared_skills']['conflicts']:
             print('Preserved shared skill conflicts: ' + ', '.join(output['shared_skills']['conflicts']))
         if output['missing_dependencies']:
             print('Checks need these missing tools: ' + ', '.join(output['missing_dependencies']))
         if output['missing_context_sources']:
             print('Missing context: ' + ', '.join(output['missing_context_sources']))
+        if output.get('cli'):
+            print('Terminal command: ' + output['cli'] + (
+                '' if output.get('cli_on_path') else
+                ' (~/.local/bin is not on this PATH yet: ' + str(ROOT / 'bin/chewbacca') + ' works meanwhile)'))
         print('Model, account and permission settings preserved. Data imports and session openers are optional.')
+        print('Undo everything above: ' + shlex.quote(sys.executable) + ' '
+              + shlex.quote(str(ROOT / 'tools/agent_runtime.py')) + ' remove --runtime '
+              + ','.join(r['id'] for r in output['runtimes']))
+        print('Agents page: ' + agents_command() + ' puts it in a browser tab (no Kyber needed; '
+              'with Kyber it is on the glass).')
     elif command in ('plan', 'status'):
         print('Platform: ' + output['platform'])
         for runtime in output['runtimes']:

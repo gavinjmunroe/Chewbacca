@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Restart a desktop app whose window is up but whose page has died.
+
+  app-revive            list apps in that state (nothing is touched)
+  app-revive --fix      quit and reopen them in the background
+  app-revive --json     machine-readable list
+  app-revive --fix --dry-run   say what --fix would restart
+
+WHY. 2026-10-26. Granola had been running for almost three days when its
+window went blank: the traffic lights and an empty cream pane, nothing else.
+The main process was alive and idle, but it had no `--type=renderer` child
+left, so nothing was drawing the window. A plain Quit was ignored; it took a
+SIGKILL and a relaunch. Caleb: "fix chewbs so stuff like this never happens
+again".
+
+WHAT COUNTS. An Electron app (its bundle has Electron Framework.framework)
+whose main process:
+  - has at least one normal window (layer 0) on any Space, so an app closed
+    to the menu bar, which also has no renderer, is never reopened
+  - has no renderer process under it
+  - has been running at least MIN_AGE seconds, so a launch in progress is
+    left alone
+and was in that state on the previous run too. Two runs in a row, a minute
+apart, keeps a renderer that is mid-reload from counting.
+
+NOT WHILE RECORDING. If an audio process of the app is busy (RECORDING_CPU),
+the restart waits: a dead window is better than a cut-off meeting.
+
+THE FIX. Quit through AppleScript, SIGTERM after QUIT_WAIT, SIGKILL after
+that, then `open -g -a`, so the app comes back without taking the screen.
+"""
+import argparse
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HOME = Path.home()
+STATE = Path(os.environ.get("APP_REVIVE_STATE", str(HOME / ".chewbacca" / "state" / "app-revive.json")))
+LOG = HOME / ".chewbacca" / "logs" / "app-revive.log"
+
+# A fresh Electron launch spawns its first renderer within a few seconds even
+# at load 40 (Granola relaunch on 2026-10-26: renderers up inside 8 s). Two
+# minutes is a guess with wide margin, never measured on a slower app.
+MIN_AGE = 120
+# Granola ignored Quit outright on 2026-10-26, so this only bounds the wait.
+QUIT_WAIT = 10
+
+
+WINDOWS_JXA = (
+    'ObjC.import("CoreGraphics");'
+    "var r = $.CGWindowListCopyWindowInfo(16, 0);"  # all Spaces, no desktop
+    "var a = ObjC.deepUnwrap(ObjC.castRefToObject(r)) || [];"
+    "JSON.stringify(a.filter(function (w) { return w.kCGWindowLayer == 0"
+    " && w.kCGWindowBounds && w.kCGWindowBounds.Height > 100; })"
+    ".map(function (w) { return w.kCGWindowOwnerPID; }))"
+)
+
+
+def processes():
+    # APP_REVIVE_PS lets tests feed a fixed table instead of the live one.
+    fixture = os.environ.get("APP_REVIVE_PS")
+    text = open(fixture).read() if fixture else subprocess.run(
+        ["ps", "-Ao", "pid=,ppid=,etime=,command="], capture_output=True, text=True).stdout
+    rows = []
+    for line in text.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append({"pid": int(parts[0]), "ppid": int(parts[1]),
+                         "age": seconds(parts[2]), "command": parts[3]})
+    return rows
+
+
+def seconds(etime):
+    """ps etime is [[dd-]hh:]mm:ss."""
+    days, _, rest = etime.rpartition("-")
+    total = 0
+    for n in rest.split(":"):
+        total = total * 60 + (int(n) if n.isdigit() else 0)
+    return total + (int(days) * 86400 if days.isdigit() else 0)
+
+
+def window_pids():
+    fixture = os.environ.get("APP_REVIVE_WINDOWS")
+    if fixture:
+        return set(json.load(open(fixture)))
+    out = subprocess.run(["osascript", "-l", "JavaScript", "-e", WINDOWS_JXA],
+                         capture_output=True, text=True, timeout=20).stdout.strip()
+    try:
+        return set(json.loads(out or "[]"))
+    except ValueError:
+        return set()
+
+
+def bundle_of(command):
+    """The .app a main executable lives in, or None. The first /Contents/ must
+    lead to MacOS: a wrapper like Claude's `disclaimer -- sandbox-exec ...
+    Claude iOS Sim.app/Contents/MacOS/...` names a bundle later in its
+    arguments, and a regex that skipped ahead stat'ed a 900-character path
+    (ENAMETOOLONG, exit 1 on the daemon's first run, 2026-10-26)."""
+    bundle, sep, rest = command.partition("/Contents/")
+    if not sep or not bundle.endswith(".app") or not rest.startswith("MacOS/"):
+        return None
+    return bundle
+
+
+def is_electron(bundle):
+    if os.environ.get("APP_REVIVE_PS"):
+        return True
+    try:
+        return Path(bundle, "Contents", "Frameworks", "Electron Framework.framework").exists()
+    except OSError:
+        return False
+
+
+def blank_apps(rows, windows):
+    kids = {}
+    for r in rows:
+        kids.setdefault(r["ppid"], []).append(r)
+    found = []
+    for r in rows:
+        bundle = bundle_of(r["command"])
+        if not bundle or "--type=" in r["command"] or not is_electron(bundle):
+            continue
+        if r["pid"] not in windows or r["age"] < MIN_AGE:
+            continue
+        if any("--type=renderer" in k["command"] for k in kids.get(r["pid"], [])):
+            continue
+        found.append({"pid": r["pid"], "app": bundle, "name": Path(bundle).stem,
+                      "age": r["age"]})
+    return found
+
+
+# An audio process of the app at or above this CPU is taken as a recording in
+# progress, and the app is left alone: a restart mid-meeting could cut off
+# what Granola or Fireflies was capturing. Guessed, never measured: Granola's
+# idle audio helper read 0.0% on 2026-10-26, no recording was sampled.
+RECORDING_CPU = 2.0
+
+
+def recording(bundle):
+    fixture = os.environ.get("APP_REVIVE_PS_CPU")
+    text = open(fixture).read() if fixture else subprocess.run(
+        ["ps", "-Ao", "%cpu=,command="], capture_output=True, text=True).stdout
+    for line in text.splitlines():
+        cpu, _, command = line.strip().partition(" ")
+        if bundle + "/" in command and "audio" in command.lower():
+            try:
+                if float(cpu) >= RECORDING_CPU:
+                    return True
+            except ValueError:
+                pass
+    return False
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def wait_gone(pid, limit):
+    end = time.time() + limit
+    while alive(pid) and time.time() < end:
+        time.sleep(0.5)
+    return not alive(pid)
+
+
+def revive(app):
+    pid = app["pid"]
+    subprocess.run(["osascript", "-e", 'tell application "%s" to quit' % app["app"]],
+                   capture_output=True, timeout=QUIT_WAIT + 5)
+    if not wait_gone(pid, QUIT_WAIT):
+        os.kill(pid, signal.SIGTERM)
+        if not wait_gone(pid, QUIT_WAIT):
+            os.kill(pid, signal.SIGKILL)
+            wait_gone(pid, 5)
+    # Helpers that outlived the main process would hold its single-instance
+    # lock, and the relaunch would quit itself.
+    subprocess.run(["pkill", "-f", app["app"] + "/Contents/Frameworks/"], capture_output=True)
+    time.sleep(1)
+    return subprocess.run(["open", "-g", "-a", app["app"]], capture_output=True).returncode == 0
+
+
+def log(line):
+    try:
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        with LOG.open("a") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + line + "\n")
+    except OSError:
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--fix", action="store_true", help="restart apps seen blank on this run and the last")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--dry-run", action="store_true", help="with --fix, say what would restart and touch nothing")
+    a = ap.parse_args()
+
+    found = blank_apps(processes(), window_pids())
+    if a.json:
+        print(json.dumps(found))
+    elif not a.fix:
+        for f in found:
+            print("%s (pid %d) has a window but nothing drawing it" % (f["name"], f["pid"]))
+        if not found:
+            print("no blank app windows")
+    if not a.fix:
+        return 0
+
+    try:
+        before = set(json.loads(STATE.read_text()))
+    except (OSError, ValueError):
+        before = set()
+    now = {f["pid"] for f in found}
+    try:
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_text(json.dumps(sorted(now)))
+    except OSError:
+        pass
+    for f in found:
+        if f["pid"] not in before:
+            continue
+        if recording(f["app"]):
+            log("left %s (pid %d) alone: its audio is busy, likely recording" % (f["name"], f["pid"]))
+            print("left %s alone: recording" % f["name"])
+            continue
+        if a.dry_run:
+            print("would restart %s (pid %d)" % (f["name"], f["pid"]))
+            continue
+        ok = revive(f)
+        msg = "%s %s (pid %d, up %ds)" % ("restarted" if ok else "could not reopen", f["name"], f["pid"], f["age"])
+        log(msg)
+        print(msg)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

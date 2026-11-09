@@ -69,20 +69,37 @@ struct RowAction {
 struct RowActionButton: View {
     let action: RowAction
     let row: String
+    @Environment(\.hudFocusedRow) private var focusedRow
+    @Environment(\.hudChrome) private var chrome
 
     var body: some View {
         Button {
             action.send(row)
         } label: {
-            Text(action.label)
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(.quaternary, in: Capsule())
-                .frame(minWidth: 44, minHeight: HitTarget.minimum)
-                .contentShape(Rectangle())
+            Group {
+                if chrome == .window {
+                    // Square with a rim, in the window's pixel caps.
+                    Text(action.label)
+                        .textCase(.uppercase)
+                        .pixelFont(11)
+                        .kerning(0.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.5), in: Rectangle())
+                        .overlay { Rectangle().strokeBorder(.white.opacity(0.34), lineWidth: 1) }
+                } else {
+                    Text(action.label)
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                }
+            }
+            .frame(minWidth: 44, minHeight: HitTarget.minimum)
+            .contentShape(Rectangle())
         }
         .buttonStyle(RowButtonStyle())
+        .modifier(KeyboardRing(active: focusedRow == row))
         .accessibilityLabel("\(action.label), \(row)")
     }
 }

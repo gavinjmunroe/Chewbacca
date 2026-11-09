@@ -1,4 +1,8 @@
 #!/bin/bash
+# hookd skips this guard for a Bash call that names none of these words,
+# each one its first check requires. Proven by tools/hookd_replay.py.
+# gate: sleep
+[ -z "${HOOKD_INNER:-}" ] && [ -x "$HOME/.local/bin/hookd" ] && exec "$HOME/.local/bin/hookd" gate "$0" "$@"
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
@@ -22,9 +26,17 @@ cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 case "$cmd" in *WAIT_LOOP_OK=*) exit 0 ;; esac
 
+# Heredoc bodies are data the shell never runs as a loop: a python script or a
+# test file fed through <<'EOF' can say "while" and "sleep" in prose. 2026-10-09:
+# a heredoc patching tests/jobs.sh ("keeps the slot while it has run less",
+# "sleep 60") was refused as an unbounded poll.
+cmd="$(printf '%s\n' "$cmd" | perl -0pe 's/<<-?\s*([\x27"]?)(\w+)\1[^\n]*\n.*?\n\s*\2[ \t]*(?=\n|$)//gs')"
+
 # An until/while loop whose body sleeps: that's a poll.
 printf '%s' "$cmd" | grep -qE '\b(until|while)\b' || exit 0
 printf '%s' "$cmd" | grep -qE '\bsleep\b' || exit 0
+# And it has to be loop syntax, not the words in a commit message or an echo.
+printf '%s' "$cmd" | tr '\n' ';' | grep -qE '\b(until|while)\b[^;]*;[[:space:];]*do\b' || exit 0
 
 # Bounded if it counts or is wrapped in a timeout: a seq/for counter, an
 # arithmetic or -lt/-le/-gt/-ge comparison on a counter, or `timeout`/`gtimeout`.

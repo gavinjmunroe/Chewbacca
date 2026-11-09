@@ -1,6 +1,8 @@
 ---
 name: animated-video
-description: Make animated videos in code with Remotion (React/SVG): character animation, cartoon stories, motion graphics, kinetic typography, animated infographics, explainers and animated Reels, from a script or voiceover, in any aspect ratio. Use when asked to animate a script, make an animated video, or build a Remotion project. Not for math with equations (manim), editing camera footage (video-edit), writing the script (video-script), or generated clips and Blender renders (creative-video).
+description: "Animated videos in code with Remotion: cartoons, motion graphics, kinetic type, explainers, animated Reels. Not for math (manim), camera footage (video-edit) or generated clips (creative-video)."
+triggers: >-
+  Make animated videos in code with Remotion (React/SVG): character animation, cartoon stories, motion graphics, kinetic typography, animated infographics, explainers and animated Reels, from a script or voiceover, in any aspect ratio. Use when asked to animate a script, make an animated video, or build a Remotion project. Not for math with equations (manim), editing camera footage (video-edit), writing the script (video-script), or generated clips and Blender renders (creative-video).
 ---
 
 # Animated video
@@ -111,6 +113,7 @@ an API summary without reading the source.
 
 ## 6. Animate the shots
 
+- Kinetic type, morphs, bounces and whips follow [library/crafts/motion-film.md](../../library/crafts/motion-film.md); its curves are in `apps/ux-engine/motion/primitives/motion.ts`.
 - Write the art bible (the look, the colour script, the cast, staging and safe zones) and per-act briefs naming
   the line, the picture and the action before animators start.
 - In the full production, run one animator per act in parallel, each owning its own files; the
@@ -119,6 +122,9 @@ an API summary without reading the source.
   quotas multiply into repeated clutter. Throttle rendering on a shared machine.
 - Every shot changes meaningfully every 1.5-3s and lands its action on its word within a few
   frames.
+- Keep one focal point per beat, morph existing shapes instead of adding new ones, and ease
+  every move with overshoot and settle. [Simple motion](references/simple-motion.md) has the
+  rules and the exact keyframe numbers.
 - Grow each transition out of the content: a morph, one object becoming the next, a camera
   push through an element, or particles that reform. Carry colour and momentum across the cut.
   Generic crossfades turn a film into a slideshow.
@@ -141,6 +147,13 @@ lenses, route issues to their owners by time range, fix in parallel, re-render, 
 - When the brief names a reference video, put each act's frame beside the reference's frame for
   the same beat before delivering. Check finish (detail, depth, lighting, real interfaces), not
   only breakage. A cut that looks sparser than its reference is not ready.
+- A reference video is a set of mechanics, not a look (Caleb, 2026-10-17: "It's not epic or
+  creative enough"). Before designing, read it at full frame rate and write down what is held
+  fixed, what changes and every how-many-frames, how each shot hands off, and the scale
+  contrast. Then carry one object through every beat. Type landing on word timestamps reads as
+  a deck. A brand's site gives texture and type language only: "It shouldn't be a carbon copy
+  of the site! Just same style". Fan out judges and lessons; keep the one heavy render serial.
+  [Detail](references/motion-graphics.md#using-a-reference-video-take-its-mechanics-not-its-look-2026-10-17).
 - Stop when a round gains less than about half a point, or when the top issue needs the user
   (their likeness, their voice, a format decision). Say so and ask.
 - Keep the open issues in `ISSUES.md` (time range, owner, severity, status) and update it after
@@ -155,6 +168,20 @@ the cover), the last second (clean, and it loops if intended), and the loudness.
 path, the open issues, and anything synthetic or invented (voice, names, messages). Commit each
 version in the project's local git repo.
 
+Four things broke on the Firm Foundation hero film on 2026-10-29, each now a default:
+
+- **Render workers stay at the config's 2.** `remotion.config.ts` sets `Config.setConcurrency(2)`;
+  never pass a higher `--concurrency`. `chewbacca jobs` SIGSTOPs a heavy job past load 35, and
+  3 or 4 Chrome workers pushed the load over that line, froze the render and timed it out at
+  frames 61 to 64 three times (one job ran 53 s in 47 min). Set the delayRender timeout in the
+  config too (`Config.setDelayRenderTimeoutInMilliseconds(900000)`).
+- **Masters stay local.** A 51 MB master in the commit failed the push to GitHub. Gitignore the
+  renders folder and commit only the web copy and the sources.
+- **A picture the user sends while you're mid-task never reaches disk.** Only pictures in their
+  own message land as files. If one has to go in a render, ask them to resend it alone.
+- **A push is not live.** Check the deploy ran and curl the served file's content-length before
+  saying the new cut is up.
+
 When the user asks for a reflection, follow [the reflection protocol](references/reflection.md).
 
 ## Related kit skills
@@ -164,6 +191,11 @@ When the user asks for a reflection, follow [the reflection protocol](references
 - [video-script](../video-script/SKILL.md): write and test the script before the story step here.
 - [video-edit](../video-edit/SKILL.md): captions, sound and publishing conventions for finished footage; its caption timing script is reusable.
 - [demo](../demo/SKILL.md): a product demo is recorded, not animated.
+
 ## Credits
 
 Adapted from cstack by Charles Zheng (MIT), https://github.com/goodnight000/cstack
+
+## Grep before you rewatch a reference
+
+A video someone sent may already be studied. Before downloading anything, grep for its id, title and creator: `grep -rIl "<id or creator>" ~/second-brain/memory ~/code/chewbacca/skills ~/code/chewbacca/team/memory`. If notes exist, build from them. On 2026-11-04 a tab downloaded and tiled the jayd3nfx simple edits video, already distilled in `references/simple-motion.md` the day before. Caleb: "Bro we've watched that before - didn't we learn everything?"

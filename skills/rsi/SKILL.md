@@ -1,6 +1,8 @@
 ---
 name: rsi
-description: Test a proposed change to a skill, rule, tool or working process with a bounded before-and-after experiment, and keep it only if it wins. Use when the user says self-improve, RSI, "does this change actually help", "A/B this skill", or wants a candidate skill edit compared against the current one. Ordinary session reviews belong in reflect.
+description: "Test a proposed change to a skill, rule, tool or process with a bounded before-and-after experiment, and keep it only if it wins. Use for self-improve, RSI, A/B this skill, does this change help."
+triggers: >-
+  Test a proposed change to a skill, rule, tool or working process with a bounded before-and-after experiment, and keep it only if it wins. Use when the user says self-improve, RSI, "does this change actually help", "A/B this skill", or wants a candidate skill edit compared against the current one. Ordinary session reviews belong in reflect.
 ---
 
 # rsi
@@ -9,7 +11,7 @@ Improve how the agent works with the model held fixed. The output is a tested ch
 
 This guides experiments. It supplies no runner or spending cap: use the repo's own (`bash tests/run.sh`, `chewbacca live --list`, `evals/evals.json`). A written instruction that passes file validation is not better performance.
 
-Diagnosis comes from [reflect](../reflect/SKILL.md) (reuse a current finding if it still applies). A single correction needs only [skill-training](../skill-training/SKILL.md). Evidence method: [decision standards](../../docs/DECISION-STANDARDS.md).
+Diagnosis comes from [reflect](../reflect/SKILL.md) (reuse a current finding if it still applies). A single correction needs only [skill-training](../skill-training/SKILL.md). Evidence method: [decision standards](../../docs/reference/DECISION-STANDARDS.md).
 
 ## 1. Bound it first
 

@@ -59,6 +59,9 @@ TABLE = [
     ("good night", "pleasantry"),
     ("Thanks", "pleasantry"),
     ("what's 17 times 23", "quick"),
+    # CHW-193: a repo card, not a model turn about a URL.
+    ("show me goodnight000/api-anything", "repo"),
+    ("https://github.com/calebnewtonusc", "repo"),
     ("Play Danielle by Fred again", "music"),
     ("Pause", "music"),
     ("what are my agents doing", "agents"),
@@ -87,7 +90,7 @@ TABLE = [
     ("close my texts", "surface"),
     ("What do I have today", "agenda"),
     ("show my texts from Sam and reply that I'm late", None),
-    # Generated panels (docs/GENUI.md), 2026-10-04: a shape no fixed surface takes.
+    # Generated panels (docs/reference/GENUI.md), 2026-10-04: a shape no fixed surface takes.
     ("compare my three classes' grades", "genui"),
     ("who have I not texted back this week", "genui"),
     ("plan my Tuesday", "genui"),
@@ -98,13 +101,35 @@ TABLE = [
     ("What's up, bro?", "pleasantry"),
     ("How are you doing?", "pleasantry"),
     ("what's up with my agents", None),
-    # clay-build (docs/CLAY-HUD.md, Voice), 2026-10-09: who, how many, and Clay.
+    # clay-build (docs/plans/CLAY-HUD.md, Voice), 2026-10-09: who, how many, and Clay.
     ("find me 50 fintech VC partners in Clay", "clay"),
     ("Clay, find 20 seed investors in Austin", "clay"),
     ("build a list of fifty fintech VC partners with work emails", "clay"),
     ("okay so find me fintech VC partners in clay", "clay"),
-    ("open clay", None),
+    # The outbound surface (0daac8c0, 10/12) answers "open clay" on purpose.
+    ("open clay", "surface"),
     ("build me a list of 5 restaurants in Dallas", None),
+    # CHW-195: one note by title, before the surface words.
+    ("add milk to my groceries note", "notes"),
+    ("new note Trip ideas", "notes"),
+    ("close the notes", "notes"),
+    ("show my notes", "surface"),
+    # CHW-204: Ghost's question lands on the glass, not the voice model.
+    ("What am I missing?", "surface"),
+    ("Is there anything I'm missing for this week?", "surface"),
+    ("what am I missing in this essay", None),
+    # CHW-190: FaceTime from the glass. A name goes through the people store;
+    # a word that isn't somebody goes to the model.
+    ("call Mark", "call"),
+    ("Call my mom", "call"),
+    ("facetime Tyler Larsen", "call"),
+    ("call Mark on my phone", "call"),
+    ("hang up", "call"),
+    ("mute the call", "call"),
+    ("show the call", "call"),
+    ("call it a day", None),
+    ("call me back later", None),
+    ("call Mark and tell him I'm running late", None),
 ]
 
 

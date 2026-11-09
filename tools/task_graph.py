@@ -27,7 +27,11 @@ def digest(path):
     with os.fdopen(os.open(path, flags), "rb") as source:
         if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
             raise ValueError("expected artifact must be a regular file")
-        return hashlib.file_digest(source, "sha256").hexdigest()
+        # hashlib.file_digest is 3.11; stock /usr/bin/python3 is 3.9.
+        h = hashlib.sha256()
+        for block in iter(lambda: source.read(1 << 16), b""):
+            h.update(block)
+        return h.hexdigest()
 
 
 def exact(value, keys):

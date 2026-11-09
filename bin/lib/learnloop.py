@@ -17,8 +17,12 @@ import json
 import os
 import re
 import statistics
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import transcript_rows  # noqa: E402  # mid-turn messages ride in attachment rows
 
 HOME = Path.home()
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -155,10 +159,10 @@ def human_asks(days: float = 14, roots: list[Path] | None = None) -> list[dict]:
                     # A cheap skip before parsing: most lines are tool output.
                     # Not '"type":"user"', which silently missed any writer
                     # that puts a space after the colon.
-                    if '"user"' not in line:
+                    if not transcript_rows.maybe_user_line(line):
                         continue
                     try:
-                        e = json.loads(line)
+                        e = transcript_rows.as_user_row(json.loads(line))
                     except ValueError:
                         continue
                     if (e.get("type") != "user" or e.get("isSidechain") or e.get("isMeta")
@@ -225,15 +229,32 @@ def claude_episodes(rows: list[dict], mine_asks) -> list[dict]:
 
 # ---------------------------------------------------------------------- voice
 
-def voice_store() -> Path:
+def main_checkout(repo: Path = REPO) -> Path | None:
+    """The checkout every worktree of `repo` hangs off, from git itself."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--path-format=absolute",
+                            "--git-common-dir"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    common = r.stdout.strip()
+    return Path(common).parent if r.returncode == 0 and common else None
+
+
+def voice_store(repo: Path = REPO) -> Path:
     """Where the voice keeps questions.jsonl. It is gitignored, so a worktree
-    has none of its own and has to be pointed at the real checkout's."""
+    has none of its own and has to be pointed at the real checkout's.
+
+    Found through git, not a fixed path. The fallback used to be
+    ~/Chewbacca, and after the checkout moved to ~/code/chewbacca on
+    2026-10-05 `reflect` run from any worktree read no voice log at all:
+    "0 requests" on 2026-10-10 while questions.jsonl held 96."""
     env = os.environ.get("SUPERASSISTANT_DIR")
     if env:
         return Path(env)
-    here = REPO / "superassistant"
-    if (here / "questions.jsonl").exists():
-        return here
+    for base in (repo, main_checkout(repo)):
+        if base and (base / "superassistant" / "questions.jsonl").exists():
+            return base / "superassistant"
     return HOME / "Chewbacca" / "superassistant"
 
 

@@ -45,6 +45,13 @@ CUTOFF = "2026-09-20"
 # refused falls, along with the drafts caught: re-measure before changing it.
 PCT = 0.97
 MIN_WORDS = 8
+# A flag file for someone who wants a draft as one consolidated text. Gavin,
+# 2026-11-09, after a reply to Chase Durkin came back as four, then six short
+# texts because the word-count reason said "send it as two or three short
+# ones": "stop doing multiple text drafts, should just be one text and as
+# consolidated as possible". With the flag, total length stops counting; long
+# sentences, commas and colons still do, so the one text stays in his voice.
+ONE_MESSAGE = Path(os.environ.get("VOICE_ONE_MESSAGE", Path.home() / ".chewbacca/texts-one-message"))
 WORD = re.compile(r"[a-z0-9']+")
 
 
@@ -131,6 +138,8 @@ def check(text: str, con, prof: dict) -> list[str]:
     out = []
     f = feats(text)
     for k, v in f.items():
+        if k == "words" and ONE_MESSAGE.exists():
+            continue
         lim = prof["limits"].get(k)
         if lim is not None and v > lim:
             out.append(REASONS[k].format(v=v, lim=lim, pct=f"{int(PCT * 100)}%"))

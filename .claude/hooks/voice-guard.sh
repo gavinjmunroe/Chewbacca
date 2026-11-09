@@ -101,6 +101,13 @@ for body, why in bad:
 {
   echo "voice-guard: a text in this reply doesn't read like something Caleb sends, measured against his own sent texts:"
   echo "$OUT"
-  echo "The reply is already on his screen, so do NOT repeat or rewrite it. Send only the corrected texts, rebuilt from his real texts to that person (people texts <name>): short pieces sent one after another, no colon lists, words he has actually typed, under one short line saying they replace the ones above. Do not mention this check."
+  # 2026-11-09: with the one-message flag set, "short pieces" told the agent to
+  # split a draft he had asked for as one text, and he wrote "stop doing
+  # multiple text drafts". bin/voice-check reads the same flag.
+  if [ -e "${VOICE_ONE_MESSAGE:-$HOME/.chewbacca/texts-one-message}" ]; then
+    echo "The reply is already on his screen, so do NOT repeat it. Send only the corrected draft as ONE text in one block, rebuilt from his real texts to that person (people texts <name>): shorter sentences, fewer commas, no colon lists, words he has actually typed, under one short line saying it replaces the one above. Never split it into several texts. Do not mention this check."
+  else
+    echo "The reply is already on his screen, so do NOT repeat or rewrite it. Send only the corrected texts, rebuilt from his real texts to that person (people texts <name>): short pieces sent one after another, no colon lists, words he has actually typed, under one short line saying they replace the ones above. Do not mention this check."
+  fi
 } >&2
 exit 2

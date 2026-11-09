@@ -77,4 +77,15 @@ reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p8", "la
 printf '%s' "$reply" | HOOK_JUDGE_STUB=0.1 bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "an email fence with a Subject line is left alone" || bad "voice-guard graded an email as a text"
 reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p9", "last_assistant_message": "Text for Jonah:\n\n> " + sys.argv[1]}))' "$FORMAL")
 printf '%s' "$reply" | HOOK_JUDGE_STUB="" bash "$hook" >/dev/null 2>&1; [ $? -eq 0 ] && ok "Jev down means no refusal" || bad "voice-guard refused with no judgment"
+# 2026-11-09: Gavin asked for drafts as one consolidated text, and the length
+# reason kept splitting them ("stop doing multiple text drafts"). With the
+# flag, total length stops counting; commas and long sentences still do.
+ONE="Read thru the rest of it. I think the pipeline is the backbone for the team. First version could be one page for the leaders, w the vision, values and plan. Send me what you have and we can talk thru it in person"
+VOICE_ONE_MESSAGE="$T/nope" "$ROOT/bin/voice-check" "$ONE" >/dev/null; [ $? -eq 1 ] && ok "a long draft is refused without the one-text flag" || bad "long draft passed with no flag"
+touch "$T/one-text"
+VOICE_ONE_MESSAGE="$T/one-text" "$ROOT/bin/voice-check" "$ONE" >/dev/null; [ $? -eq 0 ] && ok "the one-text flag stops length from counting" || bad "one-text flag ignored"
+VOICE_ONE_MESSAGE="$T/one-text" "$ROOT/bin/voice-check" "$FORMAL" >/dev/null; [ $? -eq 1 ] && ok "the one-text flag still refuses a colon list" || bad "one-text flag let a formal draft through"
+reply=$(python3 -I -c 'import json,sys; print(json.dumps({"prompt_id": "p10", "last_assistant_message": "Text for Jonah:\n\n> " + sys.argv[1]}))' "$FORMAL")
+out=$(printf '%s' "$reply" | VOICE_ONE_MESSAGE="$T/one-text" bash "$hook" 2>&1 >/dev/null)
+grep -q "ONE text" <<<"$out" && ! grep -q "short pieces" <<<"$out" && ok "with the flag, voice-guard asks for one text, never pieces" || bad "voice-guard still asks to split: $out"
 exit $fail

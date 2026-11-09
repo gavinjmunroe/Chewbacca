@@ -556,3 +556,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_spoken_brief: chewie brief --speak reads the brief aloud, off until turned on; silent on any Focus, a call or other audio; what it measured about macOS audio and the calendar (11/6)
 - reference_injection_hold: a flagged read holds a session's outbound until the person's next message, and what real transcripts say counts as that message
 - feedback_ff_ready_check_explain_2026_11_08: FF readiness command per region, why batches go stale in 2h, explain 1583 and gates in plain words
+- feedback_text_guard_needs_index_backstop: command-text guards lose to script code; decisive check goes in pre-commit on the index with an explicit ALLOW_DELETES rule

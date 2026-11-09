@@ -532,6 +532,19 @@ in `mac messages history`, so a grep for the URL never finds it.
   sends nothing until `--go`, writes each name to run.log as it goes, and skips
   every logged name on a rerun. Never hand-roll a send loop.
 
+## A DM with a character cap (LinkedIn note, 300)
+
+Count it with `printf '%s' "<draft>" | wc -m` and give him the number. Cutting
+to the cap breaks two things, so reread the cut version as the recipient:
+
+- Every sentence still has to make sense on its own. Cutting "the Tech & AI
+  section" to "Tech & AI doesn't have GTM yet" left a line with nothing
+  introducing it. Caleb, 2026-11-09: "doesnt make sense w no intro to it".
+- Write for the recipient's vocabulary, not a stranger's. Seoyoung runs an
+  edtech startup, so "go-to-market" spelled out wasted 11 characters and read
+  like he was explaining. Caleb, same day: "She knows what gtm means bruh".
+  Cut jargon the reader already knows before cutting what he's asking for.
+
 ## A card or birthday note to a friend: angles, not a finished card
 
 When the user asks for help with a card or a birthday note to a close friend,

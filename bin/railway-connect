@@ -39,6 +39,18 @@ def linked_service(cfg, cwd):
         path = parent
 
 
+def login_token(cfg):
+    # Railway CLI 5.71 writes user.accessToken, older ones user.token. Reading
+    # only "token" told a signed-in CLI 5.71 "no Railway login" on 2026-11-13,
+    # mid Lighthouse preview, and the GitHub connect had to be done by hand.
+    # railway-domain already read both.
+    for var in ("RAILWAY_API_TOKEN", "RAILWAY_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var]
+    user = cfg.get("user") or {}
+    return user.get("token") or user.get("accessToken")
+
+
 def gql(token, query, variables):
     req = urllib.request.Request(
         API,
@@ -61,7 +73,7 @@ def main():
         cfg = json.load(open(os.path.expanduser("~/.railway/config.json")))
     except (OSError, ValueError):
         die("no Railway login. Run: railway login")
-    token = (cfg.get("user") or {}).get("token")
+    token = login_token(cfg)
     if not token:
         die("no Railway login. Run: railway login")
     link = linked_service(cfg, os.getcwd())

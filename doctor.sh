@@ -1038,6 +1038,29 @@ print("|".join([d.get("sha") or "none", d.get("origin_main") or "none",
   fi
 fi
 
+# A fork installs from its own origin/main, so a tool landed upstream is missing
+# here until someone merges. On 2026-11-13 FF's SITE-BAR.md required `ux-bar`
+# (upstream 6d0451ea) while this fork sat 139 commits behind, and the command
+# wasn't found mid-build. Local refs only (tools/upstream_tools.py).
+if git -C "$REPO_DIR" rev-parse -q --verify upstream/main >/dev/null 2>&1 && [ -f "$REPO_DIR/tools/upstream_tools.py" ]; then
+  UT_LINE="$(python3 -I "$REPO_DIR/tools/upstream_tools.py" --repo "$REPO_DIR" --json 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("0||"); sys.exit()
+if not d.get("available"):
+    print("0||"); sys.exit()
+print("1|%s|%s" % (d.get("behind") or 0, " ".join(d.get("missing_names") or [])))
+' 2>/dev/null)"
+  IFS='|' read -r UT_OK UT_BEHIND UT_MISSING <<<"${UT_LINE:-0||}"
+  if [ "$UT_OK" = 1 ] && [ -n "$UT_MISSING" ]; then
+    warn "upstream/main has tool(s) this fork lacks: $UT_MISSING (origin/main is $UT_BEHIND commit(s) behind; merge upstream/main to get them)"
+  elif [ "$UT_OK" = 1 ]; then
+    ok "every PATH tool on upstream/main is in this fork (origin/main ${UT_BEHIND} commit(s) behind)"
+  fi
+fi
+
 # The gtme engine lives in Dough. Every `chewbacca gtme` and tools/gtme_*.py is a
 # front door that runs ~/.chewbacca/dough/current (tools/dough_home.py), so a
 # missing Dough breaks outbound and a stale one sends on old gate code.

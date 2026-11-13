@@ -423,6 +423,7 @@ if group "doctor"; then
   check  "a CLAUDE.md with no @ imports is reported, not passed" bash "$ROOT/tests/test_doctor_zero_imports.sh"
   check  "a registered hook whose script is missing fails doctor" bash "$ROOT/tests/test_doctor_missing_hooks.sh" "$ROOT"
   check  "a runtime install is judged as one: skipped parts counted and named, every printed command exists" bash "$ROOT/tests/test_doctor_runtime_profile.sh"
+  check  "a PATH tool upstream has and this fork lacks is named (ux-bar, 2026-11-13)" python3 "$ROOT/tests/test_upstream_tools.py"
   expect "--json carries severities" '"severity"' bash -c "bash '$ROOT/doctor.sh' --json"
   expect "--json carries sections" '"section"' bash -c "bash '$ROOT/doctor.sh' --json"
 

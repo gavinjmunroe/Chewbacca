@@ -562,3 +562,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_ff_dfw_ledger_and_email1_variants: Dough reads FF DFW from ~/code/ff-ledger/ops/gtme/dfw, not firm-foundation/ops/gtme/dfw; email 1 lives in 3 plan.json variants (step 1, copy_direct_inbox, copy_role_inbox), change all; {{short}} and sender.tagline since Dough 5f95982
 - feedback_ff_test_send_primary_tab_2026_11_09: send the exact first email to a Gmail we read and check the tab; List-Unsubscribe put FF's in Updates, off for DFW (11/9)
 - project_ff_followup_needs_fixlist: FF's email 2 says the list is done, and dough plan never checks a fix list exists; write one before the follow-up sends
+- feedback_ff_board_reply_step_2026_11_17: Dough logs reply emails as step "reply" and keeps a sent draft on the book; the FF board crashed on it for 17h, then offered a sent email again (fixed 01734af, d8391da)

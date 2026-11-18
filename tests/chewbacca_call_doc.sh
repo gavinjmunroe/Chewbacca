@@ -15,6 +15,7 @@ cat > "$T/pitch.txt" <<'S'
 ! Phone sideways.
 ### 1. Who (5 sec)
 "I'm Caleb <b>."
+" Open quote only
 - plain line
 ! Paste: https://docs.google.com/spreadsheets/d/X1/edit
 x Checked 2.3B against Pew -> matches
@@ -31,6 +32,7 @@ grep -q '<h2 style=.*>Step 1. Set up</h2>' "$H" && ok "step is an h2" || no "ste
 grep -q '<h3 style=.*color:#666666.*>1. Who (5 sec)</h3>' "$H" && ok "beat is a gray h3" || no "beat not a gray h3"
 grep -q 'color:#1a56db;font-weight:bold.*>Phone sideways.</p>' "$H" && ok "action is bold blue" || no "action not bold blue"
 grep -q 'margin-bottom:10pt.*>&quot;I.m Caleb &lt;b&gt;.&quot;</p>\|margin-bottom:10pt.*>"I.m Caleb &lt;b&gt;."</p>' "$H" && ok "say line spaced and escaped" || no "say line wrong: $(grep Caleb "$H")"
+grep -q '>&quot;Open quote only&quot;</p>\|>"Open quote only"</p>' "$H" && ok "unclosed say line gets wrapped (Durango doc, 2026-11-18)" || no "unclosed say line raw: $(grep 'Open quote' "$H")"
 grep -q '<b>TONIGHT</b>' "$H" && ok "**bold** renders" || no "**bold** raw"
 grep -q '>plain line</p>' "$H" && ok "dash line is plain, no dash" || no "dash line wrong"
 grep -q '<a href="https://docs.google.com/spreadsheets/d/X1/edit">' "$H" && ok "a URL is a clickable link (Travis sheet, 2026-10-29)" || no "URL not linked"
